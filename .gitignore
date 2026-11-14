@@ -1,0 +1,9 @@
+node_modules/
+app/dist/
+app/src/_pdfworker.js
+electron/dist/
+electron/index.html
+*.exe
+*.kap
+*.rar
+*.zip

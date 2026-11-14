@@ -1,0 +1,132 @@
+// Trạng thái chung + vòng mô phỏng.
+import { defaultShip, buildModel, newState, stepShip, squat, displayRpm, stepLabel, KN, D2R } from './physics.js';
+import { World, defaultEnv, envAt, makeAnchors, makeLines, externalForces, wrap180, body2w } from './world.js';
+
+export const $ = (s, r) => (r || document).querySelector(s);
+export const $$ = (s, r) => Array.from((r || document).querySelectorAll(s));
+export const num = (v, d) => { const n = parseFloat(String(v).replace(',', '.')); return isFinite(n) ? n : (d === undefined ? 0 : d); };
+export const pad3 = (n) => String(((Math.round(n) % 360) + 360) % 360).padStart(3, '0');
+export const clock = (s) => { s = Math.floor(((s % 86400) + 86400) % 86400); const p = (n) => String(n).padStart(2, '0'); return p(Math.floor(s / 3600)) + ':' + p(Math.floor(s / 60) % 60) + ':' + p(s % 60); };
+export const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+export const LS = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* bỏ qua */ } }
+};
+// IndexedDB đơn giản (lưu file hải đồ & bài đã ghi)
+export const DB = {
+  open() { return new Promise((res) => { try { const r = indexedDB.open('mophongtau', 1); r.onupgradeneeded = () => { r.result.createObjectStore('charts'); r.result.createObjectStore('sessions'); }; r.onsuccess = () => res(r.result); r.onerror = () => res(null); } catch (e) { res(null); } }); },
+  async tx(store, mode, fn) { const db = await this.open(); if (!db) return null; return new Promise((res) => { try { const t = db.transaction(store, mode), q = fn(t.objectStore(store)); t.oncomplete = () => res(q && q.result); t.onerror = () => res(null); } catch (e) { res(null); } }); },
+  put(s, k, v) { return this.tx(s, 'readwrite', (o) => o.put(v, k)); }, get(s, k) { return this.tx(s, 'readonly', (o) => o.get(k)); },
+  keys(s) { return this.tx(s, 'readonly', (o) => o.getAllKeys()); }, del(s, k) { return this.tx(s, 'readwrite', (o) => o.delete(k)); }
+};
+
+function mergeShip(saved) {
+  const d = defaultShip(); if (!saved) return d;
+  const p = Object.assign(d, saved); p.fx = Object.assign(defaultShip().fx, saved.fx || {});
+  if (!Array.isArray(p.steps) || p.steps.length !== 6) p.steps = defaultShip().steps;
+  return p;
+}
+export const A = {
+  p: mergeShip(LS.get('mp_ship')), env: Object.assign(defaultEnv(), LS.get('mp_env') || {}),
+  set: Object.assign({ quality: 'high', volMaster: 80, volEngine: 60, volBell: 90, headUp: false, uiScale: 'auto' }, LS.get('mp_set') || {}),
+  W: new World(), M: null, sim: null, tab: 'run', charts: [], sessions: [], hooks: {}
+};
+export function saveShip() { LS.set('mp_ship', A.p); }
+export function saveEnv() { LS.set('mp_env', A.env); }
+export function saveSet() { LS.set('mp_set', A.set); }
+export function saveObjs() { if (A.W.chart) LS.set('mp_objs:' + A.W.chart.name, { objs: A.W.objs, classDepth: A.W.classDepth, start: A.W.start || null }); }
+export function loadObjs() {
+  const W = A.W, s = W.chart ? LS.get('mp_objs:' + W.chart.name) : null;
+  W.objs = s && s.objs ? Object.assign({ lights: [], berths: [], sounds: [] }, s.objs) : { lights: [], berths: [], sounds: [] }; W.objs.sounds = []; if (!Array.isArray(W.objs.routes)) W.objs.routes = []; if (W.objs.routeSel === undefined) W.objs.routeSel = W.objs.routes.length ? 0 : -1;
+  if (s && s.classDepth) W.classDepth = s.classDepth; else W.classDepth = [-3, -1, 1.5, 3.5, 10];
+  W.start = s && s.start ? s.start : null; W.rebuild();
+}
+export function rebuildModel() { A.M = buildModel(A.p); return A.M; }
+
+export const LIGHTS = [['mast1', 'Đèn cột trước', '#fff'], ['mast2', 'Đèn cột sau', '#fff'], ['sideP', 'Đèn mạn trái', '#ff4d4d'], ['sideS', 'Đèn mạn phải', '#3dff8a'], ['stern', 'Đèn lái', '#fff'], ['anchF', 'Đèn neo trước', '#fff'], ['anchA', 'Đèn neo sau', '#fff'], ['deck', 'Đèn chiếu boong', '#ffe08a'], ['nuc', '2 đèn đỏ (mất chủ động)', '#ff4d4d']];
+export const LIGHT_PRESETS = [['Đang chạy', ['mast1', 'mast2', 'sideP', 'sideS', 'stern']], ['Đang neo', ['anchF', 'anchA', 'deck']], ['Mất chủ động', ['nuc', 'sideP', 'sideS', 'stern']], ['Tắt hết', []]];
+
+export function startPos() {
+  const W = A.W; if (W.start) return W.start;
+  return { x: 0, y: 0, hdg: 0 };
+}
+export function daySec0() { const m = /^(\d{1,2}):(\d{2})/.exec(A.env.startTime || ''); return m ? (+m[1]) * 3600 + (+m[2]) * 60 : 6.5 * 3600; }
+
+export function newSim() {
+  const M = rebuildModel(), sp = startPos(), S = newState(M);
+  S.x = sp.x; S.y = sp.y; S.psi = num(sp.hdg, 0) * D2R; S.u = num(A.env.startKn, 0) * KN;
+  const st = M.steps[A.env.startStep] ? A.env.startStep : 'st';
+  S.n.fill(M.steps[st].n);
+  const lights = {}; LIGHTS.forEach((l) => { lights[l[0]] = LIGHT_PRESETS[0][1].includes(l[0]); });
+  A.sim = {
+    S, t: 0, day0: daySec0(), running: false, speed: 1, steps: new Array(M.nE).fill(st),
+    helm: { mode: 'steady', ord: 0, target: Math.round(num(sp.hdg, 0)) % 360, steer: 'hand', my: 'Giữ hướng ' + pad3(num(sp.hdg, 0)) + '°', rep: 'Giữ hướng ' + pad3(num(sp.hdg, 0)) + ', rõ!' },
+    anchors: makeAnchors(M), lines: makeLines(M), selLine: 'hl', lights, alarm: false, bellUntil: -1,
+    log: [], rec: [], info: {}, e: envAt(A.env, daySec0(), 0), aground: false, bank: [1e4, 1e4], ukc: 99, h: 99, sq: 0, hC: 0,
+    lightMode: 'auto', fog: false, started: new Date().toISOString(), track: []
+  };
+  { const s = A.sim; s.hC = A.W.depthAt(S.x, S.y); s.h = s.hC + s.e.tide; s.ukc = s.h - M.d; }
+  logOrder('Bắt đầu bài tập', 'note');
+  if (A.hooks.simReset) A.hooks.simReset();
+  return A.sim;
+}
+export function logOrder(text, kind) { const s = A.sim; s.log.unshift({ t: s.t, text, kind: kind || 'helm' }); if (s.log.length > 400) s.log.pop(); s.lastOrd = { t: s.t, text }; }
+
+export function engName(n, i) { return n === 1 ? 'Máy' : n === 2 ? ['Máy trái', 'Máy phải'][i] : n === 3 ? ['Máy trái', 'Máy giữa', 'Máy phải'][i] : ['Máy trái ngoài', 'Máy trái trong', 'Máy phải trong', 'Máy phải ngoài'][i]; }
+export const HELM = [[-35, 'HẾT TRÁI', 'Hết lái trái'], [-20, 'TRÁI', 'Lái trái 20'], [-10, 'TRÁI', 'Lái trái 10'], [-5, 'TRÁI', 'Lái trái 5'], [0, 'LÁI VỀ', 'Lái về số 0'], [5, 'PHẢI', 'Lái phải 5'], [10, 'PHẢI', 'Lái phải 10'], [20, 'PHẢI', 'Lái phải 20'], [35, 'HẾT PHẢI', 'Hết lái phải']];
+export const Orders = {
+  rudder(a) { const h = A.sim.helm; if (h.steer === 'auto') return; const d = HELM.find((q) => q[0] === a); const mx = A.M.rudMax; h.mode = 'rudder'; h.ord = Math.max(-mx, Math.min(mx, a)); h.target = null; h.my = d[2]; h.rep = d[2].replace('Lái ', '').replace(/^./, (c) => c.toUpperCase()) + ', rõ!'; logOrder(d[2]); },
+  steady() { const s = A.sim, h = s.helm, hd = Math.round(s.S.psi / D2R) % 360; h.mode = h.steer === 'auto' ? 'auto' : 'steady'; h.target = hd; h.my = 'Giữ hướng ' + pad3(hd) + '°'; h.rep = 'Giữ hướng ' + pad3(hd) + ', rõ!'; logOrder(h.my); },
+  course(v) { const h = A.sim.helm, hd = ((Math.round(num(v, NaN)) % 360) + 360) % 360; if (!isFinite(hd)) return; h.target = hd; if (h.steer === 'auto') { h.mode = 'auto'; h.my = 'Lái tự động ' + pad3(hd) + '°'; h.rep = 'Lái tự động hướng ' + pad3(hd) + ', rõ!'; } else { h.mode = 'course'; h.my = 'Đi hướng ' + pad3(hd) + '°'; h.rep = 'Đi hướng ' + pad3(hd) + ', rõ!'; } logOrder(h.my); },
+  steer(k) { const s = A.sim, h = s.helm; if (h.steer === k) return; h.steer = k; const hd = h.target !== null ? h.target : Math.round(s.S.psi / D2R) % 360; h.target = hd; if (k === 'auto') { h.mode = 'auto'; h.my = 'Lái tự động ' + pad3(hd) + '°'; h.rep = 'Đã chuyển lái tự động, hướng ' + pad3(hd); } else { h.mode = 'steady'; h.my = 'Lái tay, giữ hướng ' + pad3(hd) + '°'; h.rep = 'Lái tay, giữ hướng ' + pad3(hd) + ', rõ!'; } logOrder(h.my); },
+  engine(i, id) { const s = A.sim; s.steps[i] = id; const lb = stepLabel(A.p, id); const nm = engName(A.M.nE, i); logOrder(id === 'st' ? (A.M.nE === 1 ? 'Dừng máy' : nm + ' dừng') : nm + ' ' + lb.toLowerCase(), 'engine'); },
+  anchor(id, act) {
+    const s = A.sim, a = s.anchors.find((q) => q.id === id); if (!a) return; const nm = a.name.toLowerCase();
+    if (act === 'drop') { a.st = 'drop'; a.target = 0; logOrder('Thả ' + nm, 'anchor'); }
+    else if (act === 'dredge') { a.st = 'drop'; a.target = Math.max(a.chain + 1, Math.round((s.h + 3) * 1.5)); logOrder('Thả ' + nm + ' kéo lê (' + a.target + ' m xích)', 'anchor'); }
+    else if (act === 'brake' && a.chain > 0) { a.st = 'hold'; a.target = 0; logOrder('Hãm ' + nm + ' ở ' + a.chain.toFixed(0) + ' m xích', 'anchor'); }
+    else if (act === 'heave' && a.chain > 0) { a.st = 'heave'; a.target = 0; logOrder('Kéo ' + nm, 'anchor'); }
+  },
+  light(k, on) { A.sim.lights[k] = on; logOrder((on ? 'Bật ' : 'Tắt ') + LIGHTS.find((l) => l[0] === k)[1].toLowerCase(), 'light'); },
+  lightPreset(i) { const p = LIGHT_PRESETS[i]; LIGHTS.forEach((l) => { A.sim.lights[l[0]] = p[1].includes(l[0]); }); logOrder('Đèn hàng hải: ' + p[0].toLowerCase(), 'light'); }
+};
+
+const DT = 0.1;
+export function helmCmd() {
+  const s = A.sim, h = s.helm; if (h.mode === 'rudder' || h.target === null) return h.ord;
+  const lim = h.mode === 'auto' ? 15 : 25, err = wrap180(h.target - s.S.psi / D2R), rot = s.S.r / D2R * 60;
+  h.ord = Math.round(Math.max(-lim, Math.min(lim, err * 1.6 - rot * 0.7))); return h.ord;
+}
+export function substep() {
+  const s = A.sim, S = s.S, M = A.M, W = A.W;
+  const e = s.e = envAt(A.env, s.day0 + s.t, s.t); if (s.fog) e.vis = 550;
+  const L = M.L, pts = [[0, 0], [0.45 * L, 0], [-0.45 * L, 0]];
+  let hC = 1e9; for (const p of pts) { const [wx, wy] = body2w(S, p[0], p[1]); hC = Math.min(hC, W.depthAt(wx, wy)); }
+  const h = hC + e.tide; s.hC = hC; s.h = h;
+  if (Math.round(s.t * 10) % 10 === 0) s.bank = [W.bankDist(S, 1, M.d, e.tide), W.bankDist(S, -1, M.d, e.tide)];
+  const env = { h: Math.max(h, M.d * 1.02), wS: e.wS, wD: e.wD, cE: e.cE, cN: e.cN, waveH: e.waveH, waveD: e.waveD, bankS: s.bank[0], bankP: s.bank[1] };
+  const ctrl = { nT: s.steps.map((id) => (M.steps[id] || M.steps.st).n), dT: helmCmd() };
+  const ext = externalForces(W, S, M, s.anchors, s.lines, Math.max(h, 1), DT, s.info);
+  stepShip(S, M, ctrl, env, ext, DT);
+  s.sq = squat(M, Math.abs(S.u) / KN, Math.max(h, M.d)); s.ukc = h - M.d - s.sq;
+  if (s.ukc < 0) { S.u *= 0.6; S.v *= 0.6; S.r *= 0.6; if (!s.aground) { s.aground = true; logOrder('TÀU MẮC CẠN', 'alarm'); } } else if (s.ukc > 0.3) s.aground = false;
+  s.t += DT;
+  const k = Math.round(s.t * 10);
+  if (k % 10 === 0) {
+    const gE = S.u * Math.sin(S.psi) + S.v * Math.cos(S.psi) + S.cE, gN = S.u * Math.cos(S.psi) - S.v * Math.sin(S.psi) + S.cN;
+    s.rec.push({ t: s.t, x: S.x, y: S.y, psi: S.psi, sog: Math.hypot(gE, gN) / KN, rot: S.r / D2R * 60, d: S.delta, rpm: displayRpm(M, S.n.reduce((a, b) => a + b, 0) / M.nE), ukc: s.ukc, tide: e.tide, st: s.steps.join(','), vis: e.vis, wH: e.waveH });
+    if (k % 100 === 0) { s.track.push([S.x, S.y]); if (s.track.length > 2000) s.track.shift(); }
+  }
+}
+export function derived() {
+  const s = A.sim, S = s.S, M = A.M;
+  const gE = S.u * Math.sin(S.psi) + S.v * Math.cos(S.psi) + S.cE, gN = S.u * Math.cos(S.psi) - S.v * Math.sin(S.psi) + S.cN;
+  const sog = Math.hypot(gE, gN) / KN; let cog = Math.atan2(gE, gN) / D2R; if (cog < 0) cog += 360;
+  const lat = gE * Math.cos(S.psi) - gN * Math.sin(S.psi);
+  return { sog, cog, hdg: S.psi / D2R, drift: sog > 0.2 ? wrap180(cog - S.psi / D2R) : 0, rot: S.r / D2R * 60, stw: S.u / KN, bowLat: (lat + S.r * 0.45 * M.L) / KN, sternLat: (lat - S.r * 0.45 * M.L) / KN, gE, gN };
+}
+export function sunEl(daySec, mode) {
+  if (mode === 'day') return 50; if (mode === 'dusk') return 3; if (mode === 'night') return -30;
+  return 62 * Math.sin(2 * Math.PI * (daySec / 3600 - 6) / 24);
+}
+export { DT };
