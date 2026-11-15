@@ -2,6 +2,8 @@
 import * as THREE from 'three';
 import { sampleWorld, DEF_CLASS_DEPTH } from './chartsys.js';
 import { body2w } from './world.js';
+import { buildModel } from './shipdraw/model.js';
+import { modelGroup } from './shipdraw/mesh3.js';
 
 export const QUALITY = {
   // ter: [nửa vùng mịn (m), bước lưới vùng mịn (m), bước lưới xa nhất (m)]
@@ -127,8 +129,19 @@ export class View3D {
     this.wU.uStr.value = Math.min(0.6, 0.1 + 0.17 * Math.max(Hs, 0.05));
   }
   waveH(x, z, t) { let h = 0; if (this.wComp) for (const w of this.wComp) h += w.A * Math.sin(w.k * (w.dx * x + w.dz * z) - w.om * t + w.ph); return h; }
+  // tàu vẽ từ sơ đồ (thông số tàu có `model`): dựng theo mô hình; lỗi thì quay về tàu đơn giản
+  buildShipModel(M) {
+    const T = M.d, geom = buildModel(M.p.model, { L: M.loa, B: M.B, D: +M.p.D || M.d * 1.6, T, cb: +M.p.cb || 0.6 }), g = this.shipG;
+    g.add(modelGroup(THREE, geom, { inside: true })); this.shipGeom = geom;
+    const e = geom.eye, H = geom.hull, hbE = H.hb(Math.max(H.xa, Math.min(H.xf, e.x)));
+    this.dim = { L: geom.dims.L, B: geom.dims.B, fb: geom.dims.fb, shh: Math.max(3, e.z - T - geom.dims.fb + 1.6), bridgeX: e.x, eye: e.z - T, eyeY: e.y || 0, wingY: hbE + 0.4 };
+    const lp = (c, l, s) => { const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.glow, color: c, blending: THREE.AdditiveBlending, depthWrite: false, fog: false })); sp.position.set(l.y, l.z - T, -l.x); sp.scale.setScalar(s); sp.visible = false; g.add(sp); return sp; };
+    const C = { sideP: COL.R, sideS: COL.G, nuc: COL.R, deck: 0xffe08a }, Z = { sideP: 4, sideS: 4, stern: 4, nuc: 4, deck: 9 };
+    this.navL = {}; for (const l of geom.lights) (this.navL[l.key] || (this.navL[l.key] = [])).push(lp(C[l.key] || COL.W, l, Z[l.key] || 5));
+  }
   buildShip(M, anchors) {
-    const g = this.shipG; g.clear();
+    const g = this.shipG; g.clear(); this.shipGeom = null;
+    if (M.p.model && M.p.model.parts && M.p.model.parts.length) { try { this.buildShipModel(M); return; } catch (e) { console.error('Không dựng được mô hình tàu', e); g.clear(); } }
     const L = M.loa, B = M.B, D = +M.p.D || M.d * 1.6, T = M.d, fb = D - T;
     const sh = new THREE.Shape(); const hb = B / 2, bow = L / 2, st = -L / 2;
     sh.moveTo(-hb, st + 2); sh.lineTo(-hb, bow - L * 0.2); sh.quadraticCurveTo(-hb * 0.7, bow - L * 0.06, 0, bow); sh.quadraticCurveTo(hb * 0.7, bow - L * 0.06, hb, bow - L * 0.2); sh.lineTo(hb, st + 2); sh.quadraticCurveTo(hb * 0.8, st, 0, st); sh.quadraticCurveTo(-hb * 0.8, st, -hb, st + 2);
@@ -252,12 +265,12 @@ export class View3D {
     const c = this.cam, sn = Math.sin(st.psi), cs = Math.cos(st.psi), lk = this.look;
     const P = (bx, by, hgt) => this.shipG.localToWorld(new THREE.Vector3(by, hgt, -bx)), qS = this.shipG.quaternion;
     let pos, yaw = st.psi, pitchC = -3;
-    if (view === 'wingP') pos = P(d.bridgeX, -d.B * 0.56, d.eye);
-    else if (view === 'wingS') pos = P(d.bridgeX, d.B * 0.56, d.eye);
+    if (view === 'wingP') pos = P(d.bridgeX, -(d.wingY || d.B * 0.56), d.eye);
+    else if (view === 'wingS') pos = P(d.bridgeX, d.wingY || d.B * 0.56, d.eye);
     else if (view === 'aft') { pos = P(d.bridgeX - 6, 0, d.eye + 1); yaw = st.psi + Math.PI; }
     else if (view === 'top') { pos = new THREE.Vector3(st.x, 420 * lk.dist, -st.y); pitchC = -89.9; }
     else if (view === 'follow') { const dd = d.L * 1.6 * lk.dist, a = st.psi + Math.PI + lk.yaw * Math.PI / 180; pos = new THREE.Vector3(st.x + Math.sin(a) * dd, d.L * 0.45 * lk.dist + 8, -(st.y + Math.cos(a) * dd)); c.position.copy(pos); c.fov = 50; c.up.set(0, 1, 0); c.lookAt(st.x, 6, -st.y); }
-    else pos = P(d.bridgeX, 0, d.eye);
+    else pos = P(d.bridgeX, d.eyeY || 0, d.eye);
     this.spec = null;
     if (view !== 'follow') {
       c.position.copy(pos); c.fov = view === 'top' ? 50 : lk.fov;

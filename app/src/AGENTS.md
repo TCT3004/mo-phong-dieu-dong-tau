@@ -15,12 +15,13 @@
 | `places.js` | kho đối tượng người dùng theo lat/lon (`mp_places`), đổi qua lại mét thế giới, chuyển dữ liệu v0.1 |
 | `world.js` | môi trường (`envAt`: gió, dòng, triều, sóng; lấy từ thời tiết ngẫu nhiên nếu có), tra độ sâu / lớp đáy qua `CS`, cầu bến, cọc bích, neo, dây, lực ngoài |
 | `weather.js` | thời tiết ngẫu nhiên có hạt giống: chuỗi kiểu trời (nắng, nhiều mây, mưa, mưa giông, sương mù) theo giờ trong ngày, chuyển dần; gió giật, sóng gió có độ trễ, sét |
-| `view3d.js` | cảnh three.js: nước (sóng Gerstner + texture, giữ pha liền khi sóng đổi), mưa, mây, chớp sét, địa hình dựng quanh tàu từ các tờ (lưới mịn gần, thưa xa), tàu, đèn, camera buồng lái 3 cửa sổ |
+| `view3d.js` | cảnh three.js: nước (sóng Gerstner + texture, giữ pha liền khi sóng đổi), mưa, mây, chớp sét, địa hình dựng quanh tàu từ các tờ (lưới mịn gần, thưa xa), tàu (mô hình vẽ từ sơ đồ nếu có, không thì tàu đơn giản), đèn, camera buồng lái 3 cửa sổ đặt tại vị trí người điều động |
 | `radar.js` | radar quét tia, cự ly tới 24 Hl, EBL/VRM, nhiễu sóng và nhiễu mưa |
 | `kap.js` | georef tuyến tính của v0.1 — chỉ dùng chuyển dữ liệu cũ; `fmtLL` |
 | `nav.js` | định dạng khoảng cách, đọc tọa độ, tuyến đi (`legsLL` loxodrom theo lat/lon, `legs`, `trackRoute`) |
 | `windage.js` | tính diện tích hứng gió từ sơ đồ tàu PDF / ảnh |
 | `pdfload.js` | mở PDF bằng pdf.js (worker classic từ Blob), dùng chung cho `windage.js` và hải đồ PDF |
+| `ui_shipdraw.js` | hộp thoại vẽ tàu từ sơ đồ (mở từ tab 1): hình chiếu, mốc + số đo, công cụ dò / chấm, chọn loại nhiều nấc, xem 3D, dùng cho tàu, xuất / nhập file |
 | `ui_pdfchart.js` | hộp thoại nạp hải đồ PDF: trang, tỷ lệ, datum (mặc định VN-2000), độ nét, điểm tọa độ, khung hải đồ, sai số khớp |
 | `audio.js` | âm thanh tổng hợp: máy, còi, chuông, báo động, mưa, gió, sấm |
 | `ui_setup.js` | tab 1 Thông số tàu, tab 2 Cảng & luồng (kho hải đồ, khung nhìn liền mạch, datum / dời tay từng tờ), tab 4 Môi trường, Cài đặt |
@@ -36,6 +37,7 @@
 - Kịch bản `mp_env`: `wxMode` (`manual` | `random`), `wxStart` (kiểu trời khởi đầu, rỗng = app chọn), `waveL` bước sóng (m; chu kỳ suy ra theo sóng nước sâu). Thời tiết ngẫu nhiên tạo mới mỗi bài (`A.sim.wx`), không đổi thủy triều, dòng chảy, giờ
 - Bản ghi bài tập (`rec`, 1 dòng/giây) có cả thời tiết (`wKn`, `wDir`, `wD`, `wL`, `rn`, `cl`, `wx`) để xem lại 3D đúng như lúc chạy
 - Nấc lệnh lái lấy từ `helmSteps()` theo `rudMax` của tàu
+- Thông số tàu có `model` (vẽ từ sơ đồ, xem `shipdraw/AGENTS.md`) thì cảnh 3D, camera buồng lái, vị trí đèn hàng hải theo mô hình; ảnh sơ đồ lưu riêng ở IndexedDB `mp_shipimg`
 - Độ sâu theo màu (`classDepth`) thuộc từng tờ hải đồ; ngoài mọi tờ là biển trống sâu `noChartDepth` (30 m)
 - Khung nhìn hải đồ là `render/chartcanvas.js` (có `redraw` thì vòng lặp chính tự vẽ lại khi `dirty`)
 - `physics.js` không phụ thuộc hải đồ; độ sâu đi qua `world.depthAt` / `classAt`
@@ -44,7 +46,7 @@
 ## Work Guidance
 
 - ES modules thuần, không framework; mỗi tab một file `ui_*.js`
-- Module mới của giai đoạn 2 đặt trong thư mục con: `geo/`, `charts/`, `render/`, `depth/`
+- Module lõi theo mảng đặt trong thư mục con: `geo/`, `charts/`, `render/`, `depth/`, `shipdraw/`
 
 ## Verification
 
@@ -56,3 +58,4 @@
 - `charts/AGENTS.md` — đọc BSB đầy đủ, georef đa thức, kho hải đồ, worker chia ô ảnh
 - `render/AGENTS.md` — chọn tờ (quilting), renderer WebGL2, khung nhìn hải đồ
 - `depth/AGENTS.md` — nguồn độ sâu ghép nhiều tờ
+- `shipdraw/AGENTS.md` — vẽ tàu từ sơ đồ: cây chi tiết, dò viền, tỷ lệ, dựng mô hình 3D

@@ -14,6 +14,7 @@ import { DATUMS } from './geo/datum.js';
 import { defaultEnv, tideAt, envWaveL } from './world.js';
 import { QUALITY } from './view3d.js';
 import { openWindage } from './windage.js';
+import { openShipDraw } from './ui_shipdraw.js';
 
 const fld = (k, label, unit, val, attr) => `<div class="fld"><label for="f_${k}">${label}</label><div class="in"><input id="f_${k}" data-k="${k}" value="${esc(val)}" ${attr || ''}>${unit ? `<span class="u">${unit}</span>` : ''}</div></div>`;
 const sel = (k, label, opts, val) => `<div class="fld"><label for="f_${k}">${label}</label><div class="in"><select id="f_${k}" data-k="${k}">${opts.map((o) => `<option value="${o[0]}" ${String(o[0]) === String(val) ? 'selected' : ''}>${o[1]}</option>`).join('')}</select></div></div>`;
@@ -34,7 +35,8 @@ export function initShip() {
   <div><button class="btn" id="shipReset">Về tàu mẫu</button> <button class="btn" id="shipExport">Lưu ra file</button> <label class="btn" style="display:inline-flex;align-items:center">Mở từ file<input type="file" id="shipImport" accept=".json" hidden></label></div></div>
   <div id="shipCalc" class="note" style="margin-bottom:12px"></div>
   <div class="flex"><div class="col" style="flex:1 1 560px">${SHIP.map((g) => `<section class="card"><h2>${g[0]}</h2><div class="grid ${g[1]}">${g[2].map((f) => Array.isArray(f[2]) ? sel(f[0], f[1], f[2], p[f[0]]) : fld(f[0], f[1], f[2], p[f[0]], f[3] ? 'data-t="1"' : 'inputmode="decimal"')).join('')}</div></section>`).join('')}</div>
-  <div class="col" style="flex:1 1 420px"><section class="card"><h2>Bảng nấc máy (tay chuông)</h2><div class="muted" style="margin-bottom:6px">Mỗi dòng là một nút trên tay chuông. Tàu nhiều máy: bảng áp dụng cho từng máy. Tốc độ lùi để trống — app tự tính.</div>
+  <div class="col" style="flex:1 1 420px"><section class="card"><h2>Mô hình 3D tàu</h2><div class="muted" id="mdlInfo" style="margin-bottom:8px">${p.model && p.model.parts && p.model.parts.length ? 'Đang dùng mô hình vẽ từ sơ đồ: ' + p.model.parts.length + ' chi tiết trên ' + p.model.views.length + ' hình chiếu. Buồng lái, đèn hành trình theo mô hình.' : 'Đang dùng tàu đơn giản. Vẽ lại tàu theo sơ đồ (ảnh / PDF, 1–3 hình chiếu) để cảnh nhìn từ buồng lái, đèn và diện tích hứng gió giống tàu thật.'}</div><div class="flex" style="gap:8px"><button class="btn sm pri" id="mdlBtn">Vẽ tàu từ sơ đồ…</button>${p.model ? '<button class="btn sm" id="mdlOff">Bỏ mô hình (dùng tàu đơn giản)</button>' : ''}</div></section>
+  <section class="card"><h2>Bảng nấc máy (tay chuông)</h2><div class="muted" style="margin-bottom:6px">Mỗi dòng là một nút trên tay chuông. Tàu nhiều máy: bảng áp dụng cho từng máy. Tốc độ lùi để trống — app tự tính.</div>
   <table><thead><tr><th>Nấc</th><th>Vòng quay (v/ph)</th><th>Tốc độ có hàng (hl/h)</th><th>Tốc độ ballast (hl/h)</th></tr></thead><tbody>${p.steps.map((s, i) => `<tr><th>${s.label}</th><td><input class="cell mono" data-s="${i}" data-c="rpm" value="${s.rpm}" aria-label="Vòng quay ${s.label}"></td><td>${s.id[0] === 'f' ? `<input class="cell mono" data-s="${i}" data-c="kn" value="${s.kn}" aria-label="Tốc độ có hàng ${s.label}">` : '—'}</td><td>${s.id[0] === 'f' ? `<input class="cell mono" data-s="${i}" data-c="knB" value="${s.knB}" aria-label="Tốc độ ballast ${s.label}">` : '—'}</td></tr>`).join('')}</tbody></table></section>
   <section class="card"><h2>Hiệu ứng tính thêm</h2>${FX.map((f) => `<label style="display:flex;gap:8px;align-items:center;padding:4px 0"><input type="checkbox" data-fx="${f[0]}" ${p.fx[f[0]] ? 'checked' : ''} style="width:17px;height:17px"> ${f[1]}</label>`).join('')}
   <div class="muted" style="margin-top:6px">Mô hình thân tàu – chân vịt – bánh lái tách rời (kiểu MMG), hệ số thân tàu ước tính theo Kijima từ L, B, mớn nước, Cb. Chưa có: tương tác tàu–tàu.</div></section></div></div>`;
@@ -49,6 +51,8 @@ export function initShip() {
     else if (t.dataset.fx) { p.fx[t.dataset.fx] = t.checked; changed(); }
   });
   $('#shipReset').onclick = () => { if (confirm('Đưa mọi thông số về tàu mẫu?')) { A.p = defaultShip(); saveShip(); initShip(); if (A.hooks.shipChanged) A.hooks.shipChanged(); } };
+  $('#mdlBtn').onclick = () => openShipDraw();
+  if ($('#mdlOff')) $('#mdlOff').onclick = () => { if (confirm('Bỏ mô hình vẽ, dùng lại tàu đơn giản? (bản vẽ vẫn mở lại được nếu chưa đóng app)')) { A.p.model = null; saveShip(); initShip(); if (A.hooks.shipChanged) A.hooks.shipChanged(); } };
   $('#shipExport').onclick = () => { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify(A.p, null, 1)], { type: 'application/json' })); a.download = (A.p.name || 'tau') + '.json'; a.click(); };
   $('#shipImport').onchange = async (e) => { try { const o = JSON.parse(await e.target.files[0].text()); A.p = Object.assign(defaultShip(), o); saveShip(); initShip(); if (A.hooks.shipChanged) A.hooks.shipChanged(); } catch (x) { alert('File không đọc được'); } };
   calcShip();

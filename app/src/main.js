@@ -4,6 +4,7 @@ import { View3D } from './view3d.js';
 import { Sound } from './audio.js';
 import { windageState } from './windage.js';
 import { initShip, initChart, initEnv, initSet, drawChart, initCharts, chartView, pdfChartAdded, pdfTest } from './ui_setup.js';
+import { shipDrawTest } from './ui_shipdraw.js';
 import { initRun, rebuildRun, uiTick, runState, lineSegs3D, paneCvs, consoleFrame, fillRoutes, runKey } from './ui_run.js';
 import { initReplay, replayFrame, saveSession, restoreSessions, R } from './ui_replay.js';
 
@@ -110,4 +111,4 @@ function frame(ts) {
   if (A.tab !== 'run' && A.snd.amb) A.snd.weather(0, 0);
 }
 requestAnimationFrame(frame);
-window.__A = A; window.__R = R; window.__W = windageState; window.__chartView = chartView; window.__CS = CS; window.__pdf = pdfTest;
+window.__A = A; window.__R = R; window.__W = windageState; window.__chartView = chartView; window.__CS = CS; window.__pdf = pdfTest; window.__sd = shipDrawTest;

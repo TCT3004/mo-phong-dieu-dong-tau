@@ -81,7 +81,8 @@ Default section order:
 - Mô phỏng điều động tàu 3D cho **người điều động** (không phải người lái), offline, Windows
 - JavaScript ES modules + three.js + pdf.js, bundle bằng esbuild thành **1 file HTML**; Electron bọc thành `.exe` portable
 - Giai đoạn 1 xong (v0.1.0). Giai đoạn 2 xong (v0.2.0): hải đồ liền mạch kiểu OpenCPN (quilting), mét thế giới + gốc trôi, kho hải đồ KAP / PDF, độ sâu ghép nhiều tờ
-- Lộ trình: giai đoạn 3 (0.3.x) dựng mô hình tàu từ sơ đồ (dò viền + chấm tay, chọn chi tiết nhiều nấc, đo kích thước); giai đoạn 4 (0.4.x) đọc số độ sâu trên hải đồ PDF vector, dữ liệu cảng thật; giai đoạn 5 (0.5.x) các tàu khác (tàu lai, tàu trên luồng, tránh va)
+- Giai đoạn 3 đang làm: 0.3.0 nấc lái theo góc lái tối đa, thời tiết ngẫu nhiên; 0.3.1 vẽ tàu từ sơ đồ (dò viền + chấm tay, chọn chi tiết nhiều nấc, đo kích thước, tự suy hình chiếu thiếu)
+- Lộ trình: giai đoạn 4 (0.4.x) đọc số độ sâu trên hải đồ PDF vector, dữ liệu cảng thật; giai đoạn 5 (0.5.x) các tàu khác (tàu lai, tàu trên luồng, tránh va)
 
 ## Project-wide Rules
 
@@ -111,6 +112,7 @@ Default section order:
 - Người dùng là sĩ quan điều động; khẩu lệnh lái / máy tiếng Việt; tay chuông Tiến max/3/2/1, Dừng, Lùi 1/2
 - Khẩu lệnh máy tàu 2 máy: cùng nấc hô «2 máy tiến 1», «2 máy lùi»; tách riêng hô gộp một câu «Trái tiến 1, phải dừng»
 - Mục tiêu: một app làm được mọi việc điều động; độ sâu sát thực tế và mô hình tàu giống thật là ưu tiên
+- Người khác sẽ tự dùng app cho tàu của họ (tự nạp sơ đồ, tự vẽ): công cụ phải tự giải thích, không cần người làm app hướng dẫn
 - Phím tắt tab 3: phím cách chạy / tạm dừng; ← / → đánh lái từng nấc (lái tự động: đổi hướng đặt 1°); ↑ / ↓ tăng / giảm một nấc máy
 - Máy đích: Lenovo LOQ (RTX 3050), 1 màn hình; tab 3 phải vừa một màn hình, không cuộn
 - Bước sóng chỉnh theo m ở tab 4, mặc định 225 m (tương đương «×4» cũ); tốc độ lắc tàu mặc định ×4 (Cài đặt)
