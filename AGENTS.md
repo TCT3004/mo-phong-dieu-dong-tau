@@ -109,6 +109,8 @@ Default section order:
 ## User Preferences
 
 - Người dùng là sĩ quan điều động; khẩu lệnh lái / máy tiếng Việt; tay chuông Tiến max/3/2/1, Dừng, Lùi 1/2
+- Khẩu lệnh máy tàu 2 máy: cùng nấc hô «2 máy tiến 1», «2 máy lùi»; tách riêng hô gộp một câu «Trái tiến 1, phải dừng»
+- Mục tiêu: một app làm được mọi việc điều động; độ sâu sát thực tế và mô hình tàu giống thật là ưu tiên
 - Phím tắt tab 3: phím cách chạy / tạm dừng; ← / → đánh lái từng nấc (lái tự động: đổi hướng đặt 1°); ↑ / ↓ tăng / giảm một nấc máy
 - Máy đích: Lenovo LOQ (RTX 3050), 1 màn hình; tab 3 phải vừa một màn hình, không cuộn
 - Mặc định bước sóng ×4 và tốc độ lắc tàu ×4 (chỉnh trong Cài đặt)
