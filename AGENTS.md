@@ -93,7 +93,7 @@ Default section order:
 
 ## Phase 2 Decisions (đã duyệt)
 
-- D1: "mét thế giới" = Mercator cầu × cos φ₀, gốc theo bài tập, có gốc trôi; mọi dữ liệu lưu bằng WGS‑84 lat/lon
+- D1: "mét thế giới" = Mercator elipxoit WGS‑84 ÷ hệ số phóng tại φ₀ (Mercator cầu bị loại vì lệch tỷ lệ 0,65% ở 21°N), gốc theo bài tập, có gốc trôi; mọi dữ liệu lưu bằng WGS‑84 lat/lon (`app/src/geo/`)
 - D2: renderer hải đồ WebGL2 thuần, một context dùng chung tab 2 và tab 3
 - D3: được dùng `earcut` và `polygon-clipping`
 - D4: cache ô ảnh hải đồ trên đĩa, giới hạn dung lượng chỉnh được

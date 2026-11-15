@@ -38,8 +38,8 @@
 
 ## Verification
 
-- `cd app && npm run build`
+- `cd app && npm run build && npm test`
 
 ## Child DOX Index
 
-- Chưa có thư mục con
+- `geo/AGENTS.md` — nền tọa độ: Mercator elipxoit, WorldFrame, datum VN-2000, geodesic, đa giác (giai đoạn 2, M0; chưa nối vào mô phỏng)

@@ -34,6 +34,7 @@ Cần Node.js 18 trở lên.
 cd app
 npm install
 npm run build          # tạo app/dist/MoPhongDieuDongTau.html (mở bằng Chrome / Edge là chạy)
+npm test               # chạy unit test
 
 # đóng gói .exe cho Windows
 cp dist/MoPhongDieuDongTau.html ../electron/index.html

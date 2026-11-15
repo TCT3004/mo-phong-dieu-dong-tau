@@ -9,6 +9,7 @@
 - `build.mjs`: bundle esbuild (IIFE, target es2022) vào `src/template.html` tại chỗ `/*BUNDLE*/`; tạo `src/_pdfworker.js` từ pdf.js worker (bundle IIFE để chạy được dưới `file://`)
 - `package.json`: phụ thuộc `three`, `pdfjs-dist`, `esbuild`
 - `src/`: mã nguồn (xem `src/AGENTS.md`)
+- `tests/`: unit test Node (xem `tests/AGENTS.md`)
 
 ## Local Contracts
 
@@ -18,11 +19,14 @@
 ## Work Guidance
 
 - Build: `cd app && npm install && npm run build`
+- Kiểm thử: `npm test`
 
 ## Verification
 
 - `npm run build` phải in `built ... KB` không lỗi
+- `npm test` phải pass hết
 
 ## Child DOX Index
 
 - `src/AGENTS.md` — các module nguồn, quy ước tọa độ, lưu trữ, giao diện
+- `tests/AGENTS.md` — unit test
