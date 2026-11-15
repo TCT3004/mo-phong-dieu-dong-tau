@@ -1,7 +1,7 @@
 # Mô phỏng điều động tàu 3D
 
 Phần mềm mô phỏng 3D dành cho **người điều động tàu** (không phải người lái), chạy offline trên Windows.
-Bản thử nghiệm v0.2 — xong giai đoạn 2 (hải đồ liền mạch nhiều tờ).
+Bản thử nghiệm v0.3 — đang làm giai đoạn 3 (mô hình tàu từ sơ đồ).
 
 ## Các phần chính
 
@@ -10,7 +10,7 @@ Bản thử nghiệm v0.2 — xong giai đoạn 2 (hải đồ liền mạch nhi
 | 1 · Thông số tàu | Kích thước, mớn nước, máy (1–4 máy, chân vịt FPP/CPP), bảng nấc máy, bánh lái, neo, dây buộc, diện tích hứng gió (tính được từ sơ đồ tàu PDF / ảnh scan) |
 | 2 · Cảng & luồng | Kho hải đồ `.kap` và PDF: các tờ ghép liền mạch theo tọa độ như OpenCPN (tờ tỷ lệ lớn nằm trên, kéo / phóng to thu nhỏ mượt), tìm tờ theo tên / tọa độ, lưới kinh vĩ để kiểm tra, chọn datum và dời tay cho từng tờ; cầu bến, cọc bích, đèn phao, tuyến đi, vị trí xuất phát (lưu theo tọa độ WGS-84) |
 | 3 · Điều động | Buồng lái 3 cửa sổ, radar (tới 24 Hl, EBL/VRM), hải đồ nhỏ, khẩu lệnh lái tiếng Việt, tay chuông máy, vô lăng, neo, dây, đèn hành trình, còi theo COLREG, chuông, báo động |
-| 4 · Môi trường & kịch bản | Gió, dòng chảy, sóng, thủy triều, tầm nhìn, giờ trong ngày |
+| 4 · Môi trường & kịch bản | Gió, dòng chảy, sóng (độ cao, hướng, bước sóng), thủy triều, tầm nhìn, giờ trong ngày; hoặc thời tiết «Ngẫu nhiên»: app tự đổi nắng, mây, mưa, giông (có sấm sét), sương mù theo thời gian chạy bài |
 | 5 · Xem lại | Phát lại bài tập 2D / 3D, đồ thị, xuất video |
 
 Mô hình chuyển động: kiểu MMG 3 bậc tự do (thân tàu, chân vịt, bánh lái), có squat, hiệu ứng bờ, chân vịt kéo lái, gió, dòng chảy, sóng.
@@ -45,7 +45,7 @@ npm test               # chạy unit test
 cp dist/MoPhongDieuDongTau.html ../electron/index.html
 cd ../electron
 npm install
-npx electron-builder --win portable --x64   # tạo electron/dist/MoPhongDieuDongTau-0.2.0.exe
+npx electron-builder --win portable --x64   # tạo electron/dist/MoPhongDieuDongTau-0.3.0.exe
 ```
 
 File `.exe` chưa có chữ ký số: lần đầu mở, nếu Windows chặn thì bấm **More info → Run anyway**.

@@ -113,7 +113,9 @@ Default section order:
 - Mục tiêu: một app làm được mọi việc điều động; độ sâu sát thực tế và mô hình tàu giống thật là ưu tiên
 - Phím tắt tab 3: phím cách chạy / tạm dừng; ← / → đánh lái từng nấc (lái tự động: đổi hướng đặt 1°); ↑ / ↓ tăng / giảm một nấc máy
 - Máy đích: Lenovo LOQ (RTX 3050), 1 màn hình; tab 3 phải vừa một màn hình, không cuộn
-- Mặc định bước sóng ×4 và tốc độ lắc tàu ×4 (chỉnh trong Cài đặt)
+- Bước sóng chỉnh theo m ở tab 4, mặc định 225 m (tương đương «×4» cũ); tốc độ lắc tàu mặc định ×4 (Cài đặt)
+- Nút lệnh lái: 5 · 10 · 15 · hết lái, hết lái lấy đúng góc lái tối đa ở tab 1 (tàu chiến thường 25°); vạch giữa thanh quay trở phải thẳng hàng với kim góc lái
+- Thời tiết «Ngẫu nhiên» ở tab 4: app tự đổi gió, sóng, mưa, giông, sương mù theo thời gian chạy bài; ngày / đêm luôn theo giờ, không đổi đột ngột
 
 ## Child DOX Index
 

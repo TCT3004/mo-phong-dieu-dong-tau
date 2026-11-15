@@ -28,7 +28,7 @@ export class View3D {
     this.sun = new THREE.DirectionalLight(0xffffff, 1.6); this.scene.add(this.sun);
     this.glow = glowTex(); this.time = 0;
     this.look = { yaw: 0, pitch: 0, fov: 55, dist: 1 };
-    this.mkWater();
+    this.mkWater(); this.mkRain(); this.mkBolt();
     this.shipG = new THREE.Group(); this.scene.add(this.shipG);
     this.terrain = null; this.objG = new THREE.Group(); this.scene.add(this.objG);
     this.lineG = new THREE.Group(); this.scene.add(this.lineG); this.linePool = [];
@@ -42,6 +42,26 @@ export class View3D {
   }
   // Mặt nước: lưới tròn dày ở gần, thưa ở xa, đi theo camera. Sóng Gerstner theo hướng & chiều cao sóng của kịch bản:
   // gần thì mặt nước nhấp nhô thật (đỉnh vertex), xa thì chỉ đổ bóng theo pháp tuyến từng điểm ảnh.
+  // Mưa: các vệt hạt mưa trong hộp quanh camera, rơi và xiên theo gió trong shader (không tốn CPU); trong buồng lái thì chừa
+  // một khoảng quanh mắt người nhìn để mưa không "rơi trong phòng"
+  mkRain() {
+    const N = this.q.water > 1 ? 9000 : this.q.water ? 6000 : 3500, R = 45, H = 34, pos = new Float32Array(N * 6), end = new Float32Array(N * 2);
+    for (let i = 0; i < N; i++) { const x = (Math.random() * 2 - 1) * R, y = Math.random() * H, z = (Math.random() * 2 - 1) * R; pos.set([x, y, z, x, y, z], i * 6); end[i * 2 + 1] = 1; }
+    const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.BufferAttribute(pos, 3)); geo.setAttribute('aEnd', new THREE.BufferAttribute(end, 1));
+    this.rU = { uT: { value: 0 }, uCam: { value: new THREE.Vector3() }, uVel: { value: new THREE.Vector3(0, -8.5, 0) }, uOp: { value: 0 }, uCol: { value: new THREE.Color(0xc8d2da) }, uIn: { value: 0 }, uR: { value: R }, uH: { value: H } };
+    const m = new THREE.ShaderMaterial({ uniforms: this.rU, transparent: true, depthWrite: false,
+      vertexShader: `attribute float aEnd; uniform float uT; uniform vec3 uCam; uniform vec3 uVel; uniform float uIn; uniform float uR; uniform float uH; varying float vA;
+      void main(){ vec3 b=position; vec2 q=mod(b.xz+uVel.xz*uT-uCam.xz+uR,2.0*uR)-uR; float y=mod(b.y+uVel.y*uT,uH);
+        vec3 p=vec3(uCam.x+q.x, uCam.y-uH*0.35+y, uCam.z+q.y); p+=uVel*0.055*aEnd; float r=length(q);
+        vA=(r<uIn?0.0:1.0)*(1.0-smoothstep(uR*0.6,uR,r)); gl_Position=projectionMatrix*viewMatrix*vec4(p,1.0); }`,
+      fragmentShader: `uniform vec3 uCol; uniform float uOp; varying float vA; void main(){ gl_FragColor=vec4(uCol,uOp*vA); }` });
+    this.rain = new THREE.LineSegments(geo, m); this.rain.frustumCulled = false; this.rain.visible = false; this.scene.add(this.rain);
+  }
+  // tia sét: đường gấp khúc từ mây xuống mặt biển, hiện trong lúc chớp
+  mkBolt() {
+    this.bolt = new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshBasicMaterial({ color: 0xffffff, fog: false, transparent: true, depthWrite: false }));
+    this.bolt.frustumCulled = false; this.bolt.visible = false; this.scene.add(this.bolt); this.boltT = null;
+  }
   mkWater() {
     const q = this.q, NT = q.water ? 256 : 128, NR = q.water ? 180 : 110, b = q.water ? 0.045 : 0.07, a = 20000 / (Math.exp(b * NR) - 1);
     const pos = [0, 0, 0], idx = [];
@@ -50,7 +70,7 @@ export class View3D {
     for (let j = 1; j < NR; j++) for (let i = 0; i < NT; i++) { const a0 = 1 + (j - 1) * NT + i, a1 = 1 + (j - 1) * NT + (i + 1) % NT, b0 = a0 + NT, b1 = a1 + NT; idx.push(a0, a1, b1, a0, b1, b0); }
     const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); geo.setIndex(idx);
     const W8 = () => Array.from({ length: 8 }, () => new THREE.Vector4());
-    this.wU = THREE.UniformsUtils.merge([THREE.UniformsLib.fog, { uT: { value: 0 }, uDeep: { value: new THREE.Color(0x0d3346) }, uSky: { value: new THREE.Color(0x9db8cc) }, uSun: { value: new THREE.Vector3(0, 1, 0) }, uSunI: { value: 1 }, uCam: { value: new THREE.Vector3() }, uWd: { value: W8() }, uWa: { value: W8() }, uSp: { value: Math.max(b, 2 * Math.PI / NT) }, uHs: { value: 0.5 }, uSpec: { value: q.water > 1 ? 1 : 0.5 }, uNm: { value: this.mkWaveTex() }, uD2: { value: new THREE.Vector4(1, 0, 0, 1) }, uTile: { value: new THREE.Vector4(60, 20, 3, 1.7) }, uStr: { value: 0.2 } }]);
+    this.wU = THREE.UniformsUtils.merge([THREE.UniformsLib.fog, { uT: { value: 0 }, uDeep: { value: new THREE.Color(0x0d3346) }, uSky: { value: new THREE.Color(0x9db8cc) }, uSun: { value: new THREE.Vector3(0, 1, 0) }, uSunI: { value: 1 }, uCam: { value: new THREE.Vector3() }, uWd: { value: W8() }, uWa: { value: W8() }, uSp: { value: Math.max(b, 2 * Math.PI / NT) }, uHs: { value: 0.5 }, uSpec: { value: q.water > 1 ? 1 : 0.5 }, uNm: { value: this.mkWaveTex() }, uD1: { value: new THREE.Vector4(0, -1, 0, 0) }, uD2: { value: new THREE.Vector4(1, 0, 0, 1) }, uTile: { value: new THREE.Vector4(60, 20, 3, 1.7) }, uStr: { value: 0.2 } }]);
     const GER = `uniform vec4 uWd[8]; uniform vec4 uWa[8]; uniform float uT;`;
     const mat = new THREE.ShaderMaterial({ uniforms: this.wU, fog: true,
       vertexShader: `#include <common>\n#include <fog_pars_vertex>\n${GER} uniform vec3 uCam; uniform float uSp; varying vec3 vW; varying float vH;
@@ -58,12 +78,12 @@ export class View3D {
         for(int i=0;i<8;i++){ vec2 D=uWd[i].xy; float k=uWd[i].z, om=uWd[i].w, L=6.2832/k; float att=1.0-smoothstep(L*0.06,L*0.13,sp); float A=uWa[i].x*att, Q=uWa[i].y;
           float th=k*dot(D,p)-om*uT+uWa[i].z; float c=cos(th); d.x+=Q*A*D.x*c; d.z+=Q*A*D.y*c; d.y+=A*sin(th); }
         w.xyz+=d; vW=w.xyz; vH=d.y; vec4 mvPosition=viewMatrix*w; gl_Position=projectionMatrix*mvPosition;\n#include <fog_vertex>\n}`,
-      fragmentShader: `#include <common>\n#include <fog_pars_fragment>\n${GER} uniform vec3 uDeep; uniform vec3 uSky; uniform vec3 uSun; uniform float uSunI; uniform vec3 uCam; uniform float uHs; uniform float uSpec; uniform sampler2D uNm; uniform vec4 uD2; uniform vec4 uTile; uniform float uStr; varying vec3 vW; varying float vH;
+      fragmentShader: `#include <common>\n#include <fog_pars_fragment>\n${GER} uniform vec3 uDeep; uniform vec3 uSky; uniform vec3 uSun; uniform float uSunI; uniform vec3 uCam; uniform float uHs; uniform float uSpec; uniform sampler2D uNm; uniform vec4 uD1; uniform vec4 uD2; uniform vec4 uTile; uniform float uStr; varying vec3 vW; varying float vH;
       void main(){ vec2 p=vW.xz; float fp=max(length(fwidth(p)),0.02); vec3 N=vec3(0.0);
         for(int i=0;i<8;i++){ vec2 D=uWd[i].xy; float k=uWd[i].z, om=uWd[i].w, L=6.2832/k; float att=1.0-smoothstep(L*0.1,L*0.3,fp); float A=uWa[i].x*att, Q=uWa[i].y;
           float th=k*dot(D,p)-om*uT+uWa[i].z; float c=cos(th); N.x+=D.x*k*A*c; N.z+=D.y*k*A*c; N.y+=Q*k*A*sin(th); }
         // sóng gió nhỏ: 2 lớp texture pháp tuyến (có mipmap nên ở xa tự mịn, không bị sọc), xoay theo hướng sóng, trôi theo vận tốc sóng
-        vec2 D=uWd[0].xy, Dp=vec2(-D.y,D.x), E=uD2.xy, Ep=uD2.zw;
+        vec2 D=uD1.xy, Dp=vec2(-D.y,D.x), E=uD2.xy, Ep=uD2.zw;
         vec2 uv1=(vec2(dot(p,D),dot(p,Dp))-vec2(uTile.z*uT,0.0))/uTile.x, uv2=(vec2(dot(p,E),dot(p,Ep))-vec2(uTile.w*uT,0.0))/uTile.y;
         vec2 g1=texture2D(uNm,uv1).rg*2.0-1.0, g2=texture2D(uNm,uv2+vec2(0.37,0.61)).rg*2.0-1.0;
         vec2 gw=uStr*((g1.x*D+g1.y*Dp)+0.75*(g2.x*E+g2.y*Ep)); N.x+=gw.x; N.z+=gw.y;
@@ -89,15 +109,21 @@ export class View3D {
   }
   // các thành phần sóng: hướng truyền (về), số sóng, tần số, biên độ, độ dốc
   // lenK: hệ số nhân bước sóng (chu kỳ tăng theo căn bậc hai để sóng vẫn đúng quan hệ tán sắc nước sâu)
-  setWaves(Hs, fromRad, Tp, lenK = 1) {
+  // t, rx, rz: thời điểm và vị trí tàu — khi sóng đổi dần (thời tiết ngẫu nhiên) thì chỉnh pha để mặt nước quanh tàu không bị giật
+  setWaves(Hs, fromRad, Tp, lenK = 1, t = 0, rx = 0, rz = 0) {
     const key = Hs.toFixed(2) + '|' + fromRad.toFixed(3) + '|' + Tp.toFixed(2) + '|' + lenK; if (key === this.wKey) return; this.wKey = key;
+    const old = this.wComp;
     const H = Math.max(Hs, 0.15), to = fromRad + Math.PI, T = Math.max(2.5, Tp || 6), G = 9.81;
     const C = [[0, 1, 0.33], [16, 0.86, 0.2], [-20, 0.9, 0.18], [36, 0.66, 0.12], [-32, 0.6, 0.11], [6, 1.22, 0.1], [-55, 0.45, 0.07], [62, 0.38, 0.06]];
     this.wComp = C.map((c, i) => { const dir = to + c[0] * Math.PI / 180, Ti = T * c[1], k = (2 * Math.PI / Ti) ** 2 / G / lenK, om = Math.sqrt(G * k), A = H * c[2], Q = Math.min(1, 0.7 / (k * A * 8 + 1e-6)); return { dx: Math.sin(dir), dz: -Math.cos(dir), k, om, A, Q, ph: i * 1.7 }; });
+    if (old) this.wComp.forEach((w, i) => { const o = old[i]; w.ph = o.k * (o.dx * rx + o.dz * rz) - o.om * t + o.ph - (w.k * (w.dx * rx + w.dz * rz) - w.om * t); w.ph %= 2 * Math.PI; });
     this.wComp.forEach((w, i) => { this.wU.uWd.value[i].set(w.dx, w.dz, w.k, w.om); this.wU.uWa.value[i].set(w.A, w.Q, w.ph, 0); });
     this.wU.uHs.value = H;
-    const Lm = 9.81 * T * T / (2 * Math.PI) * lenK, S1 = Math.max(14, 0.9 * Lm), S2 = 0.31 * S1, d2 = to + 0.45, cs = (S) => Math.sqrt(9.81 * (S / 9) / (2 * Math.PI));
-    this.wU.uTile.value.set(S1, S2, cs(S1), cs(S2)); this.wU.uD2.value.set(Math.sin(d2), -Math.cos(d2), Math.cos(d2), Math.sin(d2));
+    const Lm = 9.81 * T * T / (2 * Math.PI) * lenK, tk = this.tKey;
+    if (!tk || Math.abs(Lm / tk.L - 1) > 0.12 || Math.abs(Math.atan2(Math.sin(to - tk.to), Math.cos(to - tk.to))) > 0.14) { // lớp texture chỉ đổi khi sóng đổi đáng kể
+      this.tKey = { L: Lm, to }; const S1 = Math.max(14, 0.9 * Lm), S2 = 0.31 * S1, d2 = to + 0.45, cs = (S) => Math.sqrt(9.81 * (S / 9) / (2 * Math.PI));
+      this.wU.uTile.value.set(S1, S2, cs(S1), cs(S2)); this.wU.uD1.value.set(Math.sin(to), -Math.cos(to), 0, 0); this.wU.uD2.value.set(Math.sin(d2), -Math.cos(d2), Math.cos(d2), Math.sin(d2));
+    }
     this.wU.uStr.value = Math.min(0.6, 0.1 + 0.17 * Math.max(Hs, 0.05));
   }
   waveH(x, z, t) { let h = 0; if (this.wComp) for (const w of this.wComp) h += w.A * Math.sin(w.k * (w.dx * x + w.dz * z) - w.om * t + w.ph); return h; }
@@ -192,7 +218,7 @@ export class View3D {
     this.view = view; this.time = e.t;
     const d = this.dim || { L: 100, B: 16, fb: 4, shh: 10, bridgeX: -30, eye: 12 };
     // tàu chòng chành theo sóng: lấy cao độ sóng ở mũi, lái, hai mạn rồi làm trễ theo quán tính thân tàu
-    this.setWaves(e.waveH || 0, e.waveD || 0, e.waveT || 6, e.waveLen || 1);
+    this.setWaves(e.waveH || 0, e.waveD || 0, e.waveT || 6, e.waveLen || 1, e.t || 0, st.x, -st.y);
     const sn0 = Math.sin(st.psi), cs0 = Math.cos(st.psi), W2 = (bx, by) => this.waveH(st.x + bx * sn0 + by * cs0, -(st.y + bx * cs0 - by * sn0), e.t);
     const hb = W2(d.L * 0.42, 0), hs = W2(-d.L * 0.42, 0), hp = W2(0, -d.B / 2), hst = W2(0, d.B / 2), hc = W2(0, 0);
     const mo = this.mo || (this.mo = { t: e.t, z: 0, p: 0, r: 0 }), dt = Math.max(0, Math.min(0.25, e.t - mo.t)); mo.t = e.t;
@@ -204,15 +230,18 @@ export class View3D {
     for (const o of this.objG.children) if (o.userData.fix !== undefined) o.position.y = o.userData.fix - e.tide;
     this.objG.position.y = 0;
     // ánh sáng
-    const el = e.sunEl, day = Math.max(0, Math.min(1, (el + 6) / 18)), dusk = Math.max(0, 1 - Math.abs(el) / 14);
+    const el = e.sunEl, cl = Math.max(0, Math.min(1, e.cloud === undefined ? 0.2 : e.cloud)), rn = e.rain || 0, fl = e.flash || 0;
+    const day0 = Math.max(0, Math.min(1, (el + 6) / 18)), day = day0 * (1 - 0.45 * Math.max(0, cl - 0.3) - 0.2 * rn), dusk = Math.max(0, 1 - Math.abs(el) / 14) * (1 - cl * 0.7);
     const sky = new THREE.Color().setRGB(0.02 + 0.50 * day + 0.25 * dusk * (1 - day * 0.6), 0.03 + 0.66 * day + 0.08 * dusk, 0.07 + 0.80 * day);
+    { const gry = (sky.r + sky.g + sky.b) / 3; sky.lerp(new THREE.Color(gry, gry * 1.02, gry * 1.06), Math.max(0, cl - 0.25) * 0.9); } // trời âm u ngả xám
+    if (fl > 0) sky.lerp(new THREE.Color(0.62, 0.64, 0.76), Math.min(0.4, fl * 0.4));
     const visK = Math.min(1, e.vis / 9000); const fogC = sky.clone().lerp(new THREE.Color(0.75 * day + 0.06, 0.78 * day + 0.07, 0.8 * day + 0.08), 1 - visK * 0.6);
     this.scene.background = fogC; this.scene.fog.color.copy(fogC); this.scene.fog.near = Math.min(e.vis * 0.15, 800); this.scene.fog.far = Math.min(e.vis * 1.6, this.q.far);
-    this.hemi.intensity = 0.12 + 1.2 * day; this.sun.intensity = 1.7 * day;
+    this.hemi.intensity = 0.12 + 1.2 * day + 2.2 * fl; this.sun.intensity = 1.7 * day * (1 - 0.85 * Math.max(0, cl - 0.2));
     const az = e.sunAz, er = Math.max(el, 5) * Math.PI / 180; const sd = new THREE.Vector3(Math.sin(az) * Math.cos(er), Math.sin(er), -Math.cos(az) * Math.cos(er));
     this.sun.position.copy(sd.clone().multiplyScalar(1000).add(this.shipG.position));
     this.sun.target = this.shipG;
-    const dark = day < 0.55;
+    const dark = day0 < 0.55; // đèn theo độ cao mặt trời, không theo mây
     for (const k in this.navL) for (const sp of this.navL[k]) sp.visible = !!(e.lights && e.lights[k]) && dark;
     for (const m of this.marks) {
       const o = m.o, per = Math.max(0.5, +o.period || 3), on = Math.max(0.2, +o.flash || 0.5);
@@ -238,6 +267,16 @@ export class View3D {
     }
     c.far = Math.max(3000, this.scene.fog.far * 1.1); c.updateProjectionMatrix();
     this.water.position.set(c.position.x, 0, c.position.z);
+    // mưa & sét
+    this.rain.visible = rn > 0.02; if (this.rain.visible) {
+      const ws = (e.wKn || 0) * 0.5144 * 0.6, wd = (e.wDir || 0) * Math.PI / 180, R = this.rU;
+      R.uT.value = e.t; R.uCam.value.copy(c.position); R.uVel.value.set(-Math.sin(wd) * ws, -8.5, Math.cos(wd) * ws); R.uOp.value = Math.min(0.55, 0.12 + 0.4 * rn) * (0.35 + 0.65 * Math.max(day, fl));
+      R.uIn.value = view === 'bridge' || view === 'wingP' || view === 'wingS' ? 4.5 : 0;
+    }
+    const bo = e.bolt; if (bo && fl > 0.25) { if (this.boltT !== bo.t) { this.boltT = bo.t; const a = bo.az * Math.PI / 180, pts = []; let x = st.x + Math.sin(a) * bo.dist, z = -(st.y + Math.cos(a) * bo.dist);
+        for (let i = 0; i < 26; i++) { pts.push(new THREE.Vector3(x, 1400 * (1 - i / 25), z)); x += (Math.random() - 0.5) * 110; z += (Math.random() - 0.5) * 110; }
+        this.bolt.geometry.dispose(); this.bolt.geometry = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts, false, 'catmullrom', 0.1), 60, Math.max(3, bo.dist / 900), 4, false); }
+      this.bolt.visible = true; this.bolt.material.opacity = Math.min(1, fl * 1.3); } else this.bolt.visible = false;
     this.wU.uT.value = e.t; this.wU.uSky.value.copy(fogC); this.wU.uDeep.value.setRGB(0.02 + 0.03 * day, 0.05 + 0.15 * day, 0.08 + 0.2 * day); this.wU.uSun.value.copy(sd); this.wU.uSunI.value = day; this.wU.uCam.value.copy(c.position);
   }
   // hướng nhìn tính trong hệ tọa độ tàu (đi theo lắc dọc / lắc ngang của tàu)

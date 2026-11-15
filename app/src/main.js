@@ -66,7 +66,7 @@ Object.assign(A.hooks, {
   objsChanged() { if (A.view) A.view.buildObjects(A.W); fillRoutes(); },
   envChanged() { if (A.tab === 'env') initEnv(); },
   qualityChanged() { mkView(); },
-  volChanged() { A.snd.setVol({ master: A.set.volMaster / 100, engine: A.set.volEngine / 100, bell: A.set.volBell / 100 }); A.snd.bellType = A.set.bellType || 'electric'; },
+  volChanged() { A.snd.setVol({ master: A.set.volMaster / 100, engine: A.set.volEngine / 100, bell: A.set.volBell / 100, env: (A.set.volEnv === undefined ? 70 : A.set.volEnv) / 100 }); A.snd.bellType = A.set.bellType || 'electric'; },
   startScenario() { saveSession(); newSim(); if (A.view) A.view.buildShip(A.M); rebuildRun(); go('run'); A.sim.running = true; A.snd.init(); hdr(); A.hooks.chartsChanged(); }
 });
 
@@ -100,12 +100,14 @@ function frame(ts) {
     if (A.view) {
       const ds = s.day0 + s.t, e = s.e;
       A.view.setSegs(lineSegs3D());
-      A.view.update({ x: s.S.x, y: s.S.y, psi: s.S.psi }, runState.view, { sunEl: sunEl(ds, s.lightMode), sunAz: 2 * Math.PI * (ds / 86400), vis: s.fog ? 550 : e.vis, tide: e.tide, waveH: e.waveH, waveD: e.waveD, waveT: e.waveT, waveLen: A.set.waveLen, rollK: A.set.rollSpeed, t: s.t, lights: s.lights, daySec: ds });
+      A.view.update({ x: s.S.x, y: s.S.y, psi: s.S.psi }, runState.view, { sunEl: sunEl(ds, s.lightMode), sunAz: 2 * Math.PI * (ds / 86400), vis: s.fog ? 550 : e.vis, tide: e.tide, waveH: e.waveH, waveD: e.waveD, waveT: e.waveT, rain: e.rain, cloud: e.cloud, flash: e.flash, bolt: e.wx ? e.wx.bolt : null, wDir: e.wDir, wKn: e.wKn, rollK: A.set.rollSpeed, t: s.t, lights: s.lights, daySec: ds });
       A.view.render(runState.view === 'bridge' ? paneCvs() : null);
     }
+    if (s.wx) for (const ev of s.wx.takeEvents()) A.snd.thunder(ev.dist, s.speed);
     consoleFrame(dtR);
-    if (ts - lastUi > 150) { lastUi = ts; uiTick(); $('#hdrClock').textContent = clock(s.day0 + s.t); $('#runBtn').textContent = s.running ? '⏸' : '▶'; $('#alarmBar').style.display = s.alarm ? 'block' : 'none'; const M = A.M; A.snd.engine(s.S.n.reduce((a, b) => a + Math.abs(b), 0) / M.nE / M.nMax); }
+    if (ts - lastUi > 150) { lastUi = ts; uiTick(); $('#hdrClock').textContent = clock(s.day0 + s.t); $('#runBtn').textContent = s.running ? '⏸' : '▶'; $('#alarmBar').style.display = s.alarm ? 'block' : 'none'; const M = A.M; A.snd.engine(s.S.n.reduce((a, b) => a + Math.abs(b), 0) / M.nE / M.nMax); A.snd.weather(s.e.rain || 0, s.e.wKn || 0); }
   } else if (A.tab === 'rep') replayFrame(dtR);
+  if (A.tab !== 'run' && A.snd.amb) A.snd.weather(0, 0);
 }
 requestAnimationFrame(frame);
 window.__A = A; window.__R = R; window.__W = windageState; window.__chartView = chartView; window.__CS = CS; window.__pdf = pdfTest;

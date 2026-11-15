@@ -1,6 +1,6 @@
 // Tab 3: buồng lái của người điều động — 3 cửa sổ phía trên, bàn điều khiển phía dưới
 // (hải đồ · radar · màn hình chính + khẩu lệnh lái · tay chuông máy + vô lăng · bảng neo/dây/đèn/tín hiệu/nhật ký).
-import { A, $, $$, num, esc, pad3, clock, Orders, HELM, LIGHTS, LIGHT_PRESETS, logOrder, derived, engName, saveSet, saveObjs, sunEl } from './app.js';
+import { A, $, $$, num, esc, pad3, clock, Orders, helmSteps, LIGHTS, LIGHT_PRESETS, logOrder, derived, engName, saveSet, saveObjs, sunEl } from './app.js';
 import { STEP_ORDER, stepLabel, displayRpm, KN, D2R } from './physics.js';
 import { sendLine, body2w, wrap180, makeLines } from './world.js';
 import { ChartCanvas } from './render/chartcanvas.js';
@@ -53,7 +53,7 @@ export function initRun() {
       </div>
       <div class="cbox" style="padding-bottom:4px"><div class="flex" style="justify-content:space-between;gap:6px"><span class="lb">GÓC LÁI <span style="color:#E6EDF2" id="iAct"></span> · LỆNH <span style="color:#FFB547" id="iOrd"></span></span><span class="lb">MÁY <span id="iStep" style="color:#FFB547"></span></span></div>
         <canvas id="rudCv" style="width:100%;height:62px;display:block"></canvas>
-        <div class="flex" style="gap:8px;align-items:center;flex-wrap:nowrap"><span class="lb" style="white-space:nowrap">QUAY TRỞ</span><div class="rotbar"><i id="rotBar"></i><s></s></div><b class="mono" id="oRot" style="min-width:74px;text-align:right"></b></div>
+        <div class="rotrow"><span class="lb" style="white-space:nowrap">QUAY TRỞ</span><div class="rotbar"><i id="rotBar"></i><s></s></div><b class="mono" id="oRot" style="text-align:right"></b></div>
         <div class="kv"><span>Vòng quay thực / lệnh</span><b><span id="iRpm"></span> / <span id="iRpmO" style="color:#FFB547"></span></b></div>
       </div>
       <div class="cbox col" style="gap:5px">
@@ -81,7 +81,7 @@ export function initRun() {
   $('#fogBtn').onclick = () => { A.sim.fog = !A.sim.fog; $('#fogBtn').classList.toggle('on', A.sim.fog); };
   $('#mzIn').onclick = () => { mapScale = Math.max(0.5, mapScale / 1.6); }; $('#mzOut').onclick = () => { mapScale = Math.min(60, mapScale * 1.6); };
   $('#rzIn').onclick = () => radar.setRange(radar.ri + 1); $('#rzOut').onclick = () => radar.setRange(radar.ri - 1);
-  $('#helmBtns').innerHTML = HELM.map((h) => `<button class="${h[0] < 0 ? 'p' : h[0] > 0 ? 's' : 'z'}" data-a="${h[0]}" aria-label="${h[2]}"><small>${h[1]}</small><span>${Math.abs(h[0])}</span></button>`).join('');
+  buildHelm();
   $('#helmBtns').onclick = (e) => { const b = e.target.closest('button'); if (b) Orders.rudder(+b.dataset.a); };
   $('#steadyBtn').onclick = () => Orders.steady();
   $('#courseBtn').onclick = () => Orders.course($('#courseIn').value);
@@ -147,8 +147,9 @@ export function runKey(k) {
   if (k === 'ArrowLeft' || k === 'ArrowRight') {
     const h = s.helm, dir = k === 'ArrowLeft' ? -1 : 1;
     if (h.steer === 'auto') { const base = h.target !== null ? h.target : Math.round(s.S.psi / D2R); Orders.course(((base + dir) % 360 + 360) % 360); $('#courseIn').value = Math.round(((base + dir) % 360 + 360) % 360); return true; }
-    let i = 4; if (h.mode === 'rudder') { let bd = 1e9; HELM.forEach((q, j) => { const d = Math.abs(q[0] - h.ord); if (d < bd) { bd = d; i = j; } }); i += dir; } else i = 4 + dir;
-    i = Math.max(0, Math.min(HELM.length - 1, i)); if (!(h.mode === 'rudder' && HELM[i][0] === h.ord)) Orders.rudder(HELM[i][0]); return true;
+    const H = helmSteps(), z = H.findIndex((q) => q[0] === 0); let i = z;
+    if (h.mode === 'rudder') { let bd = 1e9; H.forEach((q, j) => { const d = Math.abs(q[0] - h.ord); if (d < bd) { bd = d; i = j; } }); i += dir; } else i = z + dir;
+    i = Math.max(0, Math.min(H.length - 1, i)); if (!(h.mode === 'rudder' && H[i][0] === h.ord)) Orders.rudder(H[i][0]); return true;
   }
   if (k === 'ArrowUp' || k === 'ArrowDown') {
     const dir = k === 'ArrowUp' ? 1 : -1, next = s.steps.map((id) => STEP_ORDER[Math.max(0, Math.min(6, STEP_ORDER.indexOf(id) - dir))]);
@@ -159,8 +160,14 @@ export function runKey(k) {
   return false;
 }
 // dựng lại các phần phụ thuộc cấu hình tàu / bài tập
+// nút lệnh lái: 5 · 10 · 15 · hết lái, theo góc lái tối đa của tàu
+function buildHelm() {
+  const H = helmSteps(), el = $('#helmBtns'); if (!el) return;
+  el.style.gridTemplateColumns = 'repeat(' + H.length + ',minmax(0,1fr))';
+  el.innerHTML = H.map((h) => `<button class="${h[0] < 0 ? 'p' : h[0] > 0 ? 's' : 'z'}" data-a="${h[0]}" aria-label="${h[2]}"><small>${h[1]}</small><span>${String(Math.abs(h[0])).replace('.', ',')}</span></button>`).join('');
+}
 export function rebuildRun() {
-  const M = A.M, s = A.sim; if (!$('#tels')) return;
+  const M = A.M, s = A.sim; if (!$('#tels')) return; buildHelm();
   $('#telCard').style.width = [0, 196, 236, 286, 336][M.nE] + 'px';
   $('#telLink').style.display = M.nE > 1 ? '' : 'none'; $('#telLink').classList.toggle('on', telLink);
   const lab = STEP_ORDER.map((id, n) => `<button class="tl" data-n="${n}" style="top:${(n / 6 * 100).toFixed(3)}%" id="tl${n}">${stepLabel(A.p, id).replace('Dừng máy', 'Dừng')}</button>`).join('');
@@ -273,7 +280,7 @@ export function uiTick() {
   STEP_ORDER.forEach((id, n) => { const b = $('#tl' + n); if (b) b.classList.toggle('on', s.steps.includes(id)); });
   // vô lăng theo tay người lái (góc lái lệnh), đồng hồ góc lái theo bánh lái thực
   const wg = $('#wheelG'); if (wg) wg.setAttribute('transform', 'rotate(' + (s.helm.ord * 4.5).toFixed(1) + ')');
-  drawRudder(S.delta, s.helm.ord, M.rudMax || 35);
+  drawRudder(S.delta, s.helm.ord, M.rudMax > 0 ? M.rudMax : 35);
   $$('#helmBtns button').forEach((b) => { b.classList.toggle('on', s.helm.mode === 'rudder' && s.helm.ord === +b.dataset.a && s.helm.steer === 'hand'); b.disabled = s.helm.steer === 'auto'; });
   $('#steadyBtn').classList.toggle('pri', s.helm.mode === 'steady');
   set('courseLbl', s.helm.steer === 'auto' ? 'Hướng tự động' : 'Đi hướng'); set('hRep', '«' + s.helm.rep + '»');
@@ -285,7 +292,7 @@ export function uiTick() {
   // môi trường
   const arrow = (deg) => `<svg width="12" height="12" viewBox="0 0 20 20" aria-hidden="true" style="vertical-align:-1px"><g transform="rotate(${deg.toFixed(0)} 10 10)"><path d="M10 2L10 18M10 2L5 8M10 2L15 8" stroke="#5CD6FF" stroke-width="2.4" fill="none" stroke-linecap="round"/></g></svg>`;
   const box = (t, v, sub) => `<div><div class="lb">${t}</div><div class="mono" style="font-size:13px;font-weight:600">${v}</div><div class="muted" style="font-size:10.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${sub}</div></div>`;
-  const envH = box('GIÓ THẬT', arrow(e.wDir + 180) + ' ' + pad3(e.wDir) + '°', e.wKn.toFixed(0) + ' hl/h · thổi từ') + box('DÒNG CHẢY', arrow(e.cDir) + ' ' + pad3(e.cDir) + '°', e.cKn.toFixed(1) + ' hl/h · chảy về') + box('THỦY TRIỀU', '+' + e.tide.toFixed(1) + ' m', e.rising ? 'Đang lên' : 'Đang xuống') + box('SÓNG', e.waveH.toFixed(1) + ' m', 'từ ' + pad3(num(A.env.waveDir, 0)) + '°') + box('TẦM NHÌN', (e.vis / 1852).toFixed(1).replace('.', ',') + ' Hl', s.fog ? 'sương mù dày' : 'theo kịch bản') + box('GIỜ', clock(s.day0 + s.t).slice(0, 5), s.running ? 'đang chạy ×' + s.speed : 'TẠM DỪNG');
+  const envH = box('GIÓ THẬT', arrow(e.wDir + 180) + ' ' + pad3(e.wDir) + '°', e.wKn.toFixed(0) + ' hl/h · thổi từ') + box('DÒNG CHẢY', arrow(e.cDir) + ' ' + pad3(e.cDir) + '°', e.cKn.toFixed(1) + ' hl/h · chảy về') + box('THỦY TRIỀU', '+' + e.tide.toFixed(1) + ' m', e.rising ? 'Đang lên' : 'Đang xuống') + box('SÓNG', e.waveH.toFixed(1).replace('.', ',') + ' m', 'từ ' + pad3(Math.round(e.waveD / D2R) % 360) + '° · ' + Math.round(e.waveL) + ' m') + box('TẦM NHÌN', (e.vis / 1852).toFixed(1).replace('.', ',') + ' Hl', s.fog ? 'sương mù dày' : e.wx ? (e.wx.from ? e.wx.from + ' → ' : '') + e.wx.name : 'theo kịch bản') + box('GIỜ', clock(s.day0 + s.t).slice(0, 5), s.running ? 'đang chạy ×' + s.speed : 'TẠM DỪNG');
   const eb = $('#envBox'); if (eb._h !== envH) { eb._h = envH; eb.innerHTML = envH; }
   // banner
   const bn = $('#banner'); let bt = '', cls = 'bad';
@@ -314,18 +321,19 @@ export function uiTick() {
 // vẽ radar mỗi khung hình
 export function consoleFrame(dtReal) {
   if (!radar || !A.sim) return; const s = A.sim;
-  radar.step(dtReal, A.W, s.S, s.e ? s.e.waveH : 0);
+  radar.step(dtReal, A.W, s.S, s.e ? s.e.waveH : 0, s.e ? s.e.rain : 0);
   radar.mark = s.mark ? Object.assign(radar.mark || {}, s.mark) : null;
   radar.draw(s.S);
 }
 function drawRudder(act, ord, mx) {
   const c = $('#rudCv'); if (!c) return; const w = c.clientWidth | 0, h = c.clientHeight | 0; if (!w || !h) return; if (c.width !== w || c.height !== h) { c.width = w; c.height = h; }
-  const g = c.getContext('2d'), cx = w / 2, cy = h - 6, R = Math.min(w / 2 - 14, h - 14), A0 = 70 * Math.PI / 180, ang = (v) => Math.max(-1, Math.min(1, v / 35)) * A0;
+  const g = c.getContext('2d'), cx = w / 2, cy = h - 6, R = Math.min(w / 2 - 14, h - 14), A0 = 70 * Math.PI / 180, ang = (v) => Math.max(-1, Math.min(1, v / mx)) * A0;
   g.clearRect(0, 0, w, h); g.lineWidth = 7; g.lineCap = 'butt';
   g.strokeStyle = '#5A2A2E'; g.beginPath(); g.arc(cx, cy, R, -Math.PI / 2 - A0, -Math.PI / 2); g.stroke();
   g.strokeStyle = '#24553A'; g.beginPath(); g.arc(cx, cy, R, -Math.PI / 2, -Math.PI / 2 + A0); g.stroke();
   g.lineWidth = 1; g.strokeStyle = '#B8C7D1'; g.fillStyle = '#8FA3B0'; g.font = '9px Consolas'; g.textAlign = 'center';
-  for (let v = -35; v <= 35; v += 5) { const a = ang(v) - Math.PI / 2, l = v % 10 === 0 || Math.abs(v) === 35 ? 9 : 5; g.beginPath(); g.moveTo(cx + Math.cos(a) * (R - 4), cy + Math.sin(a) * (R - 4)); g.lineTo(cx + Math.cos(a) * (R - 4 - l), cy + Math.sin(a) * (R - 4 - l)); g.stroke(); if (v % 10 === 0 || Math.abs(v) === 35) g.fillText(Math.abs(v), cx + Math.cos(a) * (R + 8), cy + Math.sin(a) * (R + 8) + 3); }
+  const vs = []; for (let v = -Math.floor(mx / 5) * 5; v <= mx; v += 5) vs.push(v); if (mx % 5) vs.unshift(-mx), vs.push(mx);
+  for (const v of vs) { const a = ang(v) - Math.PI / 2, l = v % 10 === 0 || Math.abs(v) === mx ? 9 : 5; g.beginPath(); g.moveTo(cx + Math.cos(a) * (R - 4), cy + Math.sin(a) * (R - 4)); g.lineTo(cx + Math.cos(a) * (R - 4 - l), cy + Math.sin(a) * (R - 4 - l)); g.stroke(); if (v % 10 === 0 || Math.abs(v) === mx) g.fillText(Math.abs(v), cx + Math.cos(a) * (R + 8), cy + Math.sin(a) * (R + 8) + 3); }
   const ao = ang(ord) - Math.PI / 2; g.fillStyle = '#FFB547'; g.beginPath(); g.moveTo(cx + Math.cos(ao) * (R + 2), cy + Math.sin(ao) * (R + 2)); g.lineTo(cx + Math.cos(ao - 0.07) * (R - 10), cy + Math.sin(ao - 0.07) * (R - 10)); g.lineTo(cx + Math.cos(ao + 0.07) * (R - 10), cy + Math.sin(ao + 0.07) * (R - 10)); g.fill();
   const aa = ang(act) - Math.PI / 2; g.strokeStyle = '#E6EDF2'; g.lineWidth = 2.5; g.beginPath(); g.moveTo(cx, cy); g.lineTo(cx + Math.cos(aa) * (R - 6), cy + Math.sin(aa) * (R - 6)); g.stroke();
   g.fillStyle = '#E6EDF2'; g.beginPath(); g.arc(cx, cy, 4, 0, 7); g.fill();

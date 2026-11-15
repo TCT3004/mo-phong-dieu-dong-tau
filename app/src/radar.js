@@ -6,6 +6,9 @@ const RINGS = { 0.25: 0.05, 0.5: 0.1, 0.75: 0.25, 1.5: 0.25, 3: 0.5, 6: 1, 12: 2
 const NB = 1024, NR = 300;
 const hash = (x, y) => { let h = (x * 374761393 + y * 668265263) | 0; h = (h ^ (h >>> 13)) * 1274126177 | 0; return ((h ^ (h >>> 16)) >>> 0) / 4294967296; };
 
+// mật độ nhiễu mưa theo "ô mưa" (vùng mưa dày / thưa cỡ 2 km), nội suy mượt giữa các nút lưới
+function cellK(x, y) { const S = 1800, gx = x / S, gy = y / S, ix = Math.floor(gx), iy = Math.floor(gy), fx = gx - ix, fy = gy - iy, sx = fx * fx * (3 - 2 * fx), sy = fy * fy * (3 - 2 * fy);
+  const a = hash(ix, iy), b = hash(ix + 1, iy), c = hash(ix, iy + 1), d = hash(ix + 1, iy + 1); return 0.3 + 1.4 * ((a + (b - a) * sx) * (1 - sy) + (c + (d - c) * sx) * sy); }
 export class Radar {
   constructor(cv) {
     this.cv = cv; this.g = cv.getContext('2d');
@@ -15,10 +18,11 @@ export class Radar {
   get range() { return RANGES[this.ri]; }
   setRange(i) { this.ri = Math.max(0, Math.min(RANGES.length - 1, i)); this.buf.fill(0); }
   // quét thêm các tia trong khoảng dt (giây thực); anten 24 v/ph
-  step(dt, W, S, waveH) {
+  // rain 0..1: nhiễu mưa (hạt lấm tấm, dày ở gần) và tín hiệu bờ yếu đi ở xa
+  step(dt, W, S, waveH, rain) {
     this.acc += dt * 0.4 * NB; let n = Math.floor(this.acc); this.acc -= n; if (n > NB / 4) n = NB / 4;
     const rM = this.range * NM, dr = rM / NR, segs = W.segs || [], pts = (W.objs && W.objs.lights) || [];
-    const clutter = Math.min(0.5, (waveH || 0) * 0.18);
+    const clutter = Math.min(0.5, (waveH || 0) * 0.18), rc = Math.min(1, rain || 0);
     for (let k = 0; k < n; k++) {
       const b = this.sweep, a = b / NB * 2 * Math.PI, sx = Math.sin(a), sy = Math.cos(a), row = b * NR;
       let run = 0;
@@ -28,6 +32,7 @@ export class Radar {
         if (c === 0) { run += dr; v = run < Math.max(240, 2.5 * dr) ? 255 : (hash(Math.floor(x / 45), Math.floor(y / 45)) < Math.max(0.015, 0.1 - run / 8000) ? 160 : 0); }
         else { run = 0; if (c === 1 && hash(Math.floor(x / 30), Math.floor(y / 30)) < 0.35) v = 110; }
         if (clutter && d < 700 && Math.random() < clutter * Math.exp(-d / 220)) v = Math.max(v, 120);
+        if (rc) { if (v) v *= 1 - 0.5 * rc * Math.min(1, d / 15000); if (Math.random() < rc * 0.45 * dr / 1000 * Math.exp(-d / 8000) * cellK(x, y)) v = Math.max(v, 45 + 60 * Math.random()); }
         if (Math.random() < 0.0007) v = Math.max(v, 60);
         this.buf[row + j] = v;
       }

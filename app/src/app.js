@@ -2,6 +2,7 @@
 import { defaultShip, buildModel, newState, stepShip, squat, displayRpm, stepLabel, KN, D2R } from './physics.js';
 import { World, defaultEnv, envAt, makeAnchors, makeLines, externalForces, wrap180, body2w } from './world.js';
 import { CS, setOrigin, toLL } from './chartsys.js';
+import { Weather } from './weather.js';
 import { loadPlaces, placesToWorld, savePlaces } from './places.js';
 
 export const $ = (s, r) => (r || document).querySelector(s);
@@ -30,11 +31,13 @@ function mergeShip(saved) {
 }
 export const A = {
   p: mergeShip(LS.get('mp_ship')), env: Object.assign(defaultEnv(), LS.get('mp_env') || {}),
-  set: Object.assign({ quality: 'high', volMaster: 80, volEngine: 60, volBell: 90, headUp: false, uiScale: 'auto', waveLen: 4, rollSpeed: 4 }, LS.get('mp_set') || {}),
+  set: Object.assign({ quality: 'high', volMaster: 80, volEngine: 60, volBell: 90, headUp: false, uiScale: 'auto', volEnv: 70, rollSpeed: 4 }, LS.get('mp_set') || {}),
   W: new World(), M: null, sim: null, tab: 'run', sessions: [], hooks: {}
 };
 export function saveShip() { LS.set('mp_ship', A.p); }
 export function saveEnv() { LS.set('mp_env', A.env); }
+// bài tập lưu từ bản cũ: chỉ có chu kỳ sóng + hệ số «bước sóng ×» trong Cài đặt → đổi ra bước sóng (m) giữ đúng dáng sóng cũ
+{ const old = LS.get('mp_env'); if (old && !(old.waveL > 0)) { A.env.waveL = Math.round(num(A.set.waveLen, 4) * 9.81 * num(old.waveT, 6) ** 2 / (2 * Math.PI)); saveEnv(); } }
 export function saveSet() { LS.set('mp_set', A.set); }
 // đối tượng trên hải đồ: lưu theo lat/lon (places.js), trong bộ nhớ theo mét thế giới
 export function saveObjs() { savePlaces(A.W); }
@@ -58,11 +61,13 @@ export function newSim() {
   const st = M.steps[A.env.startStep] ? A.env.startStep : 'st';
   S.n.fill(M.steps[st].n);
   const lights = {}; LIGHTS.forEach((l) => { lights[l[0]] = LIGHT_PRESETS[0][1].includes(l[0]); });
+  // thời tiết ngẫu nhiên (tab 4 chọn «Ngẫu nhiên»): mỗi bài một hạt giống mới
+  const wxSeed = (Math.random() * 2 ** 31) | 0, wx = A.env.wxMode === 'random' ? new Weather(wxSeed, daySec0(), A.env.wxStart || '') : null;
   A.sim = {
     S, t: 0, day0: daySec0(), running: false, speed: 1, steps: new Array(M.nE).fill(st),
     helm: { mode: 'steady', ord: 0, target: Math.round(num(sp.hdg, 0)) % 360, steer: 'hand', my: 'Giữ hướng ' + pad3(num(sp.hdg, 0)) + '°', rep: 'Giữ hướng ' + pad3(num(sp.hdg, 0)) + ', rõ!' },
     anchors: makeAnchors(M), lines: makeLines(M), selLine: 'hl', lights, alarm: false, bellUntil: -1,
-    log: [], rec: [], info: {}, e: envAt(A.env, daySec0(), 0), aground: false, bank: [1e4, 1e4], ukc: 99, h: 99, sq: 0, hC: 0,
+    log: [], rec: [], info: {}, wx, wxSeed, e: envAt(A.env, daySec0(), 0, wx), aground: false, bank: [1e4, 1e4], ukc: 99, h: 99, sq: 0, hC: 0,
     lightMode: 'auto', fog: false, started: new Date().toISOString(), track: [], frame: { lat0: CS.frame.lat0, lon0: CS.frame.lon0 }
   };
   refreshDepth();
@@ -88,9 +93,18 @@ export function refreshDepth() { const s = A.sim; if (!s) return; s.hC = A.W.dep
 export function logOrder(text, kind) { const s = A.sim; s.log.unshift({ t: s.t, text, kind: kind || 'helm' }); if (s.log.length > 400) s.log.pop(); s.lastOrd = { t: s.t, text }; }
 
 export function engName(n, i) { return n === 1 ? 'Máy' : n === 2 ? ['Máy trái', 'Máy phải'][i] : n === 3 ? ['Máy trái', 'Máy giữa', 'Máy phải'][i] : ['Máy trái ngoài', 'Máy trái trong', 'Máy phải trong', 'Máy phải ngoài'][i]; }
-export const HELM = [[-35, 'HẾT TRÁI', 'Hết lái trái'], [-20, 'TRÁI', 'Lái trái 20'], [-10, 'TRÁI', 'Lái trái 10'], [-5, 'TRÁI', 'Lái trái 5'], [0, 'LÁI VỀ', 'Lái về số 0'], [5, 'PHẢI', 'Lái phải 5'], [10, 'PHẢI', 'Lái phải 10'], [20, 'PHẢI', 'Lái phải 20'], [35, 'HẾT PHẢI', 'Hết lái phải']];
+// các nấc lệnh lái theo góc lái tối đa của tàu (tab 1): 5°, 10°, 15° và hết lái → [góc, nhãn nút, khẩu lệnh]
+export function helmSteps(mx) {
+  mx = Math.round(num(mx === undefined ? (A.M ? A.M.rudMax : 35) : mx, 35) * 10) / 10; if (!(mx > 0)) mx = 35;
+  const st = [5, 10, 15].filter((v) => v < mx), out = [[-mx, 'HẾT TRÁI', 'Hết lái trái']];
+  for (const v of st.slice().reverse()) out.push([-v, 'TRÁI', 'Lái trái ' + v]);
+  out.push([0, 'LÁI VỀ', 'Lái về số 0']);
+  for (const v of st) out.push([v, 'PHẢI', 'Lái phải ' + v]);
+  out.push([mx, 'HẾT PHẢI', 'Hết lái phải']);
+  return out;
+}
 export const Orders = {
-  rudder(a) { const h = A.sim.helm; if (h.steer === 'auto') return; const d = HELM.find((q) => q[0] === a); const mx = A.M.rudMax; h.mode = 'rudder'; h.ord = Math.max(-mx, Math.min(mx, a)); h.target = null; h.my = d[2]; h.rep = d[2].replace('Lái ', '').replace(/^./, (c) => c.toUpperCase()) + ', rõ!'; logOrder(d[2]); },
+  rudder(a) { const h = A.sim.helm; if (h.steer === 'auto') return; const d = helmSteps().find((q) => q[0] === a) || [a, '', a ? 'Lái ' + (a < 0 ? 'trái ' : 'phải ') + Math.abs(a) : 'Lái về số 0']; const mx = A.M.rudMax; h.mode = 'rudder'; h.ord = Math.max(-mx, Math.min(mx, a)); h.target = null; h.my = d[2]; h.rep = d[2].replace('Lái ', '').replace(/^./, (c) => c.toUpperCase()) + ', rõ!'; logOrder(d[2]); },
   steady() { const s = A.sim, h = s.helm, hd = Math.round(s.S.psi / D2R) % 360; h.mode = h.steer === 'auto' ? 'auto' : 'steady'; h.target = hd; h.my = 'Giữ hướng ' + pad3(hd) + '°'; h.rep = 'Giữ hướng ' + pad3(hd) + ', rõ!'; logOrder(h.my); },
   course(v) { const h = A.sim.helm, hd = ((Math.round(num(v, NaN)) % 360) + 360) % 360; if (!isFinite(hd)) return; h.target = hd; if (h.steer === 'auto') { h.mode = 'auto'; h.my = 'Lái tự động ' + pad3(hd) + '°'; h.rep = 'Lái tự động hướng ' + pad3(hd) + ', rõ!'; } else { h.mode = 'course'; h.my = 'Đi hướng ' + pad3(hd) + '°'; h.rep = 'Đi hướng ' + pad3(hd) + ', rõ!'; } logOrder(h.my); },
   steer(k) { const s = A.sim, h = s.helm; if (h.steer === k) return; h.steer = k; const hd = h.target !== null ? h.target : Math.round(s.S.psi / D2R) % 360; h.target = hd; if (k === 'auto') { h.mode = 'auto'; h.my = 'Lái tự động ' + pad3(hd) + '°'; h.rep = 'Đã chuyển lái tự động, hướng ' + pad3(hd); } else { h.mode = 'steady'; h.my = 'Lái tay, giữ hướng ' + pad3(hd) + '°'; h.rep = 'Lái tay, giữ hướng ' + pad3(hd) + ', rõ!'; } logOrder(h.my); },
@@ -114,7 +128,8 @@ export function helmCmd() {
 }
 export function substep() {
   const s = A.sim, S = s.S, M = A.M, W = A.W;
-  const e = s.e = envAt(A.env, s.day0 + s.t, s.t); if (s.fog) e.vis = 550;
+  if (s.wx) s.wx.step(DT);
+  const e = s.e = envAt(A.env, s.day0 + s.t, s.t, s.wx); if (s.fog) e.vis = 550;
   const L = M.L, pts = [[0, 0], [0.45 * L, 0], [-0.45 * L, 0]];
   let hC = 1e9; for (const p of pts) { const [wx, wy] = body2w(S, p[0], p[1]); hC = Math.min(hC, W.depthAt(wx, wy)); }
   const h = hC + e.tide; s.hC = hC; s.h = h;
@@ -129,7 +144,7 @@ export function substep() {
   const k = Math.round(s.t * 10);
   if (k % 10 === 0) {
     const gE = S.u * Math.sin(S.psi) + S.v * Math.cos(S.psi) + S.cE, gN = S.u * Math.cos(S.psi) - S.v * Math.sin(S.psi) + S.cN;
-    s.rec.push({ t: s.t, x: S.x, y: S.y, psi: S.psi, sog: Math.hypot(gE, gN) / KN, rot: S.r / D2R * 60, d: S.delta, rpm: displayRpm(M, S.n.reduce((a, b) => a + b, 0) / M.nE), ukc: s.ukc, tide: e.tide, st: s.steps.join(','), vis: e.vis, wH: e.waveH });
+    s.rec.push({ t: s.t, x: S.x, y: S.y, psi: S.psi, sog: Math.hypot(gE, gN) / KN, rot: S.r / D2R * 60, d: S.delta, rpm: displayRpm(M, S.n.reduce((a, b) => a + b, 0) / M.nE), ukc: s.ukc, tide: e.tide, st: s.steps.join(','), vis: e.vis, wH: e.waveH, wD: Math.round(e.waveD / D2R), wL: Math.round(e.waveL), wKn: +e.wKn.toFixed(1), wDir: Math.round(e.wDir), rn: +e.rain.toFixed(2), cl: +e.cloud.toFixed(2), wx: e.wx ? e.wx.type : undefined });
     if (k % 100 === 0) { s.track.push([S.x, S.y]); if (s.track.length > 2000) s.track.shift(); }
   }
 }

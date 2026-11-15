@@ -11,7 +11,7 @@ export { pdfTest };
 import { llToMerc } from './geo/proj.js';
 import { inside } from './geo/poly.js';
 import { DATUMS } from './geo/datum.js';
-import { defaultEnv, tideAt } from './world.js';
+import { defaultEnv, tideAt, envWaveL } from './world.js';
 import { QUALITY } from './view3d.js';
 import { openWindage } from './windage.js';
 
@@ -342,7 +342,7 @@ export function drawChart() { if (cv) cv.dirty = true; }
 
 // ---------------- Tab 4: môi trường & kịch bản ----------------
 export function initEnv() {
-  const e = A.env, sp = startPos(), W = A.W;
+  const e = A.env, sp = startPos(), W = A.W, rnd = e.wxMode === 'random', FS = 'border:0;padding:0;margin:0;min-width:0;';
   const stepsO = [['f4', 'Tiến max'], ['f3', 'Tiến 3'], ['f2', 'Tiến 2'], ['f1', 'Tiến 1'], ['st', 'Dừng máy']];
   $('#p-env').innerHTML = `<div class="flex" style="align-items:flex-start">
   <section class="card" style="flex:1 1 280px;max-width:340px"><h2>Kịch bản bài tập</h2><div class="col" style="gap:8px">${fld('name', 'Tên bài tập', '', e.name, 'data-t="1"')}${fld('startTime', 'Giờ bắt đầu (giờ:phút)', '', e.startTime, 'data-t="1"')}
@@ -355,18 +355,26 @@ export function initEnv() {
   <div class="flex" style="margin-top:10px;align-items:flex-end;gap:8px"><div class="muted" style="flex:1 1 100%">Hoặc nhập nước lớn / nước ròng để app tự điền 24 giờ:</div>${fld('hwT', 'Giờ nước lớn', 'h', 15.5)}${fld('hwH', 'Cao nước lớn', 'm', 3.4)}${fld('lwT', 'Giờ nước ròng', 'h', 3)}${fld('lwH', 'Cao nước ròng', 'm', 0.5)}<button class="btn sm" id="tideGen">Điền bảng</button></div>
   <canvas id="tideCv" style="width:100%;height:170px;margin-top:10px;display:block"></canvas>
   <div class="muted" style="margin-top:6px">Bản đầu: nhập số bằng tay (gõ hoặc dán). Tự đọc bảng thủy triều từ ảnh / PDF sẽ có ở bản sau.</div></section>
-  <div class="col" style="flex:1 1 280px;max-width:340px"><section class="card"><h2>Gió</h2><div class="grid g3">${fld('windDir', 'Hướng (từ)', '°', e.windDir)}${fld('windKn', 'Tốc độ', 'hl/h', e.windKn)}${fld('gustKn', 'Giật', 'hl/h', e.gustKn)}</div><label style="display:flex;gap:8px;align-items:center;margin-top:8px"><input type="checkbox" id="windVary" ${e.windVary ? 'checked' : ''} style="width:17px;height:17px"> Gió giật và đổi hướng nhẹ theo thời gian</label></section>
+  <div class="col" style="flex:1 1 280px;max-width:340px"><section class="card"><h2>Thời tiết</h2><div class="seg" id="wxSeg" style="display:flex">${[['manual', 'Tự chỉnh'], ['random', 'Ngẫu nhiên']].map((o) => `<button data-wx="${o[0]}" class="${(e.wxMode || 'manual') === o[0] ? 'on' : ''}" style="flex:1">${o[1]}</button>`).join('')}</div>
+  ${rnd ? `<div style="margin-top:8px">${sel('wxStart', 'Bắt đầu với', [['', 'Tùy app'], ['nang', 'Nắng'], ['may', 'Nhiều mây'], ['mua', 'Mưa'], ['giong', 'Mưa giông'], ['suong', 'Sương mù']], e.wxStart || '')}</div><div class="muted" style="margin-top:6px">App tự đổi gió, sóng, mưa, tầm nhìn trong lúc chạy bài: nắng có thể chuyển mây, mưa, giông bão; sáng sớm hay có sương mù, chiều hay có giông. Ngày / đêm vẫn theo đúng giờ. Thời tiết đang có hiện ở tab 3.</div>` : '<div class="muted" style="margin-top:6px">Tự nhập gió, sóng, tầm nhìn ở dưới. Chọn «Ngẫu nhiên» để app tự lo thời tiết, đổi dần theo thời gian chạy bài.</div>'}</section>
+  <fieldset ${rnd ? 'disabled' : ''} style="${FS}${rnd ? 'opacity:.45' : ''}"><section class="card"><h2>Gió</h2><div class="grid g3">${fld('windDir', 'Hướng (từ)', '°', e.windDir)}${fld('windKn', 'Tốc độ', 'hl/h', e.windKn)}${fld('gustKn', 'Giật', 'hl/h', e.gustKn)}</div><label style="display:flex;gap:8px;align-items:center;margin-top:8px"><input type="checkbox" id="windVary" ${e.windVary ? 'checked' : ''} style="width:17px;height:17px"> Gió giật và đổi hướng nhẹ theo thời gian</label></section>
+  </fieldset>
   <section class="card"><h2>Dòng chảy (theo con nước)</h2><div class="grid g2">${fld('floodDir', 'Triều lên: chảy về', '°', e.floodDir)}${fld('floodKn', 'Mạnh nhất', 'hl/h', e.floodKn)}${fld('ebbDir', 'Triều rút: chảy về', '°', e.ebbDir)}${fld('ebbKn', 'Mạnh nhất', 'hl/h', e.ebbKn)}</div><div class="muted" style="margin-top:6px">Tốc độ dòng tự đổi theo bảng triều: mạnh nhất giữa con nước, bằng 0 lúc nước đứng. Bản đầu dùng chung một dòng chảy cho cả vùng.</div></section>
-  <section class="card"><h2>Sóng & tầm nhìn</h2><div class="grid g2">${fld('waveH', 'Độ cao sóng', 'm', e.waveH)}${fld('waveDir', 'Hướng sóng (từ)', '°', e.waveDir)}${fld('visNm', 'Tầm nhìn', 'hl', e.visNm)}</div><div class="muted" style="margin-top:6px">Ngày / đêm tính theo giờ bắt đầu. Đèn phao và đèn tàu chỉ thấy khi trời tối.</div></section></div></div>`;
+  <fieldset ${rnd ? 'disabled' : ''} style="${FS}${rnd ? 'opacity:.45' : ''}"><section class="card"><h2>Sóng & tầm nhìn</h2><div class="grid g2">${fld('waveH', 'Độ cao sóng', 'm', e.waveH)}${fld('waveDir', 'Hướng sóng (từ)', '°', e.waveDir)}${fld('waveL', 'Bước sóng', 'm', Math.round(envWaveL(e)))}${fld('visNm', 'Tầm nhìn', 'Hl', e.visNm)}</div><div class="muted" style="margin-top:6px">Bước sóng ${Math.round(envWaveL(e))} m → chu kỳ ≈ ${Math.sqrt(2 * Math.PI * envWaveL(e) / 9.81).toFixed(1).replace('.', ',')} s (sóng nước sâu). Sóng gió ven bờ thường 20–80 m, sóng lừng 100–300 m. Ngày / đêm tính theo giờ bắt đầu; đèn phao và đèn tàu chỉ thấy khi trời tối.</div></section></fieldset></div></div>`;
   const el = $('#p-env');
   el.onchange = (ev) => {
     const t = ev.target, k = t.dataset.k;
     if (t.dataset.tide !== undefined) { e.tide[+t.dataset.tide] = num(t.value, 0); saveEnv(); drawTide(); return; }
     if (t.id === 'windVary') { e.windVary = t.checked; saveEnv(); return; }
     if (!k || ['hwT', 'hwH', 'lwT', 'lwH'].includes(k)) return;
+    if (k === 'wxStart') { e.wxStart = t.value; saveEnv(); wxApply(); return; }
+    if (k === 'waveL') { e.waveL = Math.max(5, Math.min(600, num(t.value, envWaveL(e)))); saveEnv(); initEnv(); return; }
     if (k === 'startHdg') { A.W.start = Object.assign({}, startPos(), { hdg: ((num(t.value, 0) % 360) + 360) % 360 }); saveObjs(); if (A.sim && A.sim.t < 2 && A.hooks.resetToStart) A.hooks.resetToStart(false); return; }
     e[k] = t.dataset.t || t.tagName === 'SELECT' ? t.value : num(t.value, e[k]); saveEnv();
   };
+  // đổi chế độ thời tiết: bài chưa chạy thì làm lại bài ngay, đang chạy thì áp dụng khi bắt đầu bài mới
+  const wxApply = () => { if (A.sim && A.sim.t < 2 && A.hooks.resetToStart) A.hooks.resetToStart(false); };
+  $('#wxSeg').onclick = (ev) => { const m = ev.target.dataset.wx; if (!m || m === e.wxMode) return; e.wxMode = m; saveEnv(); initEnv(); wxApply(); };
   $('#tideGen').onclick = () => {
     const g = (k) => num($('#f_' + k).value, 0), hwT = g('hwT'), hwH = g('hwH'), lwT = g('lwT'), lwH = g('lwH');
     for (let h = 0; h < 24; h++) {
@@ -397,13 +405,12 @@ export function initSet() {
   <div class="muted" style="margin-top:8px">Thấp: mặt nước phẳng, địa hình thô, nhẹ nhất. Cao (đề xuất cho RTX 3050): mặt nước có sóng và phản chiếu, địa hình mịn hơn. Tối đa: địa hình mịn nhất, hình nét hơn. Thấy giật thì hạ một mức.</div></section>
   <section class="card" style="flex:1 1 300px;max-width:420px"><h2>Cỡ giao diện (theo màn hình)</h2><div class="seg" id="uiSeg" style="display:flex;flex-wrap:wrap">${[['auto', 'Tự vừa màn hình'], [70, '70%'], [80, '80%'], [90, '90%'], [100, '100%'], [110, '110%'], [125, '125%']].map((o) => `<button data-u="${o[0]}" class="${String(s.uiScale) === String(o[0]) ? 'on' : ''}" style="flex:1 1 auto">${o[1]}</button>`).join('')}</div><div class="muted" style="margin-top:8px">«Tự vừa màn hình»: app tự thu phóng để tab Điều động nằm gọn trong một màn hình, không phải cuộn. Màn hình đang là <b>${screen.width} × ${screen.height}</b>, cửa sổ ${innerWidth} × ${innerHeight}. Chữ nhỏ quá thì chọn mức % lớn hơn.</div></section>
   <section class="card" style="flex:1 1 300px;max-width:420px"><h2>Sóng & chuyển động tàu</h2>
-    <label class="lbl" for="waveLen">Bước sóng ×<b id="waveLenV">${s.waveLen || 4}</b></label><input type="range" id="waveLen" min="1" max="6" step="0.5" value="${s.waveLen || 4}" style="width:100%">
-    <label class="lbl" for="rollSpeed" style="margin-top:8px;display:block">Tốc độ lắc của tàu ×<b id="rollSpeedV">${s.rollSpeed || 4}</b></label><input type="range" id="rollSpeed" min="1" max="6" step="0.5" value="${s.rollSpeed || 4}" style="width:100%">
-    <div class="muted" style="margin-top:6px">Bước sóng lớn hơn thì sóng dài hơn và chu kỳ chậm hơn theo đúng quy luật sóng nước sâu. Tốc độ lắc lớn hơn thì tàu bám theo mặt sóng nhanh hơn.</div></section>
-  <section class="card" style="flex:1 1 300px;max-width:420px"><h2>Âm thanh</h2><div class="lbl" style="margin-bottom:4px">Kiểu chuông tàu</div><div class="flex" style="gap:6px;align-items:center;margin-bottom:10px"><div class="seg" id="bellSeg">${[['electric', 'Chuông điện 6 inch (reng reng)'], ['brass', 'Chuông đồng (gõ)']].map((b) => `<button data-b="${b[0]}" class="${(s.bellType || 'electric') === b[0] ? 'on' : ''}">${b[1]}</button>`).join('')}</div><button class="btn sm" id="bellTry">Nghe thử</button></div>${[['volMaster', 'Âm lượng chung'], ['volEngine', 'Tiếng máy'], ['volBell', 'Còi, chuông & báo động']].map((v) => `<div class="fld" style="margin-bottom:8px"><label for="${v[0]}">${v[1]}: <b id="${v[0]}V">${s[v[0]]}</b>%</label><input type="range" id="${v[0]}" min="0" max="100" step="5" value="${s[v[0]]}"></div>`).join('')}<div class="muted">Âm thanh bật sau lần bấm đầu tiên vào màn Điều động.</div></section>
+    <label class="lbl" for="rollSpeed" style="display:block">Tốc độ lắc của tàu ×<b id="rollSpeedV">${s.rollSpeed || 4}</b></label><input type="range" id="rollSpeed" min="1" max="6" step="0.5" value="${s.rollSpeed || 4}" style="width:100%">
+    <div class="muted" style="margin-top:6px">Tốc độ lắc lớn hơn thì tàu bám theo mặt sóng nhanh hơn. Bước sóng chỉnh ở tab 4 (Môi trường).</div></section>
+  <section class="card" style="flex:1 1 300px;max-width:420px"><h2>Âm thanh</h2><div class="lbl" style="margin-bottom:4px">Kiểu chuông tàu</div><div class="flex" style="gap:6px;align-items:center;margin-bottom:10px"><div class="seg" id="bellSeg">${[['electric', 'Chuông điện 6 inch (reng reng)'], ['brass', 'Chuông đồng (gõ)']].map((b) => `<button data-b="${b[0]}" class="${(s.bellType || 'electric') === b[0] ? 'on' : ''}">${b[1]}</button>`).join('')}</div><button class="btn sm" id="bellTry">Nghe thử</button></div>${[['volMaster', 'Âm lượng chung'], ['volEngine', 'Tiếng máy'], ['volBell', 'Còi, chuông & báo động'], ['volEnv', 'Mưa, gió & sấm']].map((v) => `<div class="fld" style="margin-bottom:8px"><label for="${v[0]}">${v[1]}: <b id="${v[0]}V">${s[v[0]]}</b>%</label><input type="range" id="${v[0]}" min="0" max="100" step="5" value="${s[v[0]]}"></div>`).join('')}<div class="muted">Âm thanh bật sau lần bấm đầu tiên vào màn Điều động.</div></section>
   <section class="card" style="flex:1 1 300px;max-width:420px"><h2>Dữ liệu</h2><div class="muted">Thông số tàu, kịch bản, các đối tượng vẽ trên hải đồ, kho hải đồ (ảnh đã chia ô) và bài đã ghi được lưu ngay trên máy này. App chạy hoàn toàn không cần mạng.</div><div class="kv" style="margin-top:8px"><span>Kho hải đồ</span><b id="dataUse">…</b></div><button class="btn warn sm" id="wipe" style="margin-top:10px">Xóa toàn bộ dữ liệu đã lưu</button></section></div>`;
   $('#qSeg').onclick = (e) => { const q = e.target.dataset.q; if (!q) return; s.quality = q; saveSet(); initSet(); A.hooks.qualityChanged(); };
-  for (const id of ['waveLen', 'rollSpeed']) $('#' + id).oninput = (e) => { s[id] = +e.target.value; $('#' + id + 'V').textContent = s[id]; saveSet(); };
+  for (const id of ['rollSpeed']) $('#' + id).oninput = (e) => { s[id] = +e.target.value; $('#' + id + 'V').textContent = s[id]; saveSet(); };
   $('#bellSeg').onclick = (e) => { const b = e.target.dataset.b; if (!b) return; s.bellType = b; saveSet(); A.hooks.volChanged(); initSet(); };
   $('#bellTry').onclick = () => { A.snd.init(); A.hooks.volChanged(); A.snd.bell(1.5); };
   $('#uiSeg').onclick = (e) => { const u = e.target.dataset.u; if (!u) return; s.uiScale = u === 'auto' ? 'auto' : +u; saveSet(); A.hooks.scaleChanged(); initSet(); };

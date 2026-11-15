@@ -12,7 +12,7 @@ export function defaultEnv() {
     name: 'Bài tập 1', startX: 0, startY: 0, startHdg: 0, startKn: 6, startStep: 'f2', startTime: '06:30',
     tide, windDir: 45, windKn: 12, gustKn: 18, windVary: true,
     floodDir: 60, floodKn: 0.8, ebbDir: 240, ebbKn: 0.7,
-    waveH: 0.5, waveT: 6, waveDir: 90, visNm: 6
+    waveH: 0.5, waveL: 225, waveDir: 90, visNm: 6, wxMode: 'manual', wxStart: ''
   };
 }
 
@@ -96,7 +96,10 @@ export function tideAt(env, daySec) {
   const h = ((daySec / 3600) % 24 + 24) % 24, i = Math.floor(h), f = h - i, a = num(env.tide[i], 0), b = num(env.tide[(i + 1) % 24], 0);
   const s = (1 - Math.cos(f * Math.PI)) / 2; return a + (b - a) * s;
 }
-export function envAt(env, daySec, t) {
+// bước sóng tự chỉnh (m); bài tập cũ chỉ có chu kỳ sóng thì đổi ra như dáng sóng cũ (×4)
+export const envWaveL = (env) => (num(env.waveL, 0) > 0 ? num(env.waveL, 0) : 4 * 9.81 * num(env.waveT, 6) ** 2 / (2 * Math.PI));
+// wx: thời tiết ngẫu nhiên (weather.js) — khi có thì gió, sóng, tầm nhìn, mưa lấy từ đó
+export function envAt(env, daySec, t, wx) {
   const tide = tideAt(env, daySec);
   let mr = 1e-6; for (let i = 0; i < 24; i++) mr = Math.max(mr, Math.abs(num(env.tide[(i + 1) % 24], 0) - num(env.tide[i], 0)));
   const rate = (tideAt(env, daySec + 600) - tideAt(env, daySec - 600)) * 3 / mr; // -1..1
@@ -108,8 +111,10 @@ export function envAt(env, daySec, t) {
     wk += g * Math.max(0, 0.5 * Math.sin(t / 23) + 0.5 * Math.sin(t / 7.3 + 1));
     wd += 8 * Math.sin(t / 61) + 4 * Math.sin(t / 17);
   }
-  return { tide, rising: s >= 0, cE: cs * Math.sin(cd), cN: cs * Math.cos(cd), cKn: cs / 0.5144, cDir: cd / D2R, wS: wk * 0.5144, wKn: wk, wD: wd * D2R, wDir: (wd % 360 + 360) % 360,
-    waveH: num(env.waveH, 0), waveD: num(env.waveDir, 0) * D2R, waveT: num(env.waveT, 6), vis: num(env.visNm, 6) * 1852 };
+  const lam = envWaveL(env), out = { tide, rising: s >= 0, cE: cs * Math.sin(cd), cN: cs * Math.cos(cd), cKn: cs / 0.5144, cDir: cd / D2R,
+    waveH: num(env.waveH, 0), waveD: num(env.waveDir, 0) * D2R, waveL: lam, waveT: Math.sqrt(2 * Math.PI * lam / G), vis: num(env.visNm, 6) * 1852, rain: 0, cloud: 0.2, flash: 0, storm: 0, wx: null };
+  if (wx && wx.now) { const w = wx.now; wk = w.wKn; wd = w.wDir; Object.assign(out, { waveH: w.waveH, waveD: w.waveDir * D2R, waveL: w.waveL, waveT: w.waveT, vis: w.vis, rain: w.rain, cloud: w.cloud, flash: w.flash, storm: w.storm, wx: w }); }
+  return Object.assign(out, { wS: wk * 0.5144, wKn: wk, wD: wd * D2R, wDir: (wd % 360 + 360) % 360 });
 }
 
 // ---------- neo ----------

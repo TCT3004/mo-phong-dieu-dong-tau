@@ -13,15 +13,16 @@
 | `physics.js` | mô hình tàu kiểu MMG 3 bậc tự do, nấc máy, squat |
 | `chartsys.js` | trung tâm hệ hải đồ `CS`: `WorldFrame` (gốc trôi, `setOrigin`), kho, renderer WebGL2 dùng chung, nguồn độ sâu (`sampleWorld`, `ensureAround`) |
 | `places.js` | kho đối tượng người dùng theo lat/lon (`mp_places`), đổi qua lại mét thế giới, chuyển dữ liệu v0.1 |
-| `world.js` | môi trường (gió, dòng, triều), tra độ sâu / lớp đáy qua `CS`, cầu bến, cọc bích, neo, dây, lực ngoài |
-| `view3d.js` | cảnh three.js: nước (sóng Gerstner + texture), địa hình dựng quanh tàu từ các tờ (lưới mịn gần, thưa xa), tàu, đèn, camera buồng lái 3 cửa sổ |
-| `radar.js` | radar quét tia, cự ly tới 24 Hl, EBL/VRM |
+| `world.js` | môi trường (`envAt`: gió, dòng, triều, sóng; lấy từ thời tiết ngẫu nhiên nếu có), tra độ sâu / lớp đáy qua `CS`, cầu bến, cọc bích, neo, dây, lực ngoài |
+| `weather.js` | thời tiết ngẫu nhiên có hạt giống: chuỗi kiểu trời (nắng, nhiều mây, mưa, mưa giông, sương mù) theo giờ trong ngày, chuyển dần; gió giật, sóng gió có độ trễ, sét |
+| `view3d.js` | cảnh three.js: nước (sóng Gerstner + texture, giữ pha liền khi sóng đổi), mưa, mây, chớp sét, địa hình dựng quanh tàu từ các tờ (lưới mịn gần, thưa xa), tàu, đèn, camera buồng lái 3 cửa sổ |
+| `radar.js` | radar quét tia, cự ly tới 24 Hl, EBL/VRM, nhiễu sóng và nhiễu mưa |
 | `kap.js` | georef tuyến tính của v0.1 — chỉ dùng chuyển dữ liệu cũ; `fmtLL` |
 | `nav.js` | định dạng khoảng cách, đọc tọa độ, tuyến đi (`legsLL` loxodrom theo lat/lon, `legs`, `trackRoute`) |
 | `windage.js` | tính diện tích hứng gió từ sơ đồ tàu PDF / ảnh |
 | `pdfload.js` | mở PDF bằng pdf.js (worker classic từ Blob), dùng chung cho `windage.js` và hải đồ PDF |
 | `ui_pdfchart.js` | hộp thoại nạp hải đồ PDF: trang, tỷ lệ, datum (mặc định VN-2000), độ nét, điểm tọa độ, khung hải đồ, sai số khớp |
-| `audio.js` | âm thanh tổng hợp: máy, còi, chuông, báo động |
+| `audio.js` | âm thanh tổng hợp: máy, còi, chuông, báo động, mưa, gió, sấm |
 | `ui_setup.js` | tab 1 Thông số tàu, tab 2 Cảng & luồng (kho hải đồ, khung nhìn liền mạch, datum / dời tay từng tờ), tab 4 Môi trường, Cài đặt |
 | `ui_run.js` | tab 3 Điều động (buồng lái, hải đồ nhỏ, radar, tay chuông, vô lăng, bảng tín hiệu) |
 | `ui_replay.js` | tab 5 Xem lại, ghi bài tập, xuất video |
@@ -32,6 +33,9 @@
 - Tọa độ mô phỏng: "mét thế giới" của `CS.frame` (Mercator elipxoit ÷ hệ số phóng tại gốc; x Đông, y Bắc). Gốc đặt tại vị trí xuất phát khi bắt đầu bài, dời khi tàu xa gốc > 20 km (`checkOrigin`); nơi nào giữ tọa độ mét thế giới phải đăng ký `CS.originSubs` để đổi theo. `psi` radian tính từ Bắc theo chiều kim đồng hồ; cảnh 3D: x = Đông, z = −Bắc
 - Lưu trữ: localStorage `mp_set`, `mp_ship`, `mp_env`, `mp_places` (đối tượng + vị trí xuất phát, lat/lon WGS-84); IndexedDB `mp_charts` (kho hải đồ, xem `charts/AGENTS.md`), `mophongtau` → `sessions` (bài đã ghi, kèm gốc `frame` lúc ghi). `mp_objs:<tên tờ>` và `mophongtau/charts` của v0.1 được chuyển tự động lúc khởi động rồi bỏ
 - Tọa độ lat/lon hiển thị, nhập, lưu: WGS-84
+- Kịch bản `mp_env`: `wxMode` (`manual` | `random`), `wxStart` (kiểu trời khởi đầu, rỗng = app chọn), `waveL` bước sóng (m; chu kỳ suy ra theo sóng nước sâu). Thời tiết ngẫu nhiên tạo mới mỗi bài (`A.sim.wx`), không đổi thủy triều, dòng chảy, giờ
+- Bản ghi bài tập (`rec`, 1 dòng/giây) có cả thời tiết (`wKn`, `wDir`, `wD`, `wL`, `rn`, `cl`, `wx`) để xem lại 3D đúng như lúc chạy
+- Nấc lệnh lái lấy từ `helmSteps()` theo `rudMax` của tàu
 - Độ sâu theo màu (`classDepth`) thuộc từng tờ hải đồ; ngoài mọi tờ là biển trống sâu `noChartDepth` (30 m)
 - Khung nhìn hải đồ là `render/chartcanvas.js` (có `redraw` thì vòng lặp chính tự vẽ lại khi `dirty`)
 - `physics.js` không phụ thuộc hải đồ; độ sâu đi qua `world.depthAt` / `classAt`

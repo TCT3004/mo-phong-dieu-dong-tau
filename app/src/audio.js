@@ -1,6 +1,6 @@
-// Âm thanh tổng hợp: chuông, báo động, tiếng máy.
+// Âm thanh tổng hợp: chuông, báo động, tiếng máy, mưa, gió, sấm.
 export class Sound {
-  constructor() { this.ctx = null; this.vol = { master: 0.8, engine: 0.6, bell: 0.9 }; this.alarmOn = false; this.bellType = 'electric'; }
+  constructor() { this.ctx = null; this.vol = { master: 0.8, engine: 0.6, bell: 0.9, env: 0.7 }; this.alarmOn = false; this.bellType = 'electric'; }
   init() {
     if (this.ctx) { if (this.ctx.state === 'suspended') this.ctx.resume(); return; }
     const C = window.AudioContext || window.webkitAudioContext; if (!C) return;
@@ -9,6 +9,29 @@ export class Sound {
     this.eng = c.createOscillator(); this.eng.type = 'sawtooth'; this.eng.frequency.value = 30;
     const lp = c.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 140; this.engG = c.createGain(); this.engG.gain.value = 0;
     this.eng.connect(lp); lp.connect(this.engG); this.engG.connect(this.out); this.eng.start();
+  }
+  // nguồn tiếng ồn trắng dùng chung (2 giây, lặp)
+  noiseBuf() { if (!this.nb) { const c = this.ctx, b = c.createBuffer(1, 2 * c.sampleRate, c.sampleRate), d = b.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1; this.nb = b; } return this.nb; }
+  mkAmb() {
+    if (this.amb) return; const c = this.ctx, src = (off) => { const s = c.createBufferSource(); s.buffer = this.noiseBuf(); s.loop = true; s.start(0, off); return s; };
+    // mưa: tiếng rào rào (lọc thông cao) · gió: tiếng rít (lọc dải, tần số theo sức gió)
+    const r = src(0), rh = c.createBiquadFilter(); rh.type = 'highpass'; rh.frequency.value = 1100; const rl = c.createBiquadFilter(); rl.type = 'lowpass'; rl.frequency.value = 7000; const rg = c.createGain(); rg.gain.value = 0; r.connect(rh); rh.connect(rl); rl.connect(rg); rg.connect(this.out);
+    const w = src(0.7), wb = c.createBiquadFilter(); wb.type = 'bandpass'; wb.frequency.value = 400; wb.Q.value = 0.7; const wg = c.createGain(); wg.gain.value = 0; w.connect(wb); wb.connect(wg); wg.connect(this.out);
+    this.amb = { rg, wg, wb };
+  }
+  // rain 0..1, windKn: gió thật (hl/h)
+  weather(rain, windKn) {
+    if (!this.ctx) return; this.mkAmb(); const t = this.ctx.currentTime, a = this.amb, v = this.vol.env, wk = Math.max(0, Math.min(1, (windKn - 8) / 32));
+    a.rg.gain.setTargetAtTime(0.16 * v * Math.min(1, rain), t, 1.2);
+    a.wg.gain.setTargetAtTime(0.22 * v * wk * wk, t, 1.5); a.wb.frequency.setTargetAtTime(260 + 9 * windKn + 60 * Math.random(), t, 2);
+  }
+  // sấm: tia sét cách dist m, tiếng tới sau dist/340 giây (chia cho tốc độ mô phỏng); gần thì có tiếng nổ đanh, xa chỉ còn ì ầm
+  thunder(dist, speed = 1) {
+    if (!this.ctx) return; const c = this.ctx, t0 = c.currentTime + dist / 340 / Math.max(1, speed), near = Math.max(0, 1 - dist / 6000), lv = this.vol.env * (0.25 + 0.55 * near);
+    const s = c.createBufferSource(); s.buffer = this.noiseBuf(); s.loop = true; const lp = c.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.setValueAtTime(near > 0.5 ? 900 : 300, t0); lp.frequency.exponentialRampToValueAtTime(70, t0 + 3);
+    const g = c.createGain(), dur = 3.5 + 2.5 * (1 - near); g.gain.setValueAtTime(0, t0); g.gain.linearRampToValueAtTime(lv, t0 + 0.04 + 0.4 * (1 - near));
+    for (let k = 1; k < 5; k++) g.gain.linearRampToValueAtTime(lv * (0.35 + 0.5 * Math.random()) * (1 - k / 6), t0 + k * dur / 5); g.gain.linearRampToValueAtTime(0, t0 + dur);
+    s.connect(lp); lp.connect(g); g.connect(this.out); s.start(t0, Math.random()); s.stop(t0 + dur + 0.1);
   }
   setVol(v) { Object.assign(this.vol, v); if (this.out) this.out.gain.value = this.vol.master; }
   engine(frac) { if (!this.ctx) return; const t = this.ctx.currentTime; this.eng.frequency.setTargetAtTime(22 + 50 * Math.abs(frac), t, 0.5); this.engG.gain.setTargetAtTime(0.25 * this.vol.engine * Math.min(1, 0.15 + Math.abs(frac)) * (Math.abs(frac) > 0.01 ? 1 : 0.3), t, 0.5); }
