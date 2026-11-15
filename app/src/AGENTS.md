@@ -43,4 +43,6 @@
 
 ## Child DOX Index
 
-- `geo/AGENTS.md` — nền tọa độ: Mercator elipxoit, WorldFrame, datum VN-2000, geodesic, đa giác (giai đoạn 2, M0; chưa nối vào mô phỏng)
+- `geo/AGENTS.md` — nền tọa độ: Mercator elipxoit, WorldFrame, datum VN-2000, geodesic, đa giác
+- `charts/AGENTS.md` — đọc BSB đầy đủ, georef đa thức
+- `render/AGENTS.md` — chọn tờ (quilting)

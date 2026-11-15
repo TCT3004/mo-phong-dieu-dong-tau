@@ -7,7 +7,7 @@
 ## Ownership
 
 - `build.mjs`: bundle esbuild (IIFE, target es2022) vào `src/template.html` tại chỗ `/*BUNDLE*/`; tạo `src/_pdfworker.js` từ pdf.js worker (bundle IIFE để chạy được dưới `file://`)
-- `package.json`: phụ thuộc `three`, `pdfjs-dist`, `esbuild`
+- `package.json`, `package-lock.json`: phụ thuộc `three`, `pdfjs-dist`, `esbuild`, `earcut`, `polygon-clipping`
 - `src/`: mã nguồn (xem `src/AGENTS.md`)
 - `tests/`: unit test Node (xem `tests/AGENTS.md`)
 
