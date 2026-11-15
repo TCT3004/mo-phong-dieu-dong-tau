@@ -77,7 +77,7 @@ function frame(ts) {
     if (A.view) {
       const ds = s.day0 + s.t, e = s.e;
       A.view.setSegs(lineSegs3D());
-      A.view.update({ x: s.S.x, y: s.S.y, psi: s.S.psi }, runState.view, { sunEl: sunEl(ds, s.lightMode), sunAz: 2 * Math.PI * (ds / 86400), vis: s.fog ? 550 : e.vis, tide: e.tide, waveH: e.waveH, waveD: e.waveD, waveT: e.waveT, t: s.t, lights: s.lights, daySec: ds });
+      A.view.update({ x: s.S.x, y: s.S.y, psi: s.S.psi }, runState.view, { sunEl: sunEl(ds, s.lightMode), sunAz: 2 * Math.PI * (ds / 86400), vis: s.fog ? 550 : e.vis, tide: e.tide, waveH: e.waveH, waveD: e.waveD, waveT: e.waveT, waveLen: A.set.waveLen, rollK: A.set.rollSpeed, t: s.t, lights: s.lights, daySec: ds });
       A.view.render(runState.view === 'bridge' ? paneCvs() : null);
     }
     consoleFrame(dtR);

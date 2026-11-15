@@ -74,7 +74,7 @@ function draw2D(v, row, s, wide) {
   const pl = shipPoly(v, row.x, row.y, row.psi, M, 14); g.fillStyle = 'rgba(13,71,161,.4)'; g.strokeStyle = '#0D47A1'; g.lineWidth = 2; g.beginPath(); pl.forEach((p, k) => (k ? g.lineTo(p[0], p[1]) : g.moveTo(p[0], p[1]))); g.closePath(); g.fill(); g.stroke();
   g.restore();
 }
-function env3(row, s) { const ds = s.day0 + row.t; return { sunEl: sunEl(ds, 'auto'), sunAz: 2 * Math.PI * (ds / 86400), vis: row.vis || 11000, tide: row.tide, waveH: row.wH || 0, waveD: (s.env ? +s.env.waveDir || 0 : 0) * Math.PI / 180, waveT: s.env ? +s.env.waveT || 6 : 6, t: row.t, lights: s.lights || {}, daySec: ds }; }
+function env3(row, s) { const ds = s.day0 + row.t; return { sunEl: sunEl(ds, 'auto'), sunAz: 2 * Math.PI * (ds / 86400), vis: row.vis || 11000, tide: row.tide, waveH: row.wH || 0, waveD: (s.env ? +s.env.waveDir || 0 : 0) * Math.PI / 180, waveT: s.env ? +s.env.waveT || 6 : 6, waveLen: A.set.waveLen, rollK: A.set.rollSpeed, t: row.t, lights: s.lights || {}, daySec: ds }; }
 export function replayFrame(dt) {
   const s = R.ses; if (!s || !$('#repCv')) return;
   if (R.playing) { R.t += dt * (R.rec ? R.ex.speed : R.speed); if (R.t >= dur()) { R.t = dur(); R.playing = false; if (R.rec) stopExport(); } }

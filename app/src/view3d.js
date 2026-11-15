@@ -87,14 +87,15 @@ export class View3D {
     return t;
   }
   // các thành phần sóng: hướng truyền (về), số sóng, tần số, biên độ, độ dốc
-  setWaves(Hs, fromRad, Tp) {
-    const key = Hs.toFixed(2) + '|' + fromRad.toFixed(3) + '|' + Tp.toFixed(2); if (key === this.wKey) return; this.wKey = key;
+  // lenK: hệ số nhân bước sóng (chu kỳ tăng theo căn bậc hai để sóng vẫn đúng quan hệ tán sắc nước sâu)
+  setWaves(Hs, fromRad, Tp, lenK = 1) {
+    const key = Hs.toFixed(2) + '|' + fromRad.toFixed(3) + '|' + Tp.toFixed(2) + '|' + lenK; if (key === this.wKey) return; this.wKey = key;
     const H = Math.max(Hs, 0.15), to = fromRad + Math.PI, T = Math.max(2.5, Tp || 6), G = 9.81;
     const C = [[0, 1, 0.33], [16, 0.86, 0.2], [-20, 0.9, 0.18], [36, 0.66, 0.12], [-32, 0.6, 0.11], [6, 1.22, 0.1], [-55, 0.45, 0.07], [62, 0.38, 0.06]];
-    this.wComp = C.map((c, i) => { const dir = to + c[0] * Math.PI / 180, Ti = T * c[1], om = 2 * Math.PI / Ti, k = om * om / G, A = H * c[2], Q = Math.min(1, 0.7 / (k * A * 8 + 1e-6)); return { dx: Math.sin(dir), dz: -Math.cos(dir), k, om, A, Q, ph: i * 1.7 }; });
+    this.wComp = C.map((c, i) => { const dir = to + c[0] * Math.PI / 180, Ti = T * c[1], k = (2 * Math.PI / Ti) ** 2 / G / lenK, om = Math.sqrt(G * k), A = H * c[2], Q = Math.min(1, 0.7 / (k * A * 8 + 1e-6)); return { dx: Math.sin(dir), dz: -Math.cos(dir), k, om, A, Q, ph: i * 1.7 }; });
     this.wComp.forEach((w, i) => { this.wU.uWd.value[i].set(w.dx, w.dz, w.k, w.om); this.wU.uWa.value[i].set(w.A, w.Q, w.ph, 0); });
     this.wU.uHs.value = H;
-    const Lm = 9.81 * T * T / (2 * Math.PI), S1 = Math.max(14, 0.9 * Lm), S2 = 0.31 * S1, d2 = to + 0.45, cs = (S) => Math.sqrt(9.81 * (S / 9) / (2 * Math.PI));
+    const Lm = 9.81 * T * T / (2 * Math.PI) * lenK, S1 = Math.max(14, 0.9 * Lm), S2 = 0.31 * S1, d2 = to + 0.45, cs = (S) => Math.sqrt(9.81 * (S / 9) / (2 * Math.PI));
     this.wU.uTile.value.set(S1, S2, cs(S1), cs(S2)); this.wU.uD2.value.set(Math.sin(d2), -Math.cos(d2), Math.cos(d2), Math.sin(d2));
     this.wU.uStr.value = Math.min(0.6, 0.1 + 0.17 * Math.max(Hs, 0.05));
   }
@@ -185,13 +186,13 @@ export class View3D {
     this.view = view; this.time = e.t;
     const d = this.dim || { L: 100, B: 16, fb: 4, shh: 10, bridgeX: -30, eye: 12 };
     // tàu chòng chành theo sóng: lấy cao độ sóng ở mũi, lái, hai mạn rồi làm trễ theo quán tính thân tàu
-    this.setWaves(e.waveH || 0, e.waveD || 0, e.waveT || 6);
+    this.setWaves(e.waveH || 0, e.waveD || 0, e.waveT || 6, e.waveLen || 1);
     const sn0 = Math.sin(st.psi), cs0 = Math.cos(st.psi), W2 = (bx, by) => this.waveH(st.x + bx * sn0 + by * cs0, -(st.y + bx * cs0 - by * sn0), e.t);
     const hb = W2(d.L * 0.42, 0), hs = W2(-d.L * 0.42, 0), hp = W2(0, -d.B / 2), hst = W2(0, d.B / 2), hc = W2(0, 0);
     const mo = this.mo || (this.mo = { t: e.t, z: 0, p: 0, r: 0 }), dt = Math.max(0, Math.min(0.25, e.t - mo.t)); mo.t = e.t;
     const tz = (hb + hs + hp + hst + hc) / 5 * 0.85, tp = Math.atan2(hb - hs, d.L * 0.84) * 0.8, tr = Math.atan2(hst - hp, d.B) * 1.4;
     if (dt === 0 && Math.abs(mo.z - tz) > 3) { mo.z = tz; mo.p = tp; mo.r = tr; }
-    mo.z += (tz - mo.z) * Math.min(1, dt / 1.2); mo.p += (tp - mo.p) * Math.min(1, dt / 1.5); mo.r += (tr - mo.r) * Math.min(1, dt / 2.2);
+    const mk = Math.max(0.25, e.rollK || 1); mo.z += (tz - mo.z) * Math.min(1, dt * mk / 1.2); mo.p += (tp - mo.p) * Math.min(1, dt * mk / 1.5); mo.r += (tr - mo.r) * Math.min(1, dt * mk / 2.2);
     this.shipG.position.set(st.x, mo.z, -st.y); this.shipG.rotation.set(mo.p, -st.psi, mo.r, 'YXZ'); this.shipG.updateMatrixWorld(true);
     if (this.terrain) this.terrain.position.y = -e.tide;
     for (const o of this.objG.children) if (o.userData.fix !== undefined) o.position.y = o.userData.fix - e.tide;

@@ -28,7 +28,7 @@ function mergeShip(saved) {
 }
 export const A = {
   p: mergeShip(LS.get('mp_ship')), env: Object.assign(defaultEnv(), LS.get('mp_env') || {}),
-  set: Object.assign({ quality: 'high', volMaster: 80, volEngine: 60, volBell: 90, headUp: false, uiScale: 'auto' }, LS.get('mp_set') || {}),
+  set: Object.assign({ quality: 'high', volMaster: 80, volEngine: 60, volBell: 90, headUp: false, uiScale: 'auto', waveLen: 4, rollSpeed: 4 }, LS.get('mp_set') || {}),
   W: new World(), M: null, sim: null, tab: 'run', charts: [], sessions: [], hooks: {}
 };
 export function saveShip() { LS.set('mp_ship', A.p); }
