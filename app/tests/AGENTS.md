@@ -7,6 +7,7 @@
 ## Ownership
 
 - `geo.test.mjs`: phép chiếu, WorldFrame, datum VN-2000 (giá trị tham chiếu tính bằng PROJ 9, tham số EPSG:6960), Vincenty (mẫu Flinders Peak → Buninyong), loxodrom, đa giác
+- `kap.test.mjs`: georef KAP quy REF theo VN-2000 về WGS-84; KAP ghi WGS-84 hoặc không ghi datum giữ nguyên
 
 ## Local Contracts
 

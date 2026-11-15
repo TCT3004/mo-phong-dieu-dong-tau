@@ -82,7 +82,7 @@ export async function activateChart(key) {
     ch.key = key; A.W.setChart(ch); loadObjs(); LS.set('mp_lastChart', key);
     if (!A.W.start) { A.W.start = findWater(); saveObjs(); }
     cv.chart = ch; cv.fit(); selObj = null;
-    st.className = 'note ok'; st.textContent = 'Đang dùng: ' + ch.name + ' · tỷ lệ 1:' + ch.header.scale + ' · ' + ch.W + ' × ' + ch.H + ' điểm ảnh · ' + (ch.geo.ok ? 'đã có tọa độ' : 'KHÔNG có điểm tọa độ');
+    st.className = 'note ok'; st.textContent = 'Đang dùng: ' + ch.name + ' · tỷ lệ 1:' + ch.header.scale + ' · ' + ch.W + ' × ' + ch.H + ' điểm ảnh · ' + (ch.geo.ok ? 'tọa độ hải đồ: ' + ch.geo.datumName + (ch.geo.datum !== 'WGS84' ? ' → đã chuyển sang WGS-84' : '') : 'KHÔNG có điểm tọa độ');
     drawLib(); drawChart(); drawSide(); if (A.hooks.chartChanged) A.hooks.chartChanged();
   } catch (e) { st.className = 'note bad'; st.textContent = 'Không đọc được ' + c.name + ': ' + (e.message || e); }
 }

@@ -1,4 +1,6 @@
 // Đọc hải đồ raster BSB/KAP (OpenCPN). Trả về ảnh chỉ số màu + bảng màu + tọa độ + lưới phân lớp độ sâu.
+// Tọa độ luôn quy về WGS-84: điểm REF theo datum khác (VN-2000…) được chuyển khi dựng georef.
+import { normalizeDatum, toWGS84, DATUMS } from './geo/datum.js';
 export const CELL = 4; // số pixel hải đồ cho một ô lưới độ sâu
 // lớp: 0 đất, 1 bãi cạn hở (xanh lá), 2 nông (xanh đậm), 3 nông vừa (xanh nhạt), 4 sâu (trắng)
 
@@ -38,10 +40,12 @@ function fit(xs, ys) {
 }
 
 export function makeGeo(H) {
-  const g = { ok: H.refs.length >= 2 };
+  const g = { ok: H.refs.length >= 2 }, did = normalizeDatum(H.datum);
+  g.datum = did || 'WGS84'; g.datumKnown = !!did; g.datumName = did ? DATUMS[did].name : (H.datum ? 'không rõ (' + H.datum + ')' : 'không ghi') + ', coi như WGS-84';
+  const refs = did && did !== 'WGS84' ? H.refs.map((r) => { const [lat, lon] = toWGS84(r.lat, r.lon, did); return { x: r.x, y: r.y, lat, lon }; }) : H.refs;
   if (g.ok) {
-    [g.lon0, g.dlon] = fit(H.refs.map((r) => r.x), H.refs.map((r) => r.lon));
-    [g.my0, g.dmy] = fit(H.refs.map((r) => r.y), H.refs.map((r) => mercY(r.lat)));
+    [g.lon0, g.dlon] = fit(refs.map((r) => r.x), refs.map((r) => r.lon));
+    [g.my0, g.dmy] = fit(refs.map((r) => r.y), refs.map((r) => mercY(r.lat)));
     if (!g.dlon || !g.dmy) g.ok = false;
   }
   if (!g.ok) { g.lon0 = 0; g.dlon = 1e-5; g.my0 = 0; g.dmy = -1.7e-7; }

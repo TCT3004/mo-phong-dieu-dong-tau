@@ -99,7 +99,8 @@ Default section order:
 - D4: cache ô ảnh hải đồ trên đĩa, giới hạn dung lượng chỉnh được
 - D5: cầu bến, cọc bích, tuyến đi lưu theo lat/lon toàn cục, có chuyển dữ liệu cũ tự động
 - D6: chọn tờ hải đồ: phóng to tối đa ×4, thu nhỏ tối đa ×8 so với tỷ lệ gốc (chỉnh được)
-- Hải đồ của người dùng: hệ **VN‑2000**, dạng KAP hoặc PDF; người dùng nhập vào kho của app rồi app đọc
+- **Toàn app dùng WGS‑84**: tọa độ hiển thị, nhập và lưu đều là WGS‑84. Hải đồ của người dùng phần lớn là VN‑2000 (KAP hoặc PDF) và được chuyển sang WGS‑84 khi nạp (EPSG:6960, lệch ≈ 224 m ở Vạn Hoa); KAP theo datum ghi ở `GD`, không ghi thì coi như WGS‑84 và báo cho người dùng
+- Người dùng nhập hải đồ vào kho của app rồi app đọc
 - Bài tập theo tuyến hành trình, trước mắt dưới 100 Hl
 
 ## User Preferences
