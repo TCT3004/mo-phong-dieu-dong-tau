@@ -19,6 +19,8 @@
 | `kap.js` | georef tuyến tính của v0.1 — chỉ dùng chuyển dữ liệu cũ; `fmtLL` |
 | `nav.js` | định dạng khoảng cách, đọc tọa độ, tuyến đi (`legsLL` loxodrom theo lat/lon, `legs`, `trackRoute`) |
 | `windage.js` | tính diện tích hứng gió từ sơ đồ tàu PDF / ảnh |
+| `pdfload.js` | mở PDF bằng pdf.js (worker classic từ Blob), dùng chung cho `windage.js` và hải đồ PDF |
+| `ui_pdfchart.js` | hộp thoại nạp hải đồ PDF: trang, tỷ lệ, datum (mặc định VN-2000), độ nét, điểm tọa độ, khung hải đồ, sai số khớp |
 | `audio.js` | âm thanh tổng hợp: máy, còi, chuông, báo động |
 | `ui_setup.js` | tab 1 Thông số tàu, tab 2 Cảng & luồng (kho hải đồ, khung nhìn liền mạch, datum / dời tay từng tờ), tab 4 Môi trường, Cài đặt |
 | `ui_run.js` | tab 3 Điều động (buồng lái, hải đồ nhỏ, radar, tay chuông, vô lăng, bảng tín hiệu) |

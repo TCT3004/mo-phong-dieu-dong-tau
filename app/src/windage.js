@@ -1,17 +1,11 @@
 // Tính diện tích hứng gió từ sơ đồ tàu (PDF hoặc ảnh): khoanh hình chiếu cạnh, đặt tỷ lệ, đường ki,
 // app tự tách bóng tàu phía trên đường nước rồi tính A_L, tâm hứng gió; tùy chọn hình chiếu đứng cho A_F.
 import { A, $, num, esc, saveShip } from './app.js';
-import * as pdfjsLib from 'pdfjs-dist/build/pdf.min.mjs';
-import WORKER_SRC from './_pdfworker.js';
+import { openPdf } from './pdfload.js';
 
 let st = null;
 const fresh = () => ({ src: null, iw: 0, ih: 0, pdf: null, page: 1, pages: 0, name: '', v: { cx: 0, cy: 0, sc: 1 }, tool: 'pan', mpp: 0, spts: [], sdist: num(A.p.loa, 100), bowRight: true, thr: 200, brush: 10, side: { crop: null, keel: null, edits: [], mask: null }, front: { crop: null, keel: null, edits: [], mask: null }, tf: num(A.p.tf, 5), ta: num(A.p.ta, 5), res: null });
 
-function ensureWorker() {
-  if (pdfjsLib.GlobalWorkerOptions.workerPort) return;
-  const url = URL.createObjectURL(new Blob([WORKER_SRC], { type: 'text/javascript' }));
-  pdfjsLib.GlobalWorkerOptions.workerPort = new Worker(url);
-}
 
 const HINTS = {
   pan: 'Kéo chuột để di chuyển, lăn chuột để phóng to / thu nhỏ.',
@@ -102,8 +96,7 @@ async function loadFile(f) {
   $('#wEmpty').style.display = 'block'; $('#wEmpty').textContent = 'Đang đọc ' + f.name + '…';
   try {
     if (/\.pdf$/i.test(f.name) || f.type === 'application/pdf') {
-      ensureWorker();
-      st.pdf = await pdfjsLib.getDocument({ data: new Uint8Array(await f.arrayBuffer()), isEvalSupported: false }).promise;
+      st.pdf = await openPdf(new Uint8Array(await f.arrayBuffer()));
       st.pages = st.pdf.numPages; await renderPage(1);
     } else {
       const bmp = await createImageBitmap(f); const cv = document.createElement('canvas'); cv.width = bmp.width; cv.height = bmp.height; cv.getContext('2d').drawImage(bmp, 0, 0);

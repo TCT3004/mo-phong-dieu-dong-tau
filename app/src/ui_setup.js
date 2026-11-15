@@ -6,6 +6,8 @@ import { fmtDist, legsLL, fmtLat, fmtLon, parseCoord, parseLatLon, pad3 as p3 } 
 import { ChartCanvas } from './render/chartcanvas.js';
 import { CS, toLL, toWorld, ensureAround, DEF_CLASS_DEPTH } from './chartsys.js';
 import { migrateLegacy } from './places.js';
+import { openPdfChart, pdfTest } from './ui_pdfchart.js';
+export { pdfTest };
 import { llToMerc } from './geo/proj.js';
 import { inside } from './geo/poly.js';
 import { DATUMS } from './geo/datum.js';
@@ -76,6 +78,12 @@ export async function addChartFiles(files, auto = true) {
   if (n && !had && auto) await firstCharts();
   if (A.hooks.chartsChanged) A.hooks.chartsChanged();
   return n;
+}
+// vừa nạp xong một tờ PDF: đưa khung nhìn tới tờ đó
+export async function pdfChartAdded(r) {
+  drawLib(); if (cv) { cv.size(); cv.fitChart(r); cv.inited = true; drawChart(); }
+  if (!A.W.start) await firstCharts();
+  if (A.hooks.chartsChanged) A.hooks.chartsChanged();
 }
 // lần đầu có hải đồ: xem toàn bộ và đặt vị trí xuất phát ở vùng nước sâu gần tâm tờ đầu tiên
 async function firstCharts() {
@@ -164,10 +172,11 @@ const TOOLS = [['pan', 'Chọn / kéo'], ['light', 'Đèn / phao'], ['berth', 'C
 const HINT = { pan: 'Kéo để di chuyển, lăn chuột để phóng to. Bấm vào đèn hoặc cầu bến để sửa. Bấm chuột phải vào đèn / cầu bến để xóa.', light: 'Bấm lên vị trí đèn hoặc phao trên hải đồ, rồi sửa thông tin ở khung bên phải.', berth: 'Bấm lần lượt dọc mép cầu (phía nước). Bấm đúp để kết thúc. Bấm chuột phải để bỏ điểm vừa đặt. Bích buộc dây tự đặt đều theo khoảng cách bạn nhập.', sound: 'Bấm lên con số độ sâu trên hải đồ rồi gõ giá trị.', start: 'Bấm lên chỗ tàu xuất phát. Hướng ban đầu nhập ở tab 4.', bollard: 'Kéo cọc bích dọc mép cầu để dời. Bấm lên mép cầu để thêm cọc. Chuột phải vào cọc để xóa. Số khoảng cách từ đầu bến hiện ở khung bên phải (bấm vào cầu bến bằng «Chọn / kéo» để xem).', measure: 'Bấm hai điểm để đo khoảng cách (hải lý, gần thì mét) và phương vị. Chuột phải để bỏ.', route: 'Bấm lên hải đồ để thêm điểm vào cuối tuyến đang chọn. Kéo một điểm để dời. Chuột phải vào điểm để xóa. Nhập tọa độ ở khung bên phải cũng được. Tuyến đang chọn hiện ở tab 3.' };
 export function initChart() {
   $('#p-chart').innerHTML = `<div class="flex" style="align-items:flex-start">
-  <div class="col" style="flex:1 1 260px;max-width:320px"><section class="card"><h2>Kho hải đồ (.kap)</h2><div class="muted" style="margin-bottom:8px">Nạp một lần, app lưu trên máy. Các tờ tự ghép liền nhau theo tọa độ, tờ tỷ lệ lớn nằm trên — kéo, phóng to thu nhỏ thoải mái như OpenCPN. App quét cả thư mục con và chỉ lấy file .kap; file .rar / .zip cần giải nén trước.</div>
+  <div class="col" style="flex:1 1 260px;max-width:320px"><section class="card"><h2>Kho hải đồ (.kap)</h2><div class="muted" style="margin-bottom:8px">Nạp một lần, app lưu trên máy. Các tờ tự ghép liền nhau theo tọa độ, tờ tỷ lệ lớn nằm trên — kéo, phóng to thu nhỏ thoải mái như OpenCPN. Thêm thư mục: app quét cả thư mục con, lấy file .kap. Hải đồ PDF cần bấm vài điểm tọa độ khi nạp. File .rar / .zip cần giải nén trước.</div>
   <label class="btn" style="display:flex;align-items:center;justify-content:center;margin-bottom:6px">+ Thêm thư mục<input type="file" id="dirIn" webkitdirectory multiple hidden></label>
-  <label class="btn" style="display:flex;align-items:center;justify-content:center;margin-bottom:8px">+ Thêm file .kap<input type="file" id="fileIn" accept=".kap,.KAP" multiple hidden></label>
-  <div class="drop" id="dropZone">hoặc kéo thả file .kap vào đây</div>
+  <label class="btn" style="display:flex;align-items:center;justify-content:center;margin-bottom:6px">+ Thêm file .kap<input type="file" id="fileIn" accept=".kap,.KAP" multiple hidden></label>
+  <label class="btn" style="display:flex;align-items:center;justify-content:center;margin-bottom:8px">+ Thêm hải đồ PDF…<input type="file" id="pdfIn" accept=".pdf,application/pdf" hidden></label>
+  <div class="drop" id="dropZone">hoặc kéo thả file .kap / .pdf vào đây</div>
   <div class="fld" style="margin-top:10px"><label for="libQ">Tìm theo tên / số hải đồ</label><div class="in"><input id="libQ" placeholder="vd: 25-181 hoặc Van Hoa" autocomplete="off"><button class="btn sm" id="libQx" style="border:0;background:transparent" aria-label="Xóa ô tìm">✕</button></div></div>
   <div class="fld" style="margin-top:6px"><label for="libLL">Tìm theo tọa độ (tờ có chứa điểm này)</label><div class="in"><input id="libLL" placeholder="vd: 21°05'N 107°28'E" autocomplete="off"><button class="btn sm" id="libLLx" style="border:0;background:transparent" aria-label="Xóa tọa độ">✕</button></div></div>
   <div class="muted" id="libInfo" style="margin-top:6px"></div><div class="lib" id="chartLib" style="margin-top:6px;max-height:330px;overflow:auto"></div><div class="muted" style="margin-top:4px">Bấm vào tên tờ để đưa khung nhìn tới tờ đó.</div></section></div>
@@ -184,7 +193,8 @@ export function initChart() {
   const added = (n) => { if (!n) alert('Không thấy file .kap nào.'); };
   $('#dirIn').onchange = async (e) => { const f = Array.from(e.target.files); e.target.value = ''; added(await addChartFiles(f)); };
   $('#fileIn').onchange = async (e) => { const f = Array.from(e.target.files); e.target.value = ''; await addChartFiles(f); };
-  const dz = $('#dropZone'); dz.ondragover = (e) => { e.preventDefault(); }; dz.ondrop = async (e) => { e.preventDefault(); await addChartFiles(Array.from(e.dataTransfer.files)); };
+  $('#pdfIn').onchange = (e) => { const f = Array.from(e.target.files); e.target.value = ''; if (f.length) openPdfChart(f); };
+  const dz = $('#dropZone'); dz.ondragover = (e) => { e.preventDefault(); }; dz.ondrop = async (e) => { e.preventDefault(); const fs = Array.from(e.dataTransfer.files), pdf = fs.filter((f) => /\.pdf$/i.test(f.name)); if (pdf.length) openPdfChart(pdf); await addChartFiles(fs); };
   const goRec = (id) => { const r = CS.catalog.byId.get(id); if (r && r.ready) { cv.size(); cv.fitChart(r); drawChart(); } };
   $('#chartLib').onclick = async (e) => { const b = e.target.closest('button'); if (!b) return; if (b.dataset.del) { const r = CS.catalog.byId.get(b.dataset.del); if (r && confirm('Xóa tờ «' + r.name + '» khỏi kho? (file gốc trên máy không bị xóa)')) { await CS.catalog.remove(r.id); if (A.hooks.chartsChanged) A.hooks.chartsChanged(); } return; } goRec(b.dataset.id); };
   $('#libQ').oninput = (e) => { libQ = e.target.value; drawLib(); };
@@ -257,11 +267,12 @@ export function initChart() {
 // tọa độ, độ sâu dưới con trỏ
 function posText(p, mx, my) {
   const ll = toLL(mx, my), r = A.W.chartAt(mx, my);
+  if (!r) { const m = llToMerc(ll[0], ll[1]), q = CS.catalog.records.filter((c) => c.ready && c.plyMerc && inside(m[0], m[1], c.plyMerc)).sort((a, b) => a.mppMerc - b.mppMerc)[0]; if (q) CS.provider.load(q); }
   $('#chartPos').textContent = fmtLL(ll[0], ll[1]) + ' · ' + (r ? 'độ sâu hải đồ ' + A.W.depthAt(mx, my).toFixed(1) + ' m · ' + r.name : 'ngoài vùng hải đồ') + ' · ' + fmtM(cv.mPerPx()) + ' m/điểm' + (meas && meas.length === 1 ? ' · đo: ' + fmtDist(Math.hypot(mx - meas[0][0], my - meas[0][1])) : '');
 }
 // nạp lưới độ sâu cho vùng đang xem (để đọc độ sâu dưới con trỏ, đặt vị trí xuất phát)
 let vdT = 0;
-function viewDepth() { if (vdT) return; vdT = setTimeout(() => { vdT = 0; if (!cv) return; const [w, h] = cv.size(), r = Math.max(w, h) * cv.mPerPx() * 0.75; if (r < 60000) ensureAround(cv.cx, cv.cy, r); }, 400); }
+function viewDepth() { if (vdT) return; vdT = setTimeout(() => { vdT = 0; if (!cv) return; const [w, h] = cv.size(), r = Math.max(w, h) * cv.mPerPx() * 0.75; if (r < 60000) ensureAround(cv.cx, cv.cy, r); else if (cv.ref) CS.provider.load(cv.ref); }, 400); }
 function bolList(b) {
   const bi = A.W.objs.berths.indexOf(b), bl = A.W.bollards.filter((q) => q.bi === bi);
   return `<div class="lbl" style="margin-top:8px">Cọc bích — khoảng cách tính từ đầu bến (m)${Array.isArray(b.bols) ? ' · đã chỉnh tay' : ' · đang đặt cách đều'}</div>

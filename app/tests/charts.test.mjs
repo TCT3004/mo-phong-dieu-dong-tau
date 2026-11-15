@@ -68,3 +68,40 @@ test('Quilt: chọn tờ theo mức zoom, bỏ tờ bị che kín, giữ cả 2 
   q = selectCharts(all, vpAt(25, 110, 50));                              // ngoài vùng có hải đồ
   assert.equal(q.draw.length, 0); assert.equal(q.ref, null);
 });
+
+// ---------- bản ghi tờ: dời tay, đổi datum, khung PDF ----------
+import { georefRecord } from '../src/charts/record.js';
+import { classOfRgb, cellClass } from '../src/charts/bsb.js';
+
+test('georefRecord: dời tay theo mét, datum người dùng chọn, khung PDF theo pixel', () => {
+  const k = makeKap(SET.A), H = parseBsb(k.bytes);
+  const base = () => ({ W: H.W, H: H.H, refs: H.refs, plyRaw: H.ply, datumSrc: H.datumSrc, dtm: H.dtm, offsetM: [0, 0] });
+  const r = georefRecord(base()), c0 = r.xf.pxToLL(H.W / 2, H.H / 2), m = (a, b) => [(b[1] - a[1]) * 111320 * Math.cos(a[0] * Math.PI / 180), (b[0] - a[0]) * 110574];
+  const r2 = georefRecord({ ...base(), offsetM: [120, -80] }), d = m(c0, r2.xf.pxToLL(H.W / 2, H.H / 2));
+  assert.ok(Math.abs(d[0] - 120) < 1 && Math.abs(d[1] + 80) < 1, 'dời tay ' + d);
+  assert.ok(r2.ver === 1 && r2.plyMerc.length >= 3 && r2.bboxMerc[2] > r2.bboxMerc[0]);
+  // tờ ghi WGS-84 mà người dùng chọn VN-2000: dịch đúng như toWGS84
+  const r3 = georefRecord({ ...base(), datumUser: 'VN2000' }), e = toWGS84(c0[0], c0[1], 'VN2000'), c3 = r3.xf.pxToLL(H.W / 2, H.H / 2);
+  assert.ok(Math.abs(c3[0] - e[0]) < 2e-6 && Math.abs(c3[1] - e[1]) < 2e-6, 'datum VN-2000');
+  assert.equal(r3.datumName, 'VN-2000');
+  // khung theo pixel (hải đồ PDF): đa giác phủ là ảnh của khung qua georef
+  const r4 = georefRecord({ ...base(), plyRaw: null, plyPx: [[100, 100], [H.W - 100, 100], [H.W - 100, H.H - 100], [100, H.H - 100]] });
+  const q = r4.xf.pxToLL(100, 100); assert.ok(r4.plyLL.some((p) => Math.abs(p[0] - q[0]) < 1e-9 && Math.abs(p[1] - q[1]) < 1e-9));
+  // không đủ REF
+  assert.equal(georefRecord({ ...base(), refs: H.refs.slice(0, 1) }).coef, null);
+});
+
+test('phân lớp màu hải đồ PDF (màu lấy từ tờ 500-07)', () => {
+  assert.equal(classOfRgb(255, 255, 255), 4);        // nền trắng: sâu
+  assert.equal(classOfRgb(255, 255, 230), 0);        // đất vàng kem nhạt
+  assert.equal(classOfRgb(248, 225, 176), 0);        // đất be
+  assert.equal(classOfRgb(228, 255, 250), 3);        // nước nông xanh lơ nhạt
+  assert.equal(classOfRgb(150, 200, 240), 2);        // nước nông xanh dương đậm
+  assert.equal(classOfRgb(150, 220, 140), 1);        // bãi cạn xanh lá
+  assert.equal(classOfRgb(30, 0, 0), 255);           // nét chữ
+  assert.equal(classOfRgb(230, 20, 220), 255);       // tím (vùng hạn chế)
+  assert.equal(classOfRgb(220, 40, 30), 255);        // đỏ (đường bộ)
+  assert.equal(cellClass([6, 0, 0, 0, 10]), 0);      // đất ≥ 1/3 ô
+  assert.equal(cellClass([0, 0, 3, 9, 4]), 3);
+  assert.equal(cellClass([0, 0, 0, 0, 0]), 255);
+});

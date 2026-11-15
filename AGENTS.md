@@ -80,7 +80,7 @@ Default section order:
 
 - Mô phỏng điều động tàu 3D cho **người điều động** (không phải người lái), offline, Windows
 - JavaScript ES modules + three.js + pdf.js, bundle bằng esbuild thành **1 file HTML**; Electron bọc thành `.exe` portable
-- Giai đoạn 1 xong (v0.1.0). Giai đoạn 2 đang làm: hải đồ liền mạch kiểu OpenCPN (quilting), hệ tọa độ chung, nạp PDF vector, mô hình độ sâu ghép nhiều tờ
+- Giai đoạn 1 xong (v0.1.0). Giai đoạn 2 xong các mốc M1–M6 (v0.2.0): hải đồ liền mạch kiểu OpenCPN (quilting), mét thế giới + gốc trôi, kho hải đồ KAP / PDF, độ sâu ghép nhiều tờ. Còn: đọc số độ sâu trên PDF vector, dữ liệu cảng thật
 
 ## Project-wide Rules
 

@@ -84,6 +84,26 @@ export function classLut(pal) {
   }
   return lut;
 }
+// phân lớp theo sắc màu cho hải đồ PDF / ảnh màu thật (không có bảng màu BSB): trắng → sâu, xanh lơ / xanh dương → nông,
+// xanh lá → bãi cạn hở, vàng / be / nâu nhạt → đất; nét tối, đỏ, tím… → 255 (không rõ, lấy theo ô bên cạnh)
+export function classOfRgb(r, g, b) {
+  const mn = Math.min(r, g, b), mx = Math.max(r, g, b);
+  if (mn >= 236 && mx - mn < 14) return 4;
+  if (mx < 150) return 255;
+  if (g > r + 15 && g > b + 10) return 1;
+  if (b > r + 10 && g > r) return b - r > 45 ? 2 : 3;
+  if (r >= g && g >= b && r > 200 && g > 150 && r - b > 15 && r - b < 140) return 0;
+  return 255;
+}
+// đếm lớp trong một ô → lớp chiếm ưu thế (đất / bãi cạn ưu tiên khi chiếm ≥ 1/3); cnt[0..4]
+export function cellClass(cnt) {
+  const tot = cnt[0] + cnt[1] + cnt[2] + cnt[3] + cnt[4]; if (!tot) return 255;
+  if ((cnt[0] + cnt[1]) * 3 > tot) return cnt[0] >= cnt[1] ? 0 : 1;
+  let best = 4, bc = cnt[4]; for (let k = 2; k <= 3; k++) if (cnt[k] > bc) { bc = cnt[k]; best = k; }
+  return best;
+}
+// ô chưa rõ lớp (toàn chữ / nét): lấy theo ô bên trái hoặc bên trên
+export function fillUnknown(grid, gw) { for (let i = 0; i < grid.length; i++) if (grid[i] === 255) grid[i] = i % gw ? grid[i - 1] : (i >= gw ? grid[i - gw] : 255); }
 // lưới phân lớp độ sâu: mỗi ô CELL×CELL pixel → lớp chiếm ưu thế (đất / bãi cạn ưu tiên khi chiếm ≥ 1/3)
 export function buildGrid(idx, W, H, pal, cell = CELL) {
   const lut = classLut(pal), gw = Math.ceil(W / cell), gh = Math.ceil(H / cell), grid = new Uint8Array(gw * gh), cnt = new Uint32Array(5);

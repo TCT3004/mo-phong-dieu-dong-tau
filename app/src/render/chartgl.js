@@ -66,7 +66,7 @@ export class ChartGL {
     this.getTile(r.id, l, tx, ty).then((d) => {
       this.inflight--; this.pending.delete(key); if (!d || !this.per.has(r.id)) return;
       const gl = this.gl, rgba = r.fmt === 'rgba', tex = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, tex);
-      if (rgba) { gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, TS, TS, 0, gl.RGBA, gl.UNSIGNED_BYTE, d); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR); }
+      if (rgba) { if (d instanceof Uint8Array) gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, TS, TS, 0, gl.RGBA, gl.UNSIGNED_BYTE, d); else gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, gl.RGBA, gl.UNSIGNED_BYTE, d); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR); }
       else { gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8UI, TS, TS, 0, gl.RED_INTEGER, gl.UNSIGNED_BYTE, d); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST); }
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
       const mesh = this.tileMesh(r, l, tx, ty), vao = gl.createVertexArray(), vbo = gl.createBuffer(); gl.bindVertexArray(vao); gl.bindBuffer(gl.ARRAY_BUFFER, vbo); gl.bufferData(gl.ARRAY_BUFFER, mesh, gl.STATIC_DRAW);

@@ -1,10 +1,7 @@
 // Kho hải đồ: bản ghi (header, georef, đa giác phủ, bảng màu), ô ảnh nén và lưới lớp độ sâu trong IndexedDB `mp_charts`.
 // Ô ảnh không phụ thuộc georef → đổi datum / dời tay chỉ cần tính lại hệ số, không phải chia ô lại.
 import { parseBsb } from './bsb.js';
-import { fitGeoref, makeXf } from './georef.js';
-import { normalizeDatum, toWGS84, DATUMS } from '../geo/datum.js';
-import { llToMerc, mercToLL, mercScale } from '../geo/proj.js';
-import { bbox, normalize } from '../geo/poly.js';
+import { georefRecord } from './record.js';
 import WORKER_SRC from '../_tilerworker.js';
 
 const DBN = 'mp_charts', TS = 256;
@@ -14,35 +11,16 @@ function db() {
   return dbp;
 }
 const tx = async (store, mode, fn) => { const d = await db(); return new Promise((res, rej) => { const t = d.transaction(store, mode), s = t.objectStore(store); let out; const r = fn(s); if (r) r.onsuccess = () => { out = r.result; }; t.oncomplete = () => res(out); t.onerror = () => rej(t.error); t.onabort = () => rej(t.error); }); };
-const range = (id) => IDBKeyRange.bound(id + '/', id + '/￿');
+const range = (id) => IDBKeyRange.bound(id + '/', id + '/\uffff');
 async function unpack(z, d) {
   if (!z) return d;
   const s = new Blob([d]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
   return new Uint8Array(await new Response(s).arrayBuffer());
 }
-const STORE_KEYS = ['id', 'kind', 'fmt', 'name', 'nu', 'file', 'size', 'scale', 'W', 'H', 'datumSrc', 'datumUser', 'dtm', 'proj', 'sd', 'ed', 'refs', 'plyRaw', 'palettes', 'classDepth', 'offsetM', 'levels', 'ready', 'error', 'added', 'pdfRefs'];
+// khóa được lưu của bản ghi tờ (phần georef tính lại khi mở)
+const STORE_KEYS = ['id', 'kind', 'fmt', 'name', 'nu', 'file', 'size', 'scale', 'W', 'H', 'datumSrc', 'datumUser', 'dtm', 'proj', 'sd', 'ed', 'refs', 'plyRaw', 'palettes', 'classDepth', 'offsetM', 'levels', 'ready', 'error', 'added', 'plyPx', 'dpi', 'page'];
 
-// tính phần phụ thuộc georef: datum, hệ số, đa giác phủ, hộp bao, tâm
-export function georefRecord(r) {
-  const did = r.datumUser || normalizeDatum(r.datumSrc);
-  r.datum = did || 'WGS84'; r.datumKnown = !!did;
-  r.datumName = did ? DATUMS[did].name : (r.datumSrc ? 'không rõ (' + r.datumSrc + ')' : 'không ghi') + ', coi như WGS-84';
-  const conv = (lat, lon) => did && did !== 'WGS84' ? toWGS84(lat, lon, did).slice(0, 2) : (!did && r.dtm ? [lat + r.dtm[0] / 3600, lon + r.dtm[1] / 3600] : [lat, lon]);
-  const refs = (r.refs || []).map((q) => { const [lat, lon] = conv(q.lat, q.lon); return { x: q.x, y: q.y, lat, lon }; });
-  r.coef = fitGeoref(refs, r.W, r.H);
-  if (!r.coef) { r.error = r.error || 'Không đủ điểm tọa độ (REF)'; r.ready = false; return r; }
-  const c0 = makeXf(r.coef).pxToLL(r.W / 2, r.H / 2), k = mercScale(c0[0]), off = r.offsetM || [0, 0];
-  r.offM = [off[0] * k, off[1] * k];
-  r.xf = makeXf(r.coef, r.offM);
-  const plyLL = r.plyRaw && r.plyRaw.length >= 3 ? r.plyRaw.map(([a, b]) => conv(a, b)).map(([a, b]) => { const m = llToMerc(a, b); return mercToLL(m[0] + r.offM[0], m[1] + r.offM[1]); })
-    : [[0, 0], [r.W, 0], [r.W, r.H], [0, r.H]].map(([x, y]) => r.xf.pxToLL(x, y));
-  r.plyLL = plyLL; r.plyMerc = normalize(plyLL.map(([a, b]) => llToMerc(a, b)));
-  r.bboxMerc = bbox(r.plyMerc); r.centerMerc = r.xf.pxToMerc(r.W / 2, r.H / 2); r.mppMerc = r.coef.mpp;
-  const ll = r.plyLL.map((p) => p); r.bboxLL = [Math.min(...ll.map((p) => p[0])), Math.max(...ll.map((p) => p[0])), Math.min(...ll.map((p) => p[1])), Math.max(...ll.map((p) => p[1]))];
-  r.rmsM = r.coef.rms; r.maxM = r.coef.max; r.pxM = r.coef.mpp / k;
-  r.ver = (r.ver || 0) + 1;
-  return r;
-}
+export { georefRecord };
 const plain = (r) => { const o = {}; for (const k of STORE_KEYS) if (r[k] !== undefined) o[k] = r[k]; return o; };
 
 class Catalog {
@@ -95,7 +73,7 @@ class Catalog {
   async getTile(id, l, x, y) {
     const k = id + '/' + l + '/' + x + '/' + y, c = this.cache.get(k); if (c) { this.cache.delete(k); this.cache.set(k, c); return c; }
     const v = await tx('tiles', 'readonly', (s) => s.get(k)); if (!v) return null;
-    const d = await unpack(v.z, v.d); this.cache.set(k, d); if (this.cache.size > 300) this.cache.delete(this.cache.keys().next().value);
+    const d = v.z === 2 ? await createImageBitmap(v.d) : await unpack(v.z, v.d); this.cache.set(k, d); if (this.cache.size > 300) { const o = this.cache.keys().next().value, b = this.cache.get(o); if (b && b.close) b.close(); this.cache.delete(o); }
     return d;
   }
   async getGrid(id) { return tx('grids', 'readonly', (s) => s.get(id)); }

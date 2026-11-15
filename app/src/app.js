@@ -65,7 +65,7 @@ export function newSim() {
     log: [], rec: [], info: {}, e: envAt(A.env, daySec0(), 0), aground: false, bank: [1e4, 1e4], ukc: 99, h: 99, sq: 0, hC: 0,
     lightMode: 'auto', fog: false, started: new Date().toISOString(), track: [], frame: { lat0: CS.frame.lat0, lon0: CS.frame.lon0 }
   };
-  { const s = A.sim; s.hC = A.W.depthAt(S.x, S.y); s.h = s.hC + s.e.tide; s.ukc = s.h - M.d; }
+  refreshDepth();
   logOrder('Bắt đầu bài tập', 'note');
   if (A.hooks.simReset) A.hooks.simReset();
   return A.sim;
@@ -83,6 +83,8 @@ CS.originSubs.add((map) => {
 });
 // dời gốc khi tàu đi xa hơn 20 km (giữ sai số tỷ lệ của mét thế giới dưới ~0,15%)
 export function checkOrigin() { const s = A.sim; if (s && Math.hypot(s.S.x, s.S.y) > 20000) { setOrigin(...toLL(s.S.x, s.S.y)); return true; } return false; }
+// tính lại độ sâu tại tàu (khi lưới độ sâu vừa nạp xong mà bài chưa chạy)
+export function refreshDepth() { const s = A.sim; if (!s) return; s.hC = A.W.depthAt(s.S.x, s.S.y); s.h = s.hC + s.e.tide; s.ukc = s.h - A.M.d - (s.sq || 0); }
 export function logOrder(text, kind) { const s = A.sim; s.log.unshift({ t: s.t, text, kind: kind || 'helm' }); if (s.log.length > 400) s.log.pop(); s.lastOrd = { t: s.t, text }; }
 
 export function engName(n, i) { return n === 1 ? 'Máy' : n === 2 ? ['Máy trái', 'Máy phải'][i] : n === 3 ? ['Máy trái', 'Máy giữa', 'Máy phải'][i] : ['Máy trái ngoài', 'Máy trái trong', 'Máy phải trong', 'Máy phải ngoài'][i]; }

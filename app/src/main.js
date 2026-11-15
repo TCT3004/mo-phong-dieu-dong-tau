@@ -1,9 +1,9 @@
-import { A, $, $$, clock, newSim, substep, DT, sunEl, saveSet, rebuildModel, loadObjs, checkOrigin } from './app.js';
+import { A, $, $$, clock, newSim, substep, DT, sunEl, saveSet, rebuildModel, loadObjs, checkOrigin, refreshDepth } from './app.js';
 import { CS, ensureAround } from './chartsys.js';
 import { View3D } from './view3d.js';
 import { Sound } from './audio.js';
 import { windageState } from './windage.js';
-import { initShip, initChart, initEnv, initSet, drawChart, initCharts, chartView } from './ui_setup.js';
+import { initShip, initChart, initEnv, initSet, drawChart, initCharts, chartView, pdfChartAdded, pdfTest } from './ui_setup.js';
 import { initRun, rebuildRun, uiTick, runState, lineSegs3D, paneCvs, consoleFrame, fillRoutes, runKey } from './ui_run.js';
 import { initReplay, replayFrame, saveSession, restoreSessions, R } from './ui_replay.js';
 
@@ -60,8 +60,9 @@ Object.assign(A.hooks, {
   resetToStart(save) { if (save) saveSession(); newSim(); if (A.view) A.view.buildShip(A.M); rebuildRun(); hdr(); A.hooks.chartsChanged(); },
   shipChanged() { rebuildModel(); newSim(); if (A.view) A.view.buildShip(A.M); rebuildRun(); hdr(); },
   // kho hải đồ đổi (thêm / xóa tờ): nạp lưới độ sâu quanh tàu rồi dựng lại địa hình, cầu bến
-  chartsChanged() { const S = A.sim.S; ensureAround(S.x, S.y, 30000).then(() => { A.W.rebuild(); terrain(); if (A.view) A.view.buildObjects(A.W); hdr(); }); },
+  chartsChanged() { const S = A.sim.S; ensureAround(S.x, S.y, 30000).then(() => { A.W.rebuild(); if (!A.sim.running) refreshDepth(); terrain(); if (A.view) A.view.buildObjects(A.W); hdr(); }); },
   depthChanged() { terrain(); },
+  pdfChartAdded,
   objsChanged() { if (A.view) A.view.buildObjects(A.W); fillRoutes(); },
   envChanged() { if (A.tab === 'env') initEnv(); },
   qualityChanged() { mkView(); },
@@ -81,7 +82,7 @@ let last = performance.now(), acc = 0, lastUi = 0, lastEns = -1e9, ensPos = null
 function keepWorld(ts) {
   const S = A.sim.S;
   if (ts - lastEns > 2000 || !ensPos || Math.hypot(S.x - ensPos[0], S.y - ensPos[1]) > 5000) {
-    lastEns = ts; ensPos = [S.x, S.y]; ensureAround(S.x, S.y, 50000).then(() => { if (CS.provider.gen !== terrGen && A.W.objs.berths.length) { A.W.rebuild(); if (A.view) A.view.buildObjects(A.W); } });
+    lastEns = ts; ensPos = [S.x, S.y]; ensureAround(S.x, S.y, 50000).then(() => { if (!A.sim.running) refreshDepth(); if (CS.provider.gen !== terrGen && A.W.objs.berths.length) { A.W.rebuild(); if (A.view) A.view.buildObjects(A.W); } });
     if (A.tab === 'run') { const keep = CS.frame.worldToMerc(S.x - 90000, S.y - 90000).concat(CS.frame.worldToMerc(S.x + 90000, S.y + 90000)); CS.provider.drop(keep); }
   }
   const v = A.view; if (!v) return;
@@ -107,4 +108,4 @@ function frame(ts) {
   } else if (A.tab === 'rep') replayFrame(dtR);
 }
 requestAnimationFrame(frame);
-window.__A = A; window.__R = R; window.__W = windageState; window.__chartView = chartView; window.__CS = CS;
+window.__A = A; window.__R = R; window.__W = windageState; window.__chartView = chartView; window.__CS = CS; window.__pdf = pdfTest;
