@@ -80,7 +80,8 @@ Default section order:
 
 - Mô phỏng điều động tàu 3D cho **người điều động** (không phải người lái), offline, Windows
 - JavaScript ES modules + three.js + pdf.js, bundle bằng esbuild thành **1 file HTML**; Electron bọc thành `.exe` portable
-- Giai đoạn 1 xong (v0.1.0). Giai đoạn 2 xong các mốc M1–M6 (v0.2.0): hải đồ liền mạch kiểu OpenCPN (quilting), mét thế giới + gốc trôi, kho hải đồ KAP / PDF, độ sâu ghép nhiều tờ. Còn: đọc số độ sâu trên PDF vector, dữ liệu cảng thật
+- Giai đoạn 1 xong (v0.1.0). Giai đoạn 2 xong (v0.2.0): hải đồ liền mạch kiểu OpenCPN (quilting), mét thế giới + gốc trôi, kho hải đồ KAP / PDF, độ sâu ghép nhiều tờ
+- Lộ trình: giai đoạn 3 (0.3.x) dựng mô hình tàu từ sơ đồ (dò viền + chấm tay, chọn chi tiết nhiều nấc, đo kích thước); giai đoạn 4 (0.4.x) đọc số độ sâu trên hải đồ PDF vector, dữ liệu cảng thật; giai đoạn 5 (0.5.x) các tàu khác (tàu lai, tàu trên luồng, tránh va)
 
 ## Project-wide Rules
 
@@ -90,6 +91,8 @@ Default section order:
 - Bản build phải chạy được từ `file://` (mở trực tiếp file HTML) và trong Electron: không dùng module worker; worker tạo từ Blob kiểu classic
 - Không thêm framework UI; thư viện ngoài chỉ thêm khi nhỏ và bundle được vào file HTML
 - Làm xong phần nào commit và push lên `main` (người khác theo dõi và sửa trên GitHub)
+- Phiên bản: giai đoạn N phát hành `0.N.0`; mỗi đợt yêu cầu thêm trong giai đoạn tăng số cuối (`0.N.1`, `0.N.2`…); ghi ở `app/package.json` và `electron/package.json` (`version`, `artifactName`)
+- Kho GitHub công khai: không đưa sơ đồ hay mô hình tàu quân sự cụ thể lên; mẫu tàu có sẵn trong app phải là mẫu chung chung tự dựng
 
 ## Phase 2 Decisions (đã duyệt)
 

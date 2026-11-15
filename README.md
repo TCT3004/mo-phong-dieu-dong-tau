@@ -57,5 +57,6 @@ File `.exe` chưa có chữ ký số: lần đầu mở, nếu Windows chặn th
 
 ## Giai đoạn tiếp theo
 
-Còn lại của giai đoạn 2: tự đọc số độ sâu, độ cao trên hải đồ PDF vector để mô hình đáy chi tiết hơn vùng màu; dữ liệu cảng thật.
-Giai đoạn 3: tàu lai, tàu khác trên luồng, tình huống tránh va.
+- Giai đoạn 3 (0.3.x): dựng mô hình 3D tàu từ sơ đồ / ảnh (1–3 hình chiếu): app dò viền, người dùng chấm sửa, chọn chi tiết theo nhiều nấc (thân, thượng tầng, buồng lái, cột, đèn…), ghi kích thước; thiếu hình chiếu thì app tự suy.
+- Giai đoạn 4 (0.4.x): tự đọc số độ sâu, độ cao trên hải đồ PDF vector; dữ liệu cảng thật.
+- Giai đoạn 5 (0.5.x): các tàu khác — tàu lai, tàu trên luồng, tình huống tránh va.
