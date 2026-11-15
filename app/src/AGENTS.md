@@ -11,24 +11,27 @@
 | `main.js` | khởi động, chuyển tab, vòng lặp khung hình, phím tắt, `A.hooks` |
 | `app.js` | trạng thái chung `A`, lưu trữ (`LS`, `DB`), mô phỏng (`newSim`, `substep`), khẩu lệnh (`Orders`) |
 | `physics.js` | mô hình tàu kiểu MMG 3 bậc tự do, nấc máy, squat |
-| `world.js` | môi trường (gió, dòng, triều), tra độ sâu / lớp đáy, cầu bến, cọc bích, neo, dây, lực ngoài |
-| `view3d.js` | cảnh three.js: nước (sóng Gerstner + texture), địa hình, tàu, đèn, camera buồng lái 3 cửa sổ |
+| `chartsys.js` | trung tâm hệ hải đồ `CS`: `WorldFrame` (gốc trôi, `setOrigin`), kho, renderer WebGL2 dùng chung, nguồn độ sâu (`sampleWorld`, `ensureAround`) |
+| `places.js` | kho đối tượng người dùng theo lat/lon (`mp_places`), đổi qua lại mét thế giới, chuyển dữ liệu v0.1 |
+| `world.js` | môi trường (gió, dòng, triều), tra độ sâu / lớp đáy qua `CS`, cầu bến, cọc bích, neo, dây, lực ngoài |
+| `view3d.js` | cảnh three.js: nước (sóng Gerstner + texture), địa hình dựng quanh tàu từ các tờ (lưới mịn gần, thưa xa), tàu, đèn, camera buồng lái 3 cửa sổ |
 | `radar.js` | radar quét tia, cự ly tới 24 Hl, EBL/VRM |
-| `kap.js` | đọc header và giải mã ảnh BSB/KAP, georef tuyến tính (REF quy về WGS-84 theo `GD`), phân lớp độ sâu theo màu |
-| `chartview.js` | vẽ hải đồ bằng Canvas2D (CPU) — sẽ thay bằng renderer WebGL2 ở giai đoạn 2 |
-| `nav.js` | định dạng khoảng cách, đọc tọa độ, tuyến đi (`legs`, `trackRoute`) |
+| `kap.js` | georef tuyến tính của v0.1 — chỉ dùng chuyển dữ liệu cũ; `fmtLL` |
+| `nav.js` | định dạng khoảng cách, đọc tọa độ, tuyến đi (`legsLL` loxodrom theo lat/lon, `legs`, `trackRoute`) |
 | `windage.js` | tính diện tích hứng gió từ sơ đồ tàu PDF / ảnh |
 | `audio.js` | âm thanh tổng hợp: máy, còi, chuông, báo động |
-| `ui_setup.js` | tab 1 Thông số tàu, tab 2 Cảng & luồng, tab 4 Môi trường, Cài đặt |
+| `ui_setup.js` | tab 1 Thông số tàu, tab 2 Cảng & luồng (kho hải đồ, khung nhìn liền mạch, datum / dời tay từng tờ), tab 4 Môi trường, Cài đặt |
 | `ui_run.js` | tab 3 Điều động (buồng lái, hải đồ nhỏ, radar, tay chuông, vô lăng, bảng tín hiệu) |
 | `ui_replay.js` | tab 5 Xem lại, ghi bài tập, xuất video |
 | `template.html` | khung HTML + CSS |
 
 ## Local Contracts
 
-- Tọa độ mô phỏng hiện tại: mét cục bộ của **tờ hải đồ đang mở** (gốc ở tâm tờ, x Đông, y Bắc); `psi` radian tính từ Bắc theo chiều kim đồng hồ; cảnh 3D: x = Đông, z = −Bắc. Giai đoạn 2 chuyển sang "mét thế giới" (xem `AGENTS.md` gốc, D1)
-- Lưu trữ: localStorage `mp_set`, `mp_ship`, `mp_env`, `mp_objs:<tên tờ>` (cầu bến, đèn, tuyến, vị trí xuất phát — mét cục bộ của tờ); IndexedDB `mophongtau`: `charts` (file gốc), `sessions` (bài đã ghi)
-- Tọa độ lat/lon hiển thị, nhập, lưu: WGS-84 (`geo/datum.js` chuyển từ datum của hải đồ)
+- Tọa độ mô phỏng: "mét thế giới" của `CS.frame` (Mercator elipxoit ÷ hệ số phóng tại gốc; x Đông, y Bắc). Gốc đặt tại vị trí xuất phát khi bắt đầu bài, dời khi tàu xa gốc > 20 km (`checkOrigin`); nơi nào giữ tọa độ mét thế giới phải đăng ký `CS.originSubs` để đổi theo. `psi` radian tính từ Bắc theo chiều kim đồng hồ; cảnh 3D: x = Đông, z = −Bắc
+- Lưu trữ: localStorage `mp_set`, `mp_ship`, `mp_env`, `mp_places` (đối tượng + vị trí xuất phát, lat/lon WGS-84); IndexedDB `mp_charts` (kho hải đồ, xem `charts/AGENTS.md`), `mophongtau` → `sessions` (bài đã ghi, kèm gốc `frame` lúc ghi). `mp_objs:<tên tờ>` và `mophongtau/charts` của v0.1 được chuyển tự động lúc khởi động rồi bỏ
+- Tọa độ lat/lon hiển thị, nhập, lưu: WGS-84
+- Độ sâu theo màu (`classDepth`) thuộc từng tờ hải đồ; ngoài mọi tờ là biển trống sâu `noChartDepth` (30 m)
+- Khung nhìn hải đồ là `render/chartcanvas.js` (có `redraw` thì vòng lặp chính tự vẽ lại khi `dirty`)
 - `physics.js` không phụ thuộc hải đồ; độ sâu đi qua `world.depthAt` / `classAt`
 - Chuỗi giao diện tiếng Việt; khoảng cách định dạng bằng `nav.fmtDist`
 
@@ -44,5 +47,6 @@
 ## Child DOX Index
 
 - `geo/AGENTS.md` — nền tọa độ: Mercator elipxoit, WorldFrame, datum VN-2000, geodesic, đa giác
-- `charts/AGENTS.md` — đọc BSB đầy đủ, georef đa thức
-- `render/AGENTS.md` — chọn tờ (quilting)
+- `charts/AGENTS.md` — đọc BSB đầy đủ, georef đa thức, kho hải đồ, worker chia ô ảnh
+- `render/AGENTS.md` — chọn tờ (quilting), renderer WebGL2, khung nhìn hải đồ
+- `depth/AGENTS.md` — nguồn độ sâu ghép nhiều tờ

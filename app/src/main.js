@@ -1,8 +1,9 @@
-import { A, $, $$, clock, newSim, substep, DT, sunEl, saveSet, rebuildModel } from './app.js';
+import { A, $, $$, clock, newSim, substep, DT, sunEl, saveSet, rebuildModel, loadObjs, checkOrigin } from './app.js';
+import { CS, ensureAround } from './chartsys.js';
 import { View3D } from './view3d.js';
 import { Sound } from './audio.js';
 import { windageState } from './windage.js';
-import { initShip, initChart, initEnv, initSet, drawChart, restoreCharts, chartView } from './ui_setup.js';
+import { initShip, initChart, initEnv, initSet, drawChart, initCharts, chartView } from './ui_setup.js';
 import { initRun, rebuildRun, uiTick, runState, lineSegs3D, paneCvs, consoleFrame, fillRoutes, runKey } from './ui_run.js';
 import { initReplay, replayFrame, saveSession, restoreSessions, R } from './ui_replay.js';
 
@@ -16,7 +17,7 @@ A.snd = new Sound();
 function mkView() {
   if (A.gl) A.gl.remove();
   A.gl = document.createElement('canvas'); A.gl.className = 'gl';
-  try { A.view = new View3D(A.gl, A.set.quality); A.view.buildShip(A.M); A.view.buildTerrain(A.W); A.view.buildObjects(A.W); }
+  try { A.view = new View3D(A.gl, A.set.quality); A.view.buildShip(A.M); terrain(); A.view.buildObjects(A.W); }
   catch (e) { A.view = null; console.error(e); }
   mountGL();
 }
@@ -29,8 +30,11 @@ function go(tab) {
   if (tab !== 'run' && A.sim) A.sim.running = false;
   mountGL(); hdr();
 }
+// địa hình 3D quanh tàu
+let terrGen = 0;
+function terrain() { if (!A.view || !A.sim) return; const S = A.sim.S; terrGen = CS.provider.gen; A.view.buildTerrain(A.W, S.x, S.y); }
 function hdr() {
-  const s = A.sim; $('#hdrSub').textContent = (A.p.name || 'Tàu') + ' · ' + (A.W.chart ? A.W.chart.name : 'Biển trống') + ' · ' + (A.env.name || '');
+  const s = A.sim; $('#hdrSub').textContent = (A.p.name || 'Tàu') + ' · ' + A.W.chartName(s.S.x, s.S.y) + ' · ' + (A.env.name || '');
   $('#runBtn').textContent = s.running ? '⏸' : '▶'; $('#runBtn').classList.toggle('pri', !s.running && A.tab === 'run');
   $('#spdSeg').innerHTML = [1, 2, 4, 8].map((k) => `<button data-v="${k}" class="${s.speed === k ? 'on' : ''}">×${k}</button>`).join('');
 }
@@ -53,27 +57,45 @@ Object.assign(A.hooks, {
   go, mountGL, scaleChanged: applyScale,
   simReset() { if (A.snd) A.snd.alarm(false); },
   shipEdited() { initShip(); A.hooks.shipChanged(); },
-  resetToStart(save) { if (save) saveSession(); newSim(); if (A.view) A.view.buildShip(A.M); rebuildRun(); hdr(); },
+  resetToStart(save) { if (save) saveSession(); newSim(); if (A.view) A.view.buildShip(A.M); rebuildRun(); hdr(); A.hooks.chartsChanged(); },
   shipChanged() { rebuildModel(); newSim(); if (A.view) A.view.buildShip(A.M); rebuildRun(); hdr(); },
-  chartChanged() { if (A.view) { A.view.buildTerrain(A.W); A.view.buildObjects(A.W); } newSim(); rebuildRun(); hdr(); },
+  // kho hải đồ đổi (thêm / xóa tờ): nạp lưới độ sâu quanh tàu rồi dựng lại địa hình, cầu bến
+  chartsChanged() { const S = A.sim.S; ensureAround(S.x, S.y, 30000).then(() => { A.W.rebuild(); terrain(); if (A.view) A.view.buildObjects(A.W); hdr(); }); },
+  depthChanged() { terrain(); },
   objsChanged() { if (A.view) A.view.buildObjects(A.W); fillRoutes(); },
   envChanged() { if (A.tab === 'env') initEnv(); },
   qualityChanged() { mkView(); },
   volChanged() { A.snd.setVol({ master: A.set.volMaster / 100, engine: A.set.volEngine / 100, bell: A.set.volBell / 100 }); A.snd.bellType = A.set.bellType || 'electric'; },
-  startScenario() { saveSession(); newSim(); if (A.view) A.view.buildShip(A.M); rebuildRun(); go('run'); A.sim.running = true; A.snd.init(); hdr(); }
+  startScenario() { saveSession(); newSim(); if (A.view) A.view.buildShip(A.M); rebuildRun(); go('run'); A.sim.running = true; A.snd.init(); hdr(); A.hooks.chartsChanged(); }
 });
 
-applyScale(); rebuildModel(); newSim();
+applyScale(); rebuildModel(); loadObjs(); newSim();
 initShip(); initChart(); initRun(); initEnv(); initSet(); mkView(); A.hooks.volChanged();
 go('run');
-restoreSessions(); restoreCharts();
+restoreSessions(); initCharts();
+// gốc tọa độ dời (bắt đầu bài mới / tàu đi xa): dựng lại cảnh 3D theo gốc mới
+CS.originSubs.add(() => { if (A.view) { A.view.buildObjects(A.W); A.view.terrC = null; } });
 
-let last = performance.now(), acc = 0, lastUi = 0;
+let last = performance.now(), acc = 0, lastUi = 0, lastEns = -1e9, ensPos = null;
+// giữ lưới độ sâu quanh tàu (±50 km, đủ cho radar 24 Hl) và địa hình 3D theo tàu
+function keepWorld(ts) {
+  const S = A.sim.S;
+  if (ts - lastEns > 2000 || !ensPos || Math.hypot(S.x - ensPos[0], S.y - ensPos[1]) > 5000) {
+    lastEns = ts; ensPos = [S.x, S.y]; ensureAround(S.x, S.y, 50000).then(() => { if (CS.provider.gen !== terrGen && A.W.objs.berths.length) { A.W.rebuild(); if (A.view) A.view.buildObjects(A.W); } });
+    if (A.tab === 'run') { const keep = CS.frame.worldToMerc(S.x - 90000, S.y - 90000).concat(CS.frame.worldToMerc(S.x + 90000, S.y + 90000)); CS.provider.drop(keep); }
+  }
+  const v = A.view; if (!v) return;
+  const far = !v.terrC || Math.hypot(S.x - v.terrC[0], S.y - v.terrC[1]) > v.terrD * 0.5;
+  let fresh = false; if (CS.provider.gen !== terrGen && v.terrC) { const a = CS.frame.worldToMerc(v.terrC[0] - 26000, v.terrC[1] - 26000), b = CS.frame.worldToMerc(v.terrC[0] + 26000, v.terrC[1] + 26000); fresh = CS.provider.loadedSince(terrGen, [a[0], a[1], b[0], b[1]]); if (!fresh) terrGen = CS.provider.gen; }
+  if (far || fresh) terrain();
+}
 function frame(ts) {
   requestAnimationFrame(frame);
   const dtR = Math.min(0.1, (ts - last) / 1000); last = ts; const s = A.sim;
+  for (const v of CS.views) if (v.dirty && v.redraw && v.cv.offsetParent) v.redraw();
+  if (A.tab === 'run' || A.tab === 'chart') keepWorld(ts);
   if (A.tab === 'run') {
-    if (s.running) { acc += dtR * s.speed; let n = 0; while (acc >= DT && n < 90) { substep(); acc -= DT; n++; } if (n >= 90) acc = 0; }
+    if (s.running) { acc += dtR * s.speed; let n = 0; while (acc >= DT && n < 90) { substep(); acc -= DT; n++; } if (n >= 90) acc = 0; if (checkOrigin()) hdr(); }
     if (A.view) {
       const ds = s.day0 + s.t, e = s.e;
       A.view.setSegs(lineSegs3D());
@@ -85,4 +107,4 @@ function frame(ts) {
   } else if (A.tab === 'rep') replayFrame(dtR);
 }
 requestAnimationFrame(frame);
-window.__A = A; window.__R = R; window.__W = windageState; window.__chartView = chartView;
+window.__A = A; window.__R = R; window.__W = windageState; window.__chartView = chartView; window.__CS = CS;

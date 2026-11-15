@@ -1,6 +1,8 @@
 // Trạng thái chung + vòng mô phỏng.
 import { defaultShip, buildModel, newState, stepShip, squat, displayRpm, stepLabel, KN, D2R } from './physics.js';
 import { World, defaultEnv, envAt, makeAnchors, makeLines, externalForces, wrap180, body2w } from './world.js';
+import { CS, setOrigin, toLL } from './chartsys.js';
+import { loadPlaces, placesToWorld, savePlaces } from './places.js';
 
 export const $ = (s, r) => (r || document).querySelector(s);
 export const $$ = (s, r) => Array.from((r || document).querySelectorAll(s));
@@ -12,7 +14,7 @@ export const LS = {
   get(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } },
   set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* bỏ qua */ } }
 };
-// IndexedDB đơn giản (lưu file hải đồ & bài đã ghi)
+// IndexedDB đơn giản (bài đã ghi; kho `charts` cũ của v0.1 chỉ còn để chuyển sang kho hải đồ mới)
 export const DB = {
   open() { return new Promise((res) => { try { const r = indexedDB.open('mophongtau', 1); r.onupgradeneeded = () => { r.result.createObjectStore('charts'); r.result.createObjectStore('sessions'); }; r.onsuccess = () => res(r.result); r.onerror = () => res(null); } catch (e) { res(null); } }); },
   async tx(store, mode, fn) { const db = await this.open(); if (!db) return null; return new Promise((res) => { try { const t = db.transaction(store, mode), q = fn(t.objectStore(store)); t.oncomplete = () => res(q && q.result); t.onerror = () => res(null); } catch (e) { res(null); } }); },
@@ -29,18 +31,14 @@ function mergeShip(saved) {
 export const A = {
   p: mergeShip(LS.get('mp_ship')), env: Object.assign(defaultEnv(), LS.get('mp_env') || {}),
   set: Object.assign({ quality: 'high', volMaster: 80, volEngine: 60, volBell: 90, headUp: false, uiScale: 'auto', waveLen: 4, rollSpeed: 4 }, LS.get('mp_set') || {}),
-  W: new World(), M: null, sim: null, tab: 'run', charts: [], sessions: [], hooks: {}
+  W: new World(), M: null, sim: null, tab: 'run', sessions: [], hooks: {}
 };
 export function saveShip() { LS.set('mp_ship', A.p); }
 export function saveEnv() { LS.set('mp_env', A.env); }
 export function saveSet() { LS.set('mp_set', A.set); }
-export function saveObjs() { if (A.W.chart) LS.set('mp_objs:' + A.W.chart.name, { objs: A.W.objs, classDepth: A.W.classDepth, start: A.W.start || null }); }
-export function loadObjs() {
-  const W = A.W, s = W.chart ? LS.get('mp_objs:' + W.chart.name) : null;
-  W.objs = s && s.objs ? Object.assign({ lights: [], berths: [], sounds: [] }, s.objs) : { lights: [], berths: [], sounds: [] }; W.objs.sounds = []; if (!Array.isArray(W.objs.routes)) W.objs.routes = []; if (W.objs.routeSel === undefined) W.objs.routeSel = W.objs.routes.length ? 0 : -1;
-  if (s && s.classDepth) W.classDepth = s.classDepth; else W.classDepth = [-3, -1, 1.5, 3.5, 10];
-  W.start = s && s.start ? s.start : null; W.rebuild();
-}
+// đối tượng trên hải đồ: lưu theo lat/lon (places.js), trong bộ nhớ theo mét thế giới
+export function saveObjs() { savePlaces(A.W); }
+export function loadObjs() { placesToWorld(loadPlaces(), A.W); }
 export function rebuildModel() { A.M = buildModel(A.p); return A.M; }
 
 export const LIGHTS = [['mast1', 'Đèn cột trước', '#fff'], ['mast2', 'Đèn cột sau', '#fff'], ['sideP', 'Đèn mạn trái', '#ff4d4d'], ['sideS', 'Đèn mạn phải', '#3dff8a'], ['stern', 'Đèn lái', '#fff'], ['anchF', 'Đèn neo trước', '#fff'], ['anchA', 'Đèn neo sau', '#fff'], ['deck', 'Đèn chiếu boong', '#ffe08a'], ['nuc', '2 đèn đỏ (mất chủ động)', '#ff4d4d']];
@@ -53,6 +51,8 @@ export function startPos() {
 export function daySec0() { const m = /^(\d{1,2}):(\d{2})/.exec(A.env.startTime || ''); return m ? (+m[1]) * 3600 + (+m[2]) * 60 : 6.5 * 3600; }
 
 export function newSim() {
+  // gốc tọa độ đặt tại vị trí xuất phát (mét thế giới chính xác nhất quanh gốc)
+  { const p = startPos(); if (Math.hypot(p.x, p.y) > 1) setOrigin(...toLL(p.x, p.y)); }
   const M = rebuildModel(), sp = startPos(), S = newState(M);
   S.x = sp.x; S.y = sp.y; S.psi = num(sp.hdg, 0) * D2R; S.u = num(A.env.startKn, 0) * KN;
   const st = M.steps[A.env.startStep] ? A.env.startStep : 'st';
@@ -63,13 +63,26 @@ export function newSim() {
     helm: { mode: 'steady', ord: 0, target: Math.round(num(sp.hdg, 0)) % 360, steer: 'hand', my: 'Giữ hướng ' + pad3(num(sp.hdg, 0)) + '°', rep: 'Giữ hướng ' + pad3(num(sp.hdg, 0)) + ', rõ!' },
     anchors: makeAnchors(M), lines: makeLines(M), selLine: 'hl', lights, alarm: false, bellUntil: -1,
     log: [], rec: [], info: {}, e: envAt(A.env, daySec0(), 0), aground: false, bank: [1e4, 1e4], ukc: 99, h: 99, sq: 0, hC: 0,
-    lightMode: 'auto', fog: false, started: new Date().toISOString(), track: []
+    lightMode: 'auto', fog: false, started: new Date().toISOString(), track: [], frame: { lat0: CS.frame.lat0, lon0: CS.frame.lon0 }
   };
   { const s = A.sim; s.hC = A.W.depthAt(S.x, S.y); s.h = s.hC + s.e.tide; s.ukc = s.h - M.d; }
   logOrder('Bắt đầu bài tập', 'note');
   if (A.hooks.simReset) A.hooks.simReset();
   return A.sim;
 }
+// gốc trôi: đổi tọa độ trạng thái mô phỏng (tàu, vết, neo, dây, điểm đo, bản ghi) sang gốc mới
+CS.originSubs.add((map) => {
+  A.W.mapCoords(map);
+  const s = A.sim; if (!s) return; const S = s.S;
+  [S.x, S.y] = map(S.x, S.y); s.track = s.track.map((p) => map(p[0], p[1]));
+  for (const r of s.rec) [r.x, r.y] = map(r.x, r.y);
+  for (const a of s.anchors) if (a.ax !== null) [a.ax, a.ay] = map(a.ax, a.ay);
+  for (const l of s.lines) if (l.st !== 'chua') [l.bx, l.by] = map(l.bx, l.by);
+  if (s.mark) [s.mark.x, s.mark.y] = map(s.mark.x, s.mark.y);
+  s.frame = { lat0: CS.frame.lat0, lon0: CS.frame.lon0 };
+});
+// dời gốc khi tàu đi xa hơn 20 km (giữ sai số tỷ lệ của mét thế giới dưới ~0,15%)
+export function checkOrigin() { const s = A.sim; if (s && Math.hypot(s.S.x, s.S.y) > 20000) { setOrigin(...toLL(s.S.x, s.S.y)); return true; } return false; }
 export function logOrder(text, kind) { const s = A.sim; s.log.unshift({ t: s.t, text, kind: kind || 'helm' }); if (s.log.length > 400) s.log.pop(); s.lastOrd = { t: s.t, text }; }
 
 export function engName(n, i) { return n === 1 ? 'Máy' : n === 2 ? ['Máy trái', 'Máy phải'][i] : n === 3 ? ['Máy trái', 'Máy giữa', 'Máy phải'][i] : ['Máy trái ngoài', 'Máy trái trong', 'Máy phải trong', 'Máy phải ngoài'][i]; }

@@ -1,7 +1,10 @@
 // Tab 5: xem lại & xuất video.
 import { A, $, $$, num, esc, pad3, clock, DB, sunEl } from './app.js';
 import { D2R } from './physics.js';
-import { ChartView } from './chartview.js';
+import { ChartCanvas } from './render/chartcanvas.js';
+import { CS, toWorld } from './chartsys.js';
+import { makeGeo, mToPx } from './kap.js';
+import { WorldFrame } from './geo/frame.js';
 import { drawOverlay } from './ui_setup.js';
 import { shipPoly } from './ui_run.js';
 
@@ -11,11 +14,26 @@ const seg = (id, opts, cur, cb) => { const el = $(id); el.innerHTML = opts.map((
 
 export function saveSession() {
   const s = A.sim; if (!s || s.rec.length < 20) return null;
-  const ses = { id: 'S' + Date.now(), name: A.env.name || 'Bài tập', date: new Date().toLocaleString('vi-VN'), chart: A.W.chart ? A.W.chart.name : '', rec: s.rec.slice(), log: s.log.slice().reverse(), day0: s.day0, ship: A.p.name, lights: Object.assign({}, s.lights), env: { waveDir: A.env.waveDir, waveT: A.env.waveT } };
+  const ses = { id: 'S' + Date.now(), name: A.env.name || 'Bài tập', date: new Date().toLocaleString('vi-VN'), chart: A.W.chartName(s.S.x, s.S.y), frame: s.frame || { lat0: CS.frame.lat0, lon0: CS.frame.lon0 }, rec: s.rec.slice(), log: s.log.slice().reverse(), day0: s.day0, ship: A.p.name, lights: Object.assign({}, s.lights), env: { waveDir: A.env.waveDir, waveT: A.env.waveT } };
   A.sessions.unshift(ses); DB.put('sessions', ses.id, ses); return ses;
 }
 export async function restoreSessions() { const keys = await DB.keys('sessions'); if (!keys) return; for (const k of keys.sort().reverse().slice(0, 30)) { const s = await DB.get('sessions', k); if (s && !A.sessions.find((q) => q.id === s.id)) A.sessions.push(s); } }
 const dur = () => (R.ses && R.ses.rec.length ? R.ses.rec[R.ses.rec.length - 1].t : 0);
+// bản ghi theo gốc tọa độ hiện tại: bài ghi lưu kèm gốc (lat0, lon0) của lúc ghi; đổi sang mét thế giới hiện tại khi xem lại
+const conv = new WeakMap();
+function legacyConv(s) {
+  const r = CS.catalog.records.find((q) => q.name === s.chart && q.xf); if (!r) return null;
+  const g = makeGeo({ refs: r.refs, W: r.W, H: r.H, datum: r.datumSrc });
+  return (x, y) => { const [px, py] = mToPx(g, x, y); return toWorld(...r.xf.pxToLL(px, py)); };
+}
+export function rowsOf(s) {
+  const key = CS.frame.lat0 + ',' + CS.frame.lon0, c = conv.get(s); if (c && c.key === key) return c.rows;
+  let map = null;
+  if (s.frame) { if (s.frame.lat0 !== CS.frame.lat0 || s.frame.lon0 !== CS.frame.lon0) { const f0 = new WorldFrame(s.frame.lat0, s.frame.lon0); map = (x, y) => toWorld(...f0.toLL(x, y)); } }
+  else map = legacyConv(s);
+  const rows = map ? s.rec.map((q) => { const [x, y] = map(q.x, q.y); return Object.assign({}, q, { x, y }); }) : s.rec;
+  conv.set(s, { key, rows }); return rows;
+}
 export function rowAt(t) { const r = R.ses.rec; return r[Math.max(0, Math.min(r.length - 1, Math.round(t) - 1))]; }
 
 export function initReplay() {
@@ -29,7 +47,7 @@ export function initReplay() {
   <div id="exBox" class="rowi" style="display:none"></div>
   <div class="grid g2"><div><div class="muted" style="font-weight:600">TỐC ĐỘ (hl/h)</div><canvas id="gSog" style="width:100%;height:80px;display:block"></canvas></div><div><div class="muted" style="font-weight:600">ĐỘ SÂU DƯỚI KY — UKC (m) · vạch vàng: 1 m</div><canvas id="gUkc" style="width:100%;height:80px;display:block"></canvas></div></div></div></section>
   <div class="col" style="flex:1 1 260px;max-width:320px"><section class="card"><h2 id="repAt">Tại thời điểm</h2><div class="grid g2" id="repVals"></div></section><section class="card"><h2>Khẩu lệnh — bấm để nhảy tới</h2><div id="repOrd" style="max-height:380px;overflow:auto"></div></section></div></div>`;
-  cv = new ChartView($('#repCv'));
+  cv = new ChartCanvas($('#repCv'));
   $('#sesList').onclick = (e) => { const b = e.target.closest('button'); if (!b) return; R.ses = A.sessions.find((s) => s.id === b.dataset.id); R.t = 0; R.playing = false; initReplay(); };
   $('#repSaveNow').onclick = () => { const s = saveSession(); if (s) { R.ses = s; R.t = 0; initReplay(); } else alert('Bài đang chạy còn quá ngắn (dưới 20 giây).'); };
   $('#repPlay').onclick = () => { if (!R.ses) return; if (R.t >= dur()) R.t = 0; R.playing = !R.playing; };
@@ -50,7 +68,7 @@ function drawStatic() {
   const s = R.ses; $('#repName').textContent = s.name + ' · ' + s.date; $('#repSl').max = dur(); $('#repDur').textContent = '/ ' + clock(dur());
   const KC = { helm: '#FFB547', engine: '#5CD6FF', anchor: '#C9A7FF', line: '#C9A7FF', alarm: '#FF6B6B' };
   $('#repOrd').innerHTML = s.log.map((l) => `<button data-t="${Math.max(0, Math.round(l.t))}" style="display:grid;grid-template-columns:62px 8px 1fr;gap:8px;align-items:center;width:100%;min-height:28px;padding:0 6px;border:0;background:transparent;text-align:left"><span class="mono muted">${clock(l.t).slice(3)}</span><span style="width:8px;height:8px;border-radius:2px;background:${KC[l.kind] || '#8FA3B0'}"></span><span>${esc(l.text)}</span></button>`).join('');
-  if (A.W.chart && s.chart && A.W.chart.name !== s.chart) $('#repName').textContent += ' — hải đồ đang mở khác với lúc ghi (' + s.chart + ')';
+  if (!s.frame && !legacyConv(s)) $('#repName').textContent += ' — bài ghi ở bản cũ, chưa có tờ «' + s.chart + '» trong kho nên không đặt được đúng vị trí';
   graph('gSog', 'sog', 0); graph('gUkc', 'ukc', 1);
 }
 function graph(id, key, thr) {
@@ -63,9 +81,9 @@ function graph(id, key, thr) {
   g.fillStyle = '#FFB547'; g.fillRect(R.t / T * w - 1, 0, 2, h);
 }
 function draw2D(v, row, s, wide) {
-  v.chart = A.W.chart; v.size(); const g = v.ctx, r = s.rec, M = A.M;
-  if (wide) { let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9; for (const q of r) { x0 = Math.min(x0, q.x); x1 = Math.max(x1, q.x); y0 = Math.min(y0, q.y); y1 = Math.max(y1, q.y); } const sp = Math.max(400, (x1 - x0) * 1.25, (y1 - y0) * 1.25 * v.cv.width / v.cv.height); v.sc = v.geo().mpp * v.cv.width / sp; v.centerM((x0 + x1) / 2, (y0 + y1) / 2); }
-  else { v.sc = v.geo().mpp / 3; v.centerM(row.x, row.y); }
+  v.size(); const g = v.ctx, r = rowsOf(s), M = A.M; row = r[s.rec.indexOf(row)] || row;
+  if (wide) { let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9; for (const q of r) { x0 = Math.min(x0, q.x); x1 = Math.max(x1, q.x); y0 = Math.min(y0, q.y); y1 = Math.max(y1, q.y); } const sp = Math.max(400, (x1 - x0) * 1.25, (y1 - y0) * 1.25 * v.cv.width / v.cv.height); v.setMpp(sp / v.cv.width); v.centerM((x0 + x1) / 2, (y0 + y1) / 2); }
+  else { v.setMpp(3); v.centerM(row.x, row.y); }
   v.rot = 0; v.draw(); drawOverlay(v, true);
   g.save(); g.lineJoin = 'round'; const i0 = r.indexOf(row);
   g.strokeStyle = '#607D8B'; g.lineWidth = 1.5; g.setLineDash([5, 4]); g.beginPath(); for (let i = i0; i < r.length; i += 3) { const p = v.m2s(r[i].x, r[i].y); if (i === i0) g.moveTo(p[0], p[1]); else g.lineTo(p[0], p[1]); } g.stroke(); g.setLineDash([]);
@@ -79,7 +97,7 @@ export function replayFrame(dt) {
   const s = R.ses; if (!s || !$('#repCv')) return;
   if (R.playing) { R.t += dt * (R.rec ? R.ex.speed : R.speed); if (R.t >= dur()) { R.t = dur(); R.playing = false; if (R.rec) stopExport(); } }
   const row = rowAt(R.t), use3 = R.rec ? R.ex.view !== 'chart' : R.mode === '3d';
-  if (use3 && A.view) { A.view.setSegs([]); A.view.update({ x: row.x, y: row.y, psi: row.psi }, R.rec ? R.ex.view : R.view, env3(row, s)); A.view.render(); }
+  if (use3 && A.view) { A.view.setSegs([]); { const q = rowsOf(s)[s.rec.indexOf(row)] || row; A.view.update({ x: q.x, y: q.y, psi: row.psi }, R.rec ? R.ex.view : R.view, env3(row, s)); } A.view.render(); }
   if (!use3 || !R.rec) { if (R.mode === 'chart' || (R.rec && !use3)) draw2D(cv, row, s, true); }
   $('#repSl').value = Math.round(R.t); $('#repT').textContent = clock(R.t); $('#repPlay').textContent = R.playing ? '⏸' : '▶';
   $('#repAt').textContent = 'Tại ' + clock(s.day0 + row.t);
@@ -105,7 +123,7 @@ function drawEx() {
 function startExport() {
   if (!R.ses) return alert('Chưa chọn bài để xuất.'); if (typeof MediaRecorder === 'undefined') return alert('Trình duyệt này không hỗ trợ ghi video. Dùng Edge hoặc Chrome.');
   const x = R.ex; comp = document.createElement('canvas'); comp.height = x.res; comp.width = Math.round(x.res * 16 / 9);
-  pip = pip || new ChartView(Object.assign(document.createElement('canvas'), { width: 420, height: 280 }));
+  pip = pip || new ChartCanvas(Object.assign(document.createElement('canvas'), { width: 420, height: 280 }));
   const stream = comp.captureStream(30);
   if (A.snd.rec) for (const tr of A.snd.rec.stream.getAudioTracks()) stream.addTrack(tr);
   const types = ['video/mp4;codecs=avc1.42E01E', 'video/mp4', 'video/webm;codecs=vp9', 'video/webm'], type = types.find((t) => MediaRecorder.isTypeSupported(t)) || '';

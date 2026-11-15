@@ -3,7 +3,7 @@
 import { A, $, $$, num, esc, pad3, clock, Orders, HELM, LIGHTS, LIGHT_PRESETS, logOrder, derived, engName, saveSet, saveObjs, sunEl } from './app.js';
 import { STEP_ORDER, stepLabel, displayRpm, KN, D2R } from './physics.js';
 import { sendLine, body2w, wrap180, makeLines } from './world.js';
-import { ChartView } from './chartview.js';
+import { ChartCanvas } from './render/chartcanvas.js';
 import { drawOverlay } from './ui_setup.js';
 import { Radar, RANGES } from './radar.js';
 import { NM, fmtDist, brgDeg, trackRoute } from './nav.js';
@@ -77,7 +77,7 @@ export function initRun() {
       <div id="panBody"></div>
     </section>
   </div>`;
-  mini = new ChartView($('#mini')); radar = new Radar($('#radar'));
+  mini = new ChartCanvas($('#mini')); radar = new Radar($('#radar'));
   $('#fogBtn').onclick = () => { A.sim.fog = !A.sim.fog; $('#fogBtn').classList.toggle('on', A.sim.fog); };
   $('#mzIn').onclick = () => { mapScale = Math.max(0.5, mapScale / 1.6); }; $('#mzOut').onclick = () => { mapScale = Math.min(60, mapScale * 1.6); };
   $('#rzIn').onclick = () => radar.setRange(radar.ri + 1); $('#rzOut').onclick = () => radar.setRange(radar.ri - 1);
@@ -309,7 +309,7 @@ export function uiTick() {
   set('markInfo', mt); set('rFoot', rf || 'Bấm lên radar để đo phương vị / khoảng cách · chuột phải để bỏ');
   set('rRange', String(radar.range).replace('.', ',') + ' Hl');
   const night = sunEl(s.day0 + s.t, s.lightMode) < 4; $('#band').classList.toggle('night', night);
-  drawTape(hd, s.helm.mode !== 'rudder' ? s.helm.target : null, night); drawMini(d); drawPanel();
+  drawTape(hd, s.helm.mode !== 'rudder' ? s.helm.target : null, night); drawMini(d, night); drawPanel();
 }
 // vẽ radar mỗi khung hình
 export function consoleFrame(dtReal) {
@@ -351,9 +351,9 @@ export function shipPoly(v, x, y, psi, M, minPx) {
   const k = Math.max(1, (minPx || 0) / (M.loa / v.mPerPx())), L = M.loa * k, B = M.B * k, pts = [[L / 2, 0], [L * 0.3, B / 2], [-L / 2, B / 2], [-L / 2, -B / 2], [L * 0.3, -B / 2]];
   return pts.map((p) => v.m2s(x + p[0] * Math.sin(psi) + p[1] * Math.cos(psi), y + p[0] * Math.cos(psi) - p[1] * Math.sin(psi)));
 }
-function drawMini(d) {
-  const s = A.sim, S = s.S, M = A.M, g = mini.ctx; mini.chart = A.W.chart; mini.size();
-  mini.sc = mini.geo().mpp / mapScale; mini.rot = A.set.headUp ? -S.psi : 0; mini.centerM(S.x + mapOff.x, S.y + mapOff.y); $('#mapHome').classList.toggle('off', !!(mapOff.x || mapOff.y)); mini.draw(); drawOverlay(mini, true);
+function drawMini(d, night) {
+  const s = A.sim, S = s.S, M = A.M, g = mini.ctx; mini.size(); mini.opt.palette = night ? 'night' : 'day';
+  mini.setMpp(mapScale); mini.rot = A.set.headUp ? -S.psi : 0; mini.centerM(S.x + mapOff.x, S.y + mapOff.y); $('#mapHome').classList.toggle('off', !!(mapOff.x || mapOff.y)); mini.draw(); drawOverlay(mini, true);
   g.save(); g.lineJoin = 'round';
   // tuyến đi (màu tím như ECDIS)
   const r = curRoute();
@@ -380,7 +380,7 @@ function drawMini(d) {
   // la bàn
   const w = mini.cv.width, hh = mini.cv.height; g.translate(w - 22, hh - 42); g.rotate(mini.rot); g.fillStyle = 'rgba(9,14,18,.82)'; g.beginPath(); g.arc(0, 0, 12, 0, 7); g.fill(); g.fillStyle = '#E6EDF2'; g.beginPath(); g.moveTo(0, -9); g.lineTo(4, 4); g.lineTo(0, 1.5); g.lineTo(-4, 4); g.fill();
   g.restore();
-  const nm = A.W.chart ? A.W.chart.name : 'Biển trống (chưa nạp hải đồ)'; if ($('#mapName').textContent !== nm) $('#mapName').textContent = nm;
+  const nm = mini.ref ? mini.ref.name : A.W.hasCharts() ? 'Ngoài vùng hải đồ' : 'Biển trống (chưa nạp hải đồ)'; if ($('#mapName').textContent !== nm) $('#mapName').textContent = nm;
   const bs = A.W.segs; let info = '';
   if (bs.length) { let bd = 1e9, bb = 0; for (const q2 of bs) { const mx = (q2.ax + q2.bx) / 2, my = (q2.ay + q2.by) / 2, dd = Math.hypot(mx - S.x, my - S.y); if (dd < bd) { bd = dd; bb = Math.atan2(mx - S.x, my - S.y) / D2R; } } info = 'Tới cầu bến: ' + fmtDist(bd) + ' · ' + pad3(bb) + '°'; }
   $('#mapInfo').textContent = info; $('#mapInfoBox').style.display = info || s.mark ? 'block' : 'none';

@@ -1,5 +1,5 @@
 // Tiện ích hàng hải: đơn vị khoảng cách, tọa độ, tuyến đi.
-import { pxToLL, llToPx, pxToM, mToPx, fmtLL } from './kap.js';
+import { rhumb } from './geo/geodesic.js';
 
 export const NM = 1852;
 export const NEAR_M = 0.3 * NM; // dưới 0,3 hải lý thì hiện mét
@@ -37,13 +37,16 @@ export function parseLatLon(str) {
   const nums = s.match(/-?\d+(?:\.\d+)?/g); if (nums && nums.length === 2) return [+nums[0], +nums[1]];
   return [NaN, NaN];
 }
-export const llToM = (g, lat, lon) => { const [px, py] = llToPx(g, lat, lon); return pxToM(g, px, py); };
-export const mToLL = (g, x, y) => { const [px, py] = mToPx(g, x, y); return pxToLL(g, px, py); };
-export const fmtPos = (g, x, y) => fmtLL(...mToLL(g, x, y));
 export const fmtLat = (lat) => { const a = Math.abs(lat), d = Math.floor(a), m = (a - d) * 60; return d + '°' + m.toFixed(3).padStart(6, '0').replace('.', ',') + "'" + (lat >= 0 ? 'N' : 'S'); };
 export const fmtLon = (lon) => { const a = Math.abs(lon), d = Math.floor(a), m = (a - d) * 60; return String(d).padStart(3, '0') + '°' + m.toFixed(3).padStart(6, '0').replace('.', ',') + "'" + (lon >= 0 ? 'E' : 'W'); };
 
-// các chặng của tuyến
+// các chặng của tuyến theo lat/lon (loxodrom — hướng đi và quãng đường như kẻ trên hải đồ Mercator)
+export function legsLL(ll) {
+  const out = []; let tot = 0;
+  for (let i = 0; i + 1 < ll.length; i++) { const q = rhumb(ll[i][0], ll[i][1], ll[i + 1][0], ll[i + 1][1]); tot += q.dist; out.push({ i, len: q.dist, crs: q.brg, tot }); }
+  return out;
+}
+// các chặng của tuyến theo mét thế giới (dùng khi theo dõi tàu trên tuyến)
 export function legs(pts) {
   const out = []; let tot = 0;
   for (let i = 0; i + 1 < pts.length; i++) {

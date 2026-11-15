@@ -1,6 +1,7 @@
-// Thế giới mô phỏng: hải đồ, độ sâu, cầu bến, neo, dây buộc, môi trường.
-import { CELL, pxToM, mToPx } from './kap.js';
+// Thế giới mô phỏng: độ sâu (ghép nhiều tờ hải đồ), cầu bến, neo, dây buộc, môi trường.
+// Tọa độ: "mét thế giới" của CS.frame (x Đông, y Bắc); lưu trữ lat/lon WGS-84 nằm ở places.js.
 import { D2R, G } from './physics.js';
+import { CS, sampleWorld, DEF_CLASS_DEPTH } from './chartsys.js';
 
 const num = (v, d) => { const n = parseFloat(v); return isFinite(n) ? n : d; };
 export const wrap180 = (a) => ((((a + 180) % 360) + 360) % 360) - 180;
@@ -17,37 +18,35 @@ export function defaultEnv() {
 
 export class World {
   constructor() {
-    this.chart = null;
-    this.objs = { lights: [], berths: [], sounds: [] };
-    this.classDepth = [-3, -1, 1.5, 3.5, 10];
+    this.objs = { lights: [], berths: [], routes: [], routeSel: -1 };
+    this.start = null; // { x, y, hdg } mét thế giới
     this.noChartDepth = 30;
     this.segs = []; this.bollards = [];
   }
-  setChart(c) { this.chart = c; this.rebuild(); }
+  // có hải đồ nào trong kho chưa
+  hasCharts() { return CS.catalog.records.some((r) => r.ready); }
+  // tờ hải đồ chi tiết nhất phủ điểm (x, y), null nếu ngoài mọi tờ
+  chartAt(x, y) { return sampleWorld(x, y).rec; }
+  chartName(x, y) { const r = this.chartAt(x, y); return r ? r.name : this.hasCharts() ? 'Ngoài vùng hải đồ' : 'Biển trống'; }
+  // lớp đáy: 0 đất, 1 bãi cạn hở, 2 nông, 3 nông vừa, 4 sâu
+  classAt(x, y) { return sampleWorld(x, y).cls; }
   // độ sâu hải đồ (m, dương là dưới số 0 hải đồ; âm là đất/bãi cạn)
-  classAt(x, y) {
-    const c = this.chart; if (!c) return 4;
-    const [px, py] = mToPx(c.geo, x, y);
-    const gx = Math.floor(px / CELL), gy = Math.floor(py / CELL);
-    if (gx < 0 || gy < 0 || gx >= c.gw || gy >= c.gh) return 4;
-    return c.grid[gy * c.gw + gx];
-  }
   depthAt(x, y) {
-    if (!this.chart) return this.noChartDepth;
     for (const s of this.segs) {
       const t = (x - s.ax) * s.tx + (y - s.ay) * s.ty, sd = (x - s.ax) * s.nx + (y - s.ay) * s.ny;
       if (t > -15 && t < s.len + 15 && sd > -6 && sd < 60) return s.depth;
     }
-    const k = this.classAt(x, y), base = this.classDepth[k];
-    if (k < 2 || !this.objs.sounds || !this.objs.sounds.length) return base;
-    let ws = 0, wd = 0, dm = 1e9;
-    for (const s of this.objs.sounds) {
-      const d = Math.hypot(x - s.x, y - s.y); if (d > 500) continue;
-      const w = 1 / (d * d + 100); ws += w; wd += w * s.d; if (d < dm) dm = d;
-    }
-    if (!ws) return base;
-    const f = Math.max(0, 1 - dm / 500);
-    return f * (wd / ws) + (1 - f) * base;
+    const q = sampleWorld(x, y); if (!q.rec) return this.noChartDepth;
+    return (q.rec.classDepth || DEF_CLASS_DEPTH)[q.cls];
+  }
+  // đổi mọi tọa độ trong bộ nhớ khi gốc tọa độ dời (gốc trôi)
+  mapCoords(map) {
+    const o = this.objs, mp = (q) => map(q[0], q[1]);
+    for (const l of o.lights) [l.x, l.y] = map(l.x, l.y);
+    for (const b of o.berths) b.pts = b.pts.map(mp);
+    for (const r of o.routes || []) r.pts = r.pts.map(mp);
+    if (this.start) [this.start.x, this.start.y] = map(this.start.x, this.start.y);
+    this.rebuild();
   }
   rebuild() {
     this.segs = []; this.bollards = [];
@@ -82,7 +81,6 @@ export class World {
   }
   autoBols(bi) { const b = this.objs.berths[bi]; return autoBollards(this.segs.filter((g) => g.bi === bi), Math.max(8, num(b.spacing, 25))); }
   bankDist(S, side, draft, tide) {
-    if (!this.chart) return 1e4;
     const ex = Math.cos(S.psi) * side, ey = -Math.sin(S.psi) * side;
     for (let d = 8; d <= 248; d += 8) if (this.depthAt(S.x + ex * d, S.y + ey * d) + tide < draft * 0.8) return d;
     return 1e4;

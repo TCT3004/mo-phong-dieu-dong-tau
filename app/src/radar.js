@@ -23,7 +23,7 @@ export class Radar {
       const b = this.sweep, a = b / NB * 2 * Math.PI, sx = Math.sin(a), sy = Math.cos(a), row = b * NR;
       let run = 0;
       for (let j = 0; j < NR; j++) {
-        const d = (j + 0.5) * dr, x = S.x + sx * d, y = S.y + sy * d, c = W.chart ? W.classAt(x, y) : 4;
+        const d = (j + 0.5) * dr, x = S.x + sx * d, y = S.y + sy * d, c = W.classAt(x, y);
         let v = 0;
         if (c === 0) { run += dr; v = run < Math.max(240, 2.5 * dr) ? 255 : (hash(Math.floor(x / 45), Math.floor(y / 45)) < Math.max(0.015, 0.1 - run / 8000) ? 160 : 0); }
         else { run = 0; if (c === 1 && hash(Math.floor(x / 30), Math.floor(y / 30)) < 0.35) v = 110; }

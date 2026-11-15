@@ -1,13 +1,14 @@
 // Cảnh 3D đơn giản: mặt nước, địa hình dựng từ hải đồ, tàu, cầu bến, đèn/phao, dây và xích neo.
 import * as THREE from 'three';
-import { CELL, pxToM } from './kap.js';
+import { sampleWorld, DEF_CLASS_DEPTH } from './chartsys.js';
 import { body2w } from './world.js';
 
 export const QUALITY = {
-  low: { step: 8, water: 0, pr: 0.75, far: 12000, label: 'Thấp' },
-  mid: { step: 6, water: 1, pr: 1, far: 20000, label: 'Trung bình' },
-  high: { step: 4, water: 2, pr: 1, far: 30000, label: 'Cao' },
-  max: { step: 3, water: 2, pr: Math.min(2, (typeof devicePixelRatio !== 'undefined' ? devicePixelRatio : 1) * 1.25), far: 40000, label: 'Tối đa' }
+  // ter: [nửa vùng mịn (m), bước lưới vùng mịn (m), bước lưới xa nhất (m)]
+  low: { ter: [3000, 50, 700], water: 0, pr: 0.75, far: 12000, label: 'Thấp' },
+  mid: { ter: [4000, 38, 600], water: 1, pr: 1, far: 20000, label: 'Trung bình' },
+  high: { ter: [4500, 30, 500], water: 2, pr: 1, far: 30000, label: 'Cao' },
+  max: { ter: [6000, 22, 400], water: 2, pr: Math.min(2, (typeof devicePixelRatio !== 'undefined' ? devicePixelRatio : 1) * 1.25), far: 40000, label: 'Tối đa' }
 };
 const COL = { W: 0xffffff, R: 0xff3b30, G: 0x30e070, Y: 0xffd60a };
 
@@ -125,35 +126,40 @@ export class View3D {
       stern: [lp(COL.W, 0, fb + 3, L / 2 - 0.5, 4)], anchF: [lp(COL.W, 0, fb + 9, -(L / 2 - 2))], anchA: [lp(COL.W, 0, fb + 5, L / 2 - 1.5)],
       deck: [lp(0xffe08a, 0, fb + 6, -L * 0.15, 9), lp(0xffe08a, 0, fb + 6, -L * 0.3, 9), lp(0xffe08a, 0, fb + 6, 0, 9)], nuc: [lp(COL.R, 0, fb + shh + 6, -(sx + sl * 0.1), 4), lp(COL.R, 0, fb + shh + 4, -(sx + sl * 0.1), 4)] };
   }
-  buildTerrain(W) {
+  // địa hình dựng quanh (cx, cy) từ các tờ hải đồ đang có: lưới mịn gần tàu, thưa dần ra xa (tới tầm nhìn xa của mức chất lượng)
+  buildTerrain(W, cx = 0, cy = 0) {
     if (this.terrain) { this.scene.remove(this.terrain); this.terrain.geometry.dispose(); this.terrain = null; }
-    const c = W.chart; if (!c) return;
-    const k = this.q.step, cols = Math.floor(c.gw / k), rows = Math.floor(c.gh / k), cm = k * CELL * c.geo.mpp;
-    const cls = new Uint8Array(cols * rows), dist = new Float32Array(cols * rows);
-    for (let j = 0; j < rows; j++) for (let i = 0; i < cols; i++) {
-      // ô là đất nếu có ô con nào là đất (giữ đường bờ khỏi bị ăn mòn)
-      let best = 4, land = 0, dry = 0;
-      for (let b = 0; b < k; b++) for (let a = 0; a < k; a++) { const v = c.grid[(j * k + b) * c.gw + i * k + a]; if (v === 0) land++; else if (v === 1) dry++; else if (v < best) best = v; }
-      const n = k * k; cls[j * cols + i] = land * 2 >= n ? 0 : (land + dry) * 2 >= n ? 1 : best;
-      dist[j * cols + i] = cls[j * cols + i] === 0 ? 1e6 : 0;
+    const [D, d0, dMax] = this.q.ter, F = Math.min(this.q.far, 26000);
+    this.terrC = [cx, cy]; this.terrD = D;
+    if (!W.hasCharts()) return;
+    const axis = [0]; for (let x = d0; x <= D; x += d0) axis.push(x);
+    for (let st = d0, x = axis[axis.length - 1]; x < F;) { st = Math.min(dMax, st * 1.12); x += st; axis.push(x); }
+    const ax = [...axis.slice(1).reverse().map((v) => -v), ...axis], n = ax.length, xs = ax.map((v) => cx + v), ys = ax.map((v) => cy + v);
+    const cls = new Uint8Array(n * n), dep = new Float32Array(n * n), dist = new Float32Array(n * n); let any = false;
+    for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
+      const o = j * n + i, q = sampleWorld(xs[i], ys[j]), c = q.rec ? q.cls : 4;
+      cls[o] = c; dep[o] = q.rec ? (q.rec.classDepth || DEF_CLASS_DEPTH)[c] : W.noChartDepth; dist[o] = c === 0 ? 1e9 : 0; if (c < 2) any = true;
     }
-    for (let j = 0; j < rows; j++) for (let i = 0; i < cols; i++) { const o = j * cols + i; if (dist[o]) { let d = dist[o]; if (i) d = Math.min(d, dist[o - 1] + 1); if (j) d = Math.min(d, dist[o - cols] + 1); if (i && j) d = Math.min(d, dist[o - cols - 1] + 1.4); dist[o] = d; } }
-    for (let j = rows - 1; j >= 0; j--) for (let i = cols - 1; i >= 0; i--) { const o = j * cols + i; if (dist[o]) { let d = dist[o]; if (i < cols - 1) d = Math.min(d, dist[o + 1] + 1); if (j < rows - 1) d = Math.min(d, dist[o + cols] + 1); if (i < cols - 1 && j < rows - 1) d = Math.min(d, dist[o + cols + 1] + 1.4); dist[o] = d; } }
-    const pos = new Float32Array(cols * rows * 3), col = new Float32Array(cols * rows * 3);
-    for (let j = 0; j < rows; j++) for (let i = 0; i < cols; i++) {
-      const o = j * cols + i, [x, y] = pxToM(c.geo, (i + 0.5) * k * CELL, (j + 0.5) * k * CELL), cl = cls[o];
-      let h, r, g, b;
-      if (cl === 0) { const dm = Math.min(dist[o], 1e5) * cm; h = 2.5 + Math.min(320, dm * 0.2) * (0.8 + 0.3 * Math.sin(x * 0.004) * Math.cos(y * 0.005)); const t = Math.min(1, h / 200); r = 0.30 + 0.16 * t; g = 0.42 - 0.04 * t; b = 0.24 + 0.04 * t; }
-      else if (cl === 1) { h = -W.classDepth[1]; r = 0.56; g = 0.54; b = 0.42; }
-      else { h = -W.classDepth[cl]; r = 0.2; g = 0.33; b = 0.34; }
+    if (!any) return;
+    // khoảng cách từ đất tới mép nước (m) để dựng đồi cao dần vào trong
+    const dx = (i) => xs[i] - xs[i - 1], dy = (j) => ys[j] - ys[j - 1];
+    for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) { const o = j * n + i; if (!dist[o]) continue; let d = dist[o]; if (i) d = Math.min(d, dist[o - 1] + dx(i)); if (j) d = Math.min(d, dist[o - n] + dy(j)); if (i && j) d = Math.min(d, dist[o - n - 1] + Math.hypot(dx(i), dy(j))); dist[o] = d; }
+    for (let j = n - 1; j >= 0; j--) for (let i = n - 1; i >= 0; i--) { const o = j * n + i; if (!dist[o]) continue; let d = dist[o]; if (i < n - 1) d = Math.min(d, dist[o + 1] + dx(i + 1)); if (j < n - 1) d = Math.min(d, dist[o + n] + dy(j + 1)); if (i < n - 1 && j < n - 1) d = Math.min(d, dist[o + n + 1] + Math.hypot(dx(i + 1), dy(j + 1))); dist[o] = d; }
+    const pos = new Float32Array(n * n * 3), col = new Float32Array(n * n * 3);
+    for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
+      const o = j * n + i, x = xs[i], y = ys[j], cl = cls[o]; let h, r, g, b;
+      if (cl === 0) { const dm = Math.min(dist[o], 1e5); h = 2.5 + Math.min(320, dm * 0.2) * (0.8 + 0.3 * Math.sin(x * 0.004) * Math.cos(y * 0.005)); const t = Math.min(1, h / 200); r = 0.30 + 0.16 * t; g = 0.42 - 0.04 * t; b = 0.24 + 0.04 * t; }
+      else if (cl === 1) { h = -dep[o]; r = 0.56; g = 0.54; b = 0.42; }
+      else { h = -dep[o]; r = 0.2; g = 0.33; b = 0.34; }
       pos[o * 3] = x; pos[o * 3 + 1] = h; pos[o * 3 + 2] = -y; col[o * 3] = r; col[o * 3 + 1] = g; col[o * 3 + 2] = b;
     }
     const ind = [];
-    for (let j = 0; j < rows - 1; j++) for (let i = 0; i < cols - 1; i++) {
-      const a = j * cols + i, b2 = a + 1, c2 = a + cols, d2 = c2 + 1;
+    for (let j = 0; j < n - 1; j++) for (let i = 0; i < n - 1; i++) {
+      const a = j * n + i, b2 = a + 1, c2 = a + n, d2 = c2 + 1;
       if (cls[a] > 1 && cls[b2] > 1 && cls[c2] > 1 && cls[d2] > 1) continue;
-      ind.push(a, c2, b2, b2, c2, d2);
+      ind.push(a, b2, c2, b2, d2, c2);
     }
+    if (!ind.length) return;
     const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.BufferAttribute(pos, 3)); geo.setAttribute('color', new THREE.BufferAttribute(col, 3)); geo.setIndex(new THREE.BufferAttribute(new Uint32Array(ind), 1)); geo.computeVertexNormals();
     this.terrain = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ vertexColors: true })); this.terrain.frustumCulled = false; this.scene.add(this.terrain);
   }
