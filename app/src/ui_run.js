@@ -24,7 +24,7 @@ export function initRun() {
   <div class="band br" id="band">
     <div class="glhold" id="glHold3"></div>
     <div class="wins"><div class="win wl"><canvas id="pw0"></canvas></div><div class="win wc"><canvas id="pw1"></canvas></div><div class="win wr"><canvas id="pw2"></canvas></div></div>
-    <div class="btop"><div class="seg" id="viewSeg"></div><div class="flex" style="gap:6px;align-items:center"><div class="seg" id="lightSeg"></div><button class="btn sm" id="fogBtn">Sương mù</button></div></div>
+    <div class="btop"><div class="seg" id="viewSeg"></div></div>
     <canvas id="tape" class="ovl" width="900" height="66"></canvas><div id="hdgBig">000.0°</div>
     <div id="banner"></div>
   </div>
@@ -78,7 +78,6 @@ export function initRun() {
     </section>
   </div>`;
   mini = new ChartCanvas($('#mini')); radar = new Radar($('#radar'));
-  $('#fogBtn').onclick = () => { A.sim.fog = !A.sim.fog; $('#fogBtn').classList.toggle('on', A.sim.fog); };
   $('#mzIn').onclick = () => { mapScale = Math.max(0.5, mapScale / 1.6); }; $('#mzOut').onclick = () => { mapScale = Math.min(60, mapScale * 1.6); };
   $('#rzIn').onclick = () => radar.setRange(radar.ri + 1); $('#rzOut').onclick = () => radar.setRange(radar.ri - 1);
   buildHelm();
@@ -112,12 +111,10 @@ export function initRun() {
 function initSegs() {
   const s = A.sim;
   seg($('#viewSeg'), VIEWS, runState.view, (v) => { runState.view = v; if (A.view) Object.assign(A.view.look, { yaw: 0, pitch: 0, fov: 55, dist: 1 }); initSegs(); });
-  seg($('#lightSeg'), [['auto', 'Theo giờ'], ['day', 'Ngày'], ['dusk', 'Hoàng hôn'], ['night', 'Đêm']], s.lightMode, (v) => { s.lightMode = v; initSegs(); });
   seg($('#oriSeg'), [['0', 'Bắc trên'], ['1', 'Mũi trên']], A.set.headUp ? '1' : '0', (v) => { A.set.headUp = v === '1'; saveSet(); initSegs(); });
   seg($('#rMode'), [['H', 'Mũi trên'], ['N', 'Bắc trên']], radar.mode, (v) => { radar.mode = v; initSegs(); });
   seg($('#steerSeg'), [['hand', 'Lái tay'], ['auto', 'Tự động']], s.helm.steer, (v) => { Orders.steer(v); initSegs(); });
   seg($('#panSeg'), [['neo', 'Neo'], ['day', 'Dây buộc'], ['den', 'Đèn'], ['tin', 'Tín hiệu'], ['log', 'Nhật ký']], panel, (v) => { panel = v; built = ''; initSegs(); });
-  $('#fogBtn').classList.toggle('on', s.fog);
 }
 // ---- tay chuông máy kiểu cần gạt: kéo cần, thả ra sẽ khớp vào nấc gần nhất ----
 function initTel() {
@@ -245,7 +242,7 @@ function drawPanel() {
     const key = 'den' + JSON.stringify(s.lights);
     if (built !== key) {
       built = key;
-      el.innerHTML = `<div class="flex" style="gap:6px;align-items:center;margin-bottom:8px"><span class="muted">Bật nhanh:</span>${LIGHT_PRESETS.map((p, i) => `<button class="btn sm ${LIGHTS.every((l) => !!s.lights[l[0]] === p[1].includes(l[0])) ? 'on' : ''}" data-act="preset" data-id="${i}">${p[0]}</button>`).join('')}</div><div class="grid g2" style="gap:5px">${LIGHTS.map((l) => `<button class="btn sm" data-act="light" data-id="${l[0]}" style="display:flex;align-items:center;gap:7px;justify-content:flex-start;${s.lights[l[0]] ? 'background:#16222A;border-color:#3A5566' : ''}"><span style="width:10px;height:10px;border-radius:9px;background:${s.lights[l[0]] ? l[2] : '#2A3640'}"></span><span style="flex:1;text-align:left">${l[1]}</span><span style="color:${s.lights[l[0]] ? '#86E0A8' : '#8FA3B0'}">${s.lights[l[0]] ? 'Bật' : 'Tắt'}</span></button>`).join('')}</div><div class="muted" style="margin-top:8px">Đèn chỉ thấy trong khung 3D khi trời tối (chọn «Đêm» hoặc «Hoàng hôn» để xem thử; góc «Bám theo tàu» thấy đủ các đèn).</div>`;
+      el.innerHTML = `<div class="flex" style="gap:6px;align-items:center;margin-bottom:8px"><span class="muted">Bật nhanh:</span>${LIGHT_PRESETS.map((p, i) => `<button class="btn sm ${LIGHTS.every((l) => !!s.lights[l[0]] === p[1].includes(l[0])) ? 'on' : ''}" data-act="preset" data-id="${i}">${p[0]}</button>`).join('')}</div><div class="grid g2" style="gap:5px">${LIGHTS.map((l) => `<button class="btn sm" data-act="light" data-id="${l[0]}" style="display:flex;align-items:center;gap:7px;justify-content:flex-start;${s.lights[l[0]] ? 'background:#16222A;border-color:#3A5566' : ''}"><span style="width:10px;height:10px;border-radius:9px;background:${s.lights[l[0]] ? l[2] : '#2A3640'}"></span><span style="flex:1;text-align:left">${l[1]}</span><span style="color:${s.lights[l[0]] ? '#86E0A8' : '#8FA3B0'}">${s.lights[l[0]] ? 'Bật' : 'Tắt'}</span></button>`).join('')}</div><div class="muted" style="margin-top:8px">Đèn chỉ thấy trong khung 3D khi trời tối (muốn xem thử ban ngày thì ở tab 4, thẻ Thời tiết chọn ánh sáng «Đêm» hoặc «Hoàng hôn»; góc «Bám theo tàu» thấy đủ các đèn).</div>`;
     }
   } else if (panel === 'tin') {
     const key = 'tin' + !!s.fogAuto;
@@ -292,7 +289,7 @@ export function uiTick() {
   // môi trường
   const arrow = (deg) => `<svg width="12" height="12" viewBox="0 0 20 20" aria-hidden="true" style="vertical-align:-1px"><g transform="rotate(${deg.toFixed(0)} 10 10)"><path d="M10 2L10 18M10 2L5 8M10 2L15 8" stroke="#5CD6FF" stroke-width="2.4" fill="none" stroke-linecap="round"/></g></svg>`;
   const box = (t, v, sub) => `<div><div class="lb">${t}</div><div class="mono" style="font-size:13px;font-weight:600">${v}</div><div class="muted" style="font-size:10.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${sub}</div></div>`;
-  const envH = box('GIÓ THẬT', arrow(e.wDir + 180) + ' ' + pad3(e.wDir) + '°', e.wKn.toFixed(0) + ' hl/h · thổi từ') + box('DÒNG CHẢY', arrow(e.cDir) + ' ' + pad3(e.cDir) + '°', e.cKn.toFixed(1) + ' hl/h · chảy về') + box('THỦY TRIỀU', '+' + e.tide.toFixed(1) + ' m', e.rising ? 'Đang lên' : 'Đang xuống') + box('SÓNG', e.waveH.toFixed(1).replace('.', ',') + ' m', 'từ ' + pad3(Math.round(e.waveD / D2R) % 360) + '° · ' + Math.round(e.waveL) + ' m') + box('TẦM NHÌN', (e.vis / 1852).toFixed(1).replace('.', ',') + ' Hl', s.fog ? 'sương mù dày' : e.wx ? (e.wx.from ? e.wx.from + ' → ' : '') + e.wx.name : 'theo kịch bản') + box('GIỜ', clock(s.day0 + s.t).slice(0, 5), s.running ? 'đang chạy ×' + s.speed : 'TẠM DỪNG');
+  const envH = box('GIÓ THẬT', arrow(e.wDir + 180) + ' ' + pad3(e.wDir) + '°', e.wKn.toFixed(0) + ' hl/h · thổi từ') + box('DÒNG CHẢY', arrow(e.cDir) + ' ' + pad3(e.cDir) + '°', e.cKn.toFixed(1) + ' hl/h · chảy về') + box('THỦY TRIỀU', '+' + e.tide.toFixed(1) + ' m', e.rising ? 'Đang lên' : 'Đang xuống') + box('SÓNG', e.waveH.toFixed(1).replace('.', ',') + ' m', 'từ ' + pad3(Math.round(e.waveD / D2R) % 360) + '° · ' + Math.round(e.waveL) + ' m') + box('TẦM NHÌN', (e.vis / 1852).toFixed(1).replace('.', ',') + ' Hl', A.env.fogOn ? 'sương mù dày (tab 4)' : e.wx ? (e.wx.from ? e.wx.from + ' → ' : '') + e.wx.name : 'theo kịch bản') + box('GIỜ', clock(s.day0 + s.t).slice(0, 5), s.running ? 'đang chạy ×' + s.speed : 'TẠM DỪNG');
   const eb = $('#envBox'); if (eb._h !== envH) { eb._h = envH; eb.innerHTML = envH; }
   // banner
   const bn = $('#banner'); let bt = '', cls = 'bad';
@@ -315,7 +312,7 @@ export function uiTick() {
   if (mk) { const dd = Math.hypot(mk.x - S.x, mk.y - S.y), bb = brgDeg(mk.x - S.x, mk.y - S.y), tt = d.sog > 0.3 ? dd / (d.sog * KN) : 0; mt = 'Điểm chọn: ' + fmtDist(dd) + ' · ' + pad3(bb) + '°' + (tt ? ' · ' + Math.floor(tt / 60) + "' " + String(Math.round(tt % 60)).padStart(2, '0') + '"' : ''); rf = 'EBL ' + bb.toFixed(1).padStart(5, '0') + '° · VRM ' + fmtDist(dd); }
   set('markInfo', mt); set('rFoot', rf || 'Bấm lên radar để đo phương vị / khoảng cách · chuột phải để bỏ');
   set('rRange', String(radar.range).replace('.', ',') + ' Hl');
-  const night = sunEl(s.day0 + s.t, s.lightMode) < 4; $('#band').classList.toggle('night', night);
+  const night = sunEl(s.day0 + s.t, A.env.light) < 4; $('#band').classList.toggle('night', night);
   drawTape(hd, s.helm.mode !== 'rudder' ? s.helm.target : null, night); drawMini(d, night); drawPanel();
 }
 // vẽ radar mỗi khung hình

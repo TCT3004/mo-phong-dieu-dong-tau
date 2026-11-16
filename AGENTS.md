@@ -81,8 +81,8 @@ Default section order:
 - Mô phỏng điều động tàu 3D cho **người điều động** (không phải người lái), offline, Windows
 - JavaScript ES modules + three.js + pdf.js, bundle bằng esbuild thành **1 file HTML**; Electron bọc thành `.exe` portable
 - Giai đoạn 1 xong (v0.1.0). Giai đoạn 2 xong (v0.2.0): hải đồ liền mạch kiểu OpenCPN (quilting), mét thế giới + gốc trôi, kho hải đồ KAP / PDF, độ sâu ghép nhiều tờ
-- Giai đoạn 3 đang làm: 0.3.0 nấc lái theo góc lái tối đa, thời tiết ngẫu nhiên; 0.3.1 vẽ tàu từ sơ đồ (dò viền + chấm tay, chọn chi tiết nhiều nấc, đo kích thước, tự suy hình chiếu thiếu)
-- Lộ trình: giai đoạn 4 (0.4.x) đọc số độ sâu trên hải đồ PDF vector, dữ liệu cảng thật; giai đoạn 5 (0.5.x) các tàu khác (tàu lai, tàu trên luồng, tránh va)
+- Giai đoạn 3 đang làm: 0.3.0 nấc lái theo góc lái tối đa, thời tiết ngẫu nhiên; 0.3.1 vẽ tàu từ sơ đồ (dò viền + chấm tay, chọn chi tiết nhiều nấc, đo kích thước, tự suy hình chiếu thiếu); 0.3.2 cờ trên tàu, ánh sáng / sương mù sang tab 4, nút «Về tàu» tab 2, file đối tượng hải đồ + vị trí xuất phát có sẵn, dữ liệu cảng thật dựng từ hải đồ (giao riêng, không commit)
+- Lộ trình: giai đoạn 4 (0.4.x) đọc số độ sâu trên hải đồ PDF vector, triều Hòn Dáu (nhập bảng triều từ ảnh, số hiệu chỉnh cảng phụ); giai đoạn 5 (0.5.x) các tàu khác (tàu lai, tàu trên luồng, tàu đậu sẵn ở bến, tránh va)
 
 ## Project-wide Rules
 
@@ -94,6 +94,7 @@ Default section order:
 - Làm xong phần nào commit và push lên `main` (người khác theo dõi và sửa trên GitHub)
 - Phiên bản: giai đoạn N phát hành `0.N.0`; mỗi đợt yêu cầu thêm trong giai đoạn tăng số cuối (`0.N.1`, `0.N.2`…); ghi ở `app/package.json` và `electron/package.json` (`version`, `artifactName`)
 - Kho GitHub công khai: không đưa sơ đồ hay mô hình tàu quân sự cụ thể lên; mẫu tàu có sẵn trong app phải là mẫu chung chung tự dựng
+- Dữ liệu cảng thật (nhất là cảng quân sự: cầu bến, phao, tuyến vào) không commit; dựng thành file đối tượng `.json` gửi riêng cho người dùng nạp ở tab 2
 
 ## Phase 2 Decisions (đã duyệt)
 
@@ -118,6 +119,8 @@ Default section order:
 - Bước sóng chỉnh theo m ở tab 4, mặc định 225 m (tương đương «×4» cũ); tốc độ lắc tàu mặc định ×4 (Cài đặt)
 - Nút lệnh lái: 5 · 10 · 15 · hết lái, hết lái lấy đúng góc lái tối đa ở tab 1 (tàu chiến thường 25°); vạch giữa thanh quay trở phải thẳng hàng với kim góc lái
 - Thời tiết «Ngẫu nhiên» ở tab 4: app tự đổi gió, sóng, mưa, giông, sương mù theo thời gian chạy bài; ngày / đêm luôn theo giờ, không đổi đột ngột
+- Nút ánh sáng xem thử (Theo giờ / Ngày / Hoàng hôn / Đêm) và Sương mù dày nằm ở tab 4, không ở tab 3
+- Cờ: cờ Tổ quốc và cờ Hải quân trên cột cao nhất, cờ Tổ quốc mạn phải, cờ Hải quân mạn trái thấp hơn 20 cm (nhìn từ lái lên mũi)
 
 ## Child DOX Index
 

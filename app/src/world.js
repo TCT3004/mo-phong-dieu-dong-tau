@@ -12,7 +12,7 @@ export function defaultEnv() {
     name: 'Bài tập 1', startX: 0, startY: 0, startHdg: 0, startKn: 6, startStep: 'f2', startTime: '06:30',
     tide, windDir: 45, windKn: 12, gustKn: 18, windVary: true,
     floodDir: 60, floodKn: 0.8, ebbDir: 240, ebbKn: 0.7,
-    waveH: 0.5, waveL: 225, waveDir: 90, visNm: 6, wxMode: 'manual', wxStart: ''
+    waveH: 0.5, waveL: 225, waveDir: 90, visNm: 6, wxMode: 'manual', wxStart: '', light: 'auto', fogOn: false
   };
 }
 
@@ -45,6 +45,7 @@ export class World {
     for (const l of o.lights) [l.x, l.y] = map(l.x, l.y);
     for (const b of o.berths) b.pts = b.pts.map(mp);
     for (const r of o.routes || []) r.pts = r.pts.map(mp);
+    for (const q of o.starts || []) [q.x, q.y] = map(q.x, q.y);
     if (this.start) [this.start.x, this.start.y] = map(this.start.x, this.start.y);
     this.rebuild();
   }

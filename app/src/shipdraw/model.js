@@ -208,8 +208,18 @@ export function buildModel(model, ship) {
   if (!has('anchF')) lights.push({ key: 'anchF', x: H.xf - 1.5, y: 0, z: deckZ(H.xf - 1.5) + 4, auto: true });
   if (!has('anchA')) lights.push({ key: 'anchA', x: H.xa + 1, y: 0, z: deckZ(H.xa) + 3, auto: true });
   const nuc = lights.filter((l) => l.key === 'nuc'); if (nuc.length === 1) lights.push({ key: 'nuc', x: nuc[0].x, y: nuc[0].y, z: nuc[0].z - 2 });
+  // chỗ treo cờ: xà cao nhất trên cột cao nhất; cột không có xà thì treo sát đỉnh cột
+  let flag; const mast = P.filter((q) => q.role === 'mast' && q.vk === 'side').sort((a, b) => b.bb[3] - a.bb[3])[0];
+  if (mast) {
+    const zt = mast.bb[3]; let xt = (mast.bb[0] + mast.bb[2]) / 2;
+    if (!mast.closed || mast.pts.length < 3) xt = mast.pts.reduce((a, p) => (p[1] > a[1] ? p : a))[0];
+    else { const r = atV(mast.pts, zt - Math.min(0.3, (zt - mast.bb[1]) * 0.05)); if (r) xt = (r[0] + r[1]) / 2; }
+    const yd = P.filter((q) => q.role === 'yard' && q.vk === 'side' && q.bb[2] >= mast.bb[0] - 1.5 && q.bb[0] <= mast.bb[2] + 1.5 && (q.bb[1] + q.bb[3]) / 2 > mast.bb[1]).sort((a, b) => b.bb[3] - a.bb[3])[0];
+    if (yd) { const nm = yd.p.num || {}, top = match(yd, 'top'), w = nm.w > 0 ? nm.w : top ? top.bb[3] - top.bb[1] : 0.45 * 2 * hbAt(xt); flag = { x: xt, z: (yd.bb[1] + yd.bb[3]) / 2 - 0.05, span: Math.max(0.4, w / 2 * 0.85) }; }
+    else flag = { x: xt, z: zt - 0.5, span: 0.45 };
+  } else { const m1 = lights.find((l) => l.key === 'mast1'); flag = { x: m1.x, z: m1.z - 1, span: 0.45, auto: true }; }
   for (const a of Object.values(accs)) if (a.idx.length) items.push(a);
-  return { items, lights, eye, hull: H, areas: areas(items, ship.T), warn, dims: { L: H.L, B: 2 * Math.max(...Array.from({ length: 41 }, (_, i) => H.hb(H.xa + H.L * i / 40))), xa: H.xa, xf: H.xf, fb: deckZ(0) - ship.T, T: ship.T } };
+  return { items, lights, eye, flag, hull: H, areas: areas(items, ship.T), warn, dims: { L: H.L, B: 2 * Math.max(...Array.from({ length: 41 }, (_, i) => H.hb(H.xa + H.L * i / 40))), xa: H.xa, xf: H.xf, fb: deckZ(0) - ship.T, T: ship.T } };
 }
 
 // diện tích hứng gió (phần trên đường nước): chiếu các tam giác lên mặt mạn (x, z) và mặt trước (y, z), đếm ô lưới

@@ -5,12 +5,13 @@ import { fmtLL } from './kap.js';
 import { fmtDist, legsLL, fmtLat, fmtLon, parseCoord, parseLatLon, pad3 as p3 } from './nav.js';
 import { ChartCanvas } from './render/chartcanvas.js';
 import { CS, toLL, toWorld, ensureAround, DEF_CLASS_DEPTH } from './chartsys.js';
-import { migrateLegacy } from './places.js';
+import { migrateLegacy, placesFile, mergePlacesFile } from './places.js';
 import { openPdfChart, pdfTest } from './ui_pdfchart.js';
 export { pdfTest };
 import { llToMerc } from './geo/proj.js';
 import { inside } from './geo/poly.js';
 import { DATUMS } from './geo/datum.js';
+import { FLAG_MODES } from './flags.js';
 import { defaultEnv, tideAt, envWaveL } from './world.js';
 import { QUALITY } from './view3d.js';
 import { openWindage } from './windage.js';
@@ -35,7 +36,8 @@ export function initShip() {
   <div><button class="btn" id="shipReset">Về tàu mẫu</button> <button class="btn" id="shipExport">Lưu ra file</button> <label class="btn" style="display:inline-flex;align-items:center">Mở từ file<input type="file" id="shipImport" accept=".json" hidden></label></div></div>
   <div id="shipCalc" class="note" style="margin-bottom:12px"></div>
   <div class="flex"><div class="col" style="flex:1 1 560px">${SHIP.map((g) => `<section class="card"><h2>${g[0]}</h2><div class="grid ${g[1]}">${g[2].map((f) => Array.isArray(f[2]) ? sel(f[0], f[1], f[2], p[f[0]]) : fld(f[0], f[1], f[2], p[f[0]], f[3] ? 'data-t="1"' : 'inputmode="decimal"')).join('')}</div></section>`).join('')}</div>
-  <div class="col" style="flex:1 1 420px"><section class="card"><h2>Mô hình 3D tàu</h2><div class="muted" id="mdlInfo" style="margin-bottom:8px">${p.model && p.model.parts && p.model.parts.length ? 'Đang dùng mô hình vẽ từ sơ đồ: ' + p.model.parts.length + ' chi tiết trên ' + p.model.views.length + ' hình chiếu. Buồng lái, đèn hành trình theo mô hình.' : 'Đang dùng tàu đơn giản. Vẽ lại tàu theo sơ đồ (ảnh / PDF, 1–3 hình chiếu) để cảnh nhìn từ buồng lái, đèn và diện tích hứng gió giống tàu thật.'}</div><div class="flex" style="gap:8px"><button class="btn sm pri" id="mdlBtn">Vẽ tàu từ sơ đồ…</button>${p.model ? '<button class="btn sm" id="mdlOff">Bỏ mô hình (dùng tàu đơn giản)</button>' : ''}</div></section>
+  <div class="col" style="flex:1 1 420px"><section class="card"><h2>Mô hình 3D tàu</h2><div class="muted" id="mdlInfo" style="margin-bottom:8px">${p.model && p.model.parts && p.model.parts.length ? 'Đang dùng mô hình vẽ từ sơ đồ: ' + p.model.parts.length + ' chi tiết trên ' + p.model.views.length + ' hình chiếu. Buồng lái, đèn hành trình theo mô hình.' : 'Đang dùng tàu đơn giản. Vẽ lại tàu theo sơ đồ (ảnh / PDF, 1–3 hình chiếu) để cảnh nhìn từ buồng lái, đèn và diện tích hứng gió giống tàu thật.'}</div><div class="flex" style="gap:8px"><button class="btn sm pri" id="mdlBtn">Vẽ tàu từ sơ đồ…</button>${p.model ? '<button class="btn sm" id="mdlOff">Bỏ mô hình (dùng tàu đơn giản)</button>' : ''}</div>
+  <div style="margin-top:10px">${sel('flags', 'Cờ trên cột cao nhất', FLAG_MODES, p.flags || 'hq')}</div><div class="muted" style="margin-top:4px">Cờ Tổ quốc treo mạn phải, cờ Hải quân mạn trái thấp hơn 20 cm (nhìn từ lái lên mũi); treo ở đầu xà của cột cao nhất, bay theo gió biểu kiến.</div></section>
   <section class="card"><h2>Bảng nấc máy (tay chuông)</h2><div class="muted" style="margin-bottom:6px">Mỗi dòng là một nút trên tay chuông. Tàu nhiều máy: bảng áp dụng cho từng máy. Tốc độ lùi để trống — app tự tính.</div>
   <table><thead><tr><th>Nấc</th><th>Vòng quay (v/ph)</th><th>Tốc độ có hàng (hl/h)</th><th>Tốc độ ballast (hl/h)</th></tr></thead><tbody>${p.steps.map((s, i) => `<tr><th>${s.label}</th><td><input class="cell mono" data-s="${i}" data-c="rpm" value="${s.rpm}" aria-label="Vòng quay ${s.label}"></td><td>${s.id[0] === 'f' ? `<input class="cell mono" data-s="${i}" data-c="kn" value="${s.kn}" aria-label="Tốc độ có hàng ${s.label}">` : '—'}</td><td>${s.id[0] === 'f' ? `<input class="cell mono" data-s="${i}" data-c="knB" value="${s.knB}" aria-label="Tốc độ ballast ${s.label}">` : '—'}</td></tr>`).join('')}</tbody></table></section>
   <section class="card"><h2>Hiệu ứng tính thêm</h2>${FX.map((f) => `<label style="display:flex;gap:8px;align-items:center;padding:4px 0"><input type="checkbox" data-fx="${f[0]}" ${p.fx[f[0]] ? 'checked' : ''} style="width:17px;height:17px"> ${f[1]}</label>`).join('')}
@@ -142,13 +144,13 @@ function drawStatus() {
   else { cls = 'note ok'; t = 'Ngoài vùng hải đồ (biển trống, sâu 30 m) · ' + n + ' tờ trong kho'; }
   if (st._t !== t) { st._t = t; st.textContent = t; } if (st.className !== cls) st.className = cls;
 }
-const KIND = [['light', 'Đèn trên bờ / đảo'], ['buoyR', 'Phao trái luồng (đỏ)'], ['buoyG', 'Phao phải luồng (xanh)'], ['buoyY', 'Phao khác (vàng)']];
+const KIND = [['light', 'Đèn trên bờ / đảo'], ['beaconR', 'Tiêu trái luồng (đỏ)'], ['beaconG', 'Tiêu phải luồng (xanh)'], ['buoyR', 'Phao trái luồng (đỏ)'], ['buoyG', 'Phao phải luồng (xanh)'], ['buoyY', 'Phao khác (vàng)']];
 function drawSide() {
   const el = $('#chartSide'), W = A.W; if (!el) return;
   let h = '';
   if (selObj && selObj.t === 'light') {
     const o = selObj.o;
-    h += `<section class="card"><h2>Đang chọn: đèn / phao</h2><div class="grid g2">${fld('o_name', 'Tên / số hiệu', '', o.name || '', 'data-t="1"')}${sel('o_kind', 'Loại', KIND, o.kind)}${sel('o_color', 'Màu đèn', [['W', 'Trắng'], ['R', 'Đỏ'], ['G', 'Xanh lục'], ['Y', 'Vàng']], o.color)}${fld('o_period', 'Chu kỳ chớp', 's', o.period)}${fld('o_flash', 'Thời gian sáng', 's', o.flash)}${fld('o_height', 'Độ cao đèn', 'm', o.height)}</div><button class="btn warn sm" id="oDel" style="margin-top:8px">Xóa</button></section>`;
+    h += `<section class="card"><h2>Đang chọn: đèn / phao</h2><div class="grid g2">${fld('o_name', 'Tên / số hiệu', '', o.name || '', 'data-t="1"')}${sel('o_kind', 'Loại', KIND, o.kind)}${sel('o_color', 'Màu đèn', [['W', 'Trắng'], ['R', 'Đỏ'], ['G', 'Xanh lục'], ['Y', 'Vàng']], o.color)}${fld('o_period', 'Chu kỳ', 's', o.period)}${fld('o_flash', 'Thời gian sáng', 's', o.flash)}${fld('o_grp', 'Số chớp mỗi chu kỳ', '', o.grp || 1)}${fld('o_height', 'Độ cao đèn', 'm', o.height)}</div><div class="muted" style="margin-top:6px">Ví dụ Fl(4)15s: chu kỳ 15, sáng 0,5, 4 chớp. Fl.G 3s: chu kỳ 3, 1 chớp.</div><button class="btn warn sm" id="oDel" style="margin-top:8px">Xóa</button></section>`;
   } else if (selObj && selObj.t === 'berth') {
     const o = selObj.o;
     h += `<section class="card"><h2>Đang chọn: cầu bến</h2><div class="grid g2">${fld('o_name', 'Tên bến', '', o.name || '', 'data-t="1"')}${fld('o_depth', 'Độ sâu trước bến', 'm', o.depth)}${fld('o_top', 'Cao trình mặt cầu', 'm', o.top)}${fld('o_spacing', 'Khoảng cách bích', 'm', o.spacing)}</div><div class="muted" style="margin-top:6px">${o.pts.length - 1} đoạn · dài ${(o._len || 0).toFixed(0)} m · ${W.bollards.length} cọc bích trên toàn hải đồ.</div>${bolList(o)}<button class="btn warn sm" id="oDel" style="margin-top:8px">Xóa cầu bến</button></section>`;
@@ -169,7 +171,8 @@ function drawSide() {
     <div style="margin-top:8px">${sel('dsUser', 'Datum dùng cho tờ này', [['', 'Theo file (' + (r.datumSrc || 'không ghi') + ')'], ...Object.keys(DATUMS).map((k) => [k, DATUMS[k].name])], ds)}</div><div class="grid g2" style="margin-top:6px">${fld('offE', 'Dời tay về Đông', 'm', off[0])}${fld('offN', 'Dời tay về Bắc', 'm', off[1])}</div>
     <div class="muted" style="margin-top:6px">Bật «Lưới kinh vĩ» rồi so với lưới in trên tờ: lệch thì chọn lại datum hoặc dời tay (m). Ảnh không phải chia lại.</div></section>`;
   }
-  h += `<section class="card"><h2>Đối tượng đã đặt</h2><div class="muted" style="margin-bottom:4px">Lưu theo tọa độ WGS-84, dùng chung cho mọi tờ hải đồ.</div><div class="kv"><span>Đèn / phao</span><b>${W.objs.lights.length}</b></div><div class="kv"><span>Cầu bến · bích</span><b>${W.objs.berths.length} · ${W.bollards.length}</b></div><div class="kv"><span>Tuyến đi</span><b>${(W.objs.routes || []).length}</b></div><div class="kv"><span>Vị trí xuất phát</span><b>${W.start ? fmtLL(...toLL(sp.x, sp.y)) : 'chưa chọn'}</b></div></section>`;
+  h += `<section class="card"><h2>Đối tượng đã đặt</h2><div class="muted" style="margin-bottom:4px">Lưu theo tọa độ WGS-84, dùng chung cho mọi tờ hải đồ.</div><div class="kv"><span>Đèn / phao</span><b>${W.objs.lights.length}</b></div><div class="kv"><span>Cầu bến · bích</span><b>${W.objs.berths.length} · ${W.bollards.length}</b></div><div class="kv"><span>Tuyến đi</span><b>${(W.objs.routes || []).length}</b></div><div class="kv"><span>Vị trí xuất phát</span><b>${W.start ? fmtLL(...toLL(sp.x, sp.y)) : 'chưa chọn'}</b></div><div class="kv"><span>Vị trí xuất phát có sẵn</span><b>${(W.objs.starts || []).length}</b></div>
+  <div class="flex" style="gap:6px;margin-top:8px"><button class="btn sm" id="objExp">Lưu ra file…</button><label class="btn sm" style="display:inline-flex;align-items:center">Mở từ file…<input type="file" id="objImp" accept=".json" hidden></label></div><div class="muted" style="margin-top:4px">File gồm đèn, phao, tiêu, cầu bến, cọc bích, tuyến đi, vị trí xuất phát — chép sang máy khác rồi mở ở đây. Mở file sẽ gộp vào đối tượng đang có (trùng tên thì thay).</div></section>`;
   el.innerHTML = h;
 }
 const TOOLS = [['pan', 'Chọn / kéo'], ['light', 'Đèn / phao'], ['berth', 'Cầu bến'], ['bollard', 'Cọc bích'], ['route', 'Tuyến đi'], ['start', 'Vị trí xuất phát'], ['measure', 'Đo']];
@@ -184,15 +187,16 @@ export function initChart() {
   <div class="fld" style="margin-top:10px"><label for="libQ">Tìm theo tên / số hải đồ</label><div class="in"><input id="libQ" placeholder="vd: 25-181 hoặc Van Hoa" autocomplete="off"><button class="btn sm" id="libQx" style="border:0;background:transparent" aria-label="Xóa ô tìm">✕</button></div></div>
   <div class="fld" style="margin-top:6px"><label for="libLL">Tìm theo tọa độ (tờ có chứa điểm này)</label><div class="in"><input id="libLL" placeholder="vd: 21°05'N 107°28'E" autocomplete="off"><button class="btn sm" id="libLLx" style="border:0;background:transparent" aria-label="Xóa tọa độ">✕</button></div></div>
   <div class="muted" id="libInfo" style="margin-top:6px"></div><div class="lib" id="chartLib" style="margin-top:6px;max-height:330px;overflow:auto"></div><div class="muted" style="margin-top:4px">Bấm vào tên tờ để đưa khung nhìn tới tờ đó.</div></section></div>
-  <div class="col" style="flex:999 1 560px"><div id="chartStatus" class="note"></div><section class="card" style="padding:0;overflow:hidden"><div class="tool" style="padding:8px 8px 4px;background:#0E161C;border-bottom:1px solid #22303A;display:flex;flex-wrap:wrap;align-items:center"><span id="toolBtns"></span><span style="flex:1"></span><button class="btn sm" id="gratBtn" title="Lưới kinh vĩ độ tính từ tọa độ — so với lưới in trên hải đồ để kiểm tra">Lưới kinh vĩ</button><button class="btn sm" id="outBtn" title="Viền và tên các tờ đang hiện">Viền tờ</button><button class="btn sm" id="fitBtn">Xem toàn bộ</button></div><div style="position:relative"><canvas id="chartCv"></canvas></div><div class="muted mono" id="chartPos" style="padding:6px 10px;background:#0E161C">—</div></section></div>
+  <div class="col" style="flex:999 1 560px"><div id="chartStatus" class="note"></div><section class="card" style="padding:0;overflow:hidden"><div class="tool" style="padding:8px 8px 4px;background:#0E161C;border-bottom:1px solid #22303A;display:flex;flex-wrap:wrap;align-items:center"><span id="toolBtns"></span><span style="flex:1"></span><button class="btn sm" id="gratBtn" title="Lưới kinh vĩ độ tính từ tọa độ — so với lưới in trên hải đồ để kiểm tra">Lưới kinh vĩ</button><button class="btn sm" id="outBtn" title="Viền và tên các tờ đang hiện">Viền tờ</button><button class="btn sm" id="fitBtn">Xem toàn bộ</button></div><div style="position:relative"><canvas id="chartCv"></canvas><button class="shipBtn" id="chartHome" aria-label="Về vị trí tàu" title="Về vị trí tàu (hoặc vị trí xuất phát nếu chưa chạy bài)"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M12 2.5 L16.2 9 L16.2 20.5 L7.8 20.5 L7.8 9 Z" fill="currentColor" fill-opacity=".25" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><circle cx="12" cy="13" r="1.8" fill="currentColor"/></svg></button></div><div class="muted mono" id="chartPos" style="padding:6px 10px;background:#0E161C">—</div></section></div>
   <div class="col" style="flex:1 1 280px;max-width:340px"><div class="note" id="chartHint"></div><div class="col" id="chartSide"></div></div></div>`;
   cv = new ChartCanvas($('#chartCv'));
-  cv.redraw = () => { if (!cv.inited) { if (!cv.size()[0]) return; initialView(); cv.inited = true; } const old = cv.ref; cv.draw(); drawOverlay(cv); drawStatus(); if (old !== cv.ref) { drawSide(); drawLib(); } viewDepth(); };
+  cv.redraw = () => { if (!cv.inited) { if (!cv.size()[0]) return; initialView(); cv.inited = true; } const old = cv.ref; cv.draw(); drawOverlay(cv); drawStatus(); homeBtn(); if (old !== cv.ref) { drawSide(); drawLib(); } viewDepth(); };
   const tb = () => { $('#toolBtns').innerHTML = TOOLS.map((t) => `<button class="btn sm ${tool === t[0] ? 'pri' : ''}" data-tool="${t[0]}">${t[1]}</button>`).join(''); $('#chartHint').textContent = HINT[tool]; $('#gratBtn').classList.toggle('on', cv.opt.graticule); $('#outBtn').classList.toggle('on', cv.opt.outlines); };
   tb();
   $('#toolBtns').onclick = (e) => { const t = e.target.dataset.tool; if (t) { tool = t; draft = null; meas = null; tb(); drawChart(); drawSide(); } };
   $('#gratBtn').onclick = () => { cv.opt.graticule = !cv.opt.graticule; tb(); drawChart(); };
   $('#outBtn').onclick = () => { cv.opt.outlines = !cv.opt.outlines; tb(); drawChart(); };
+  $('#chartHome').onclick = () => { const q = shipHere(); cv.centerM(q.x, q.y); if (cv.mPerPx() > 12) cv.setMpp(6); drawChart(); };
   $('#fitBtn').onclick = () => { if (A.W.hasCharts()) fitAll(); else { cv.centerM(startPos().x, startPos().y); cv.setMpp(20); } drawChart(); };
   const added = (n) => { if (!n) alert('Không thấy file .kap nào.'); };
   $('#dirIn').onchange = async (e) => { const f = Array.from(e.target.files); e.target.value = ''; added(await addChartFiles(f)); };
@@ -248,7 +252,7 @@ export function initChart() {
     if ((k === 'dsUser' || k === 'offE' || k === 'offN') && cr) { const off = (cr.offsetM || [0, 0]).slice(); if (k === 'offE') off[0] = num(v, 0); if (k === 'offN') off[1] = num(v, 0); const ch = { offsetM: off }; if (k === 'dsUser') ch.datumUser = v || undefined; CS.catalog.update(cr, ch).then(() => { drawChart(); drawSide(); drawLib(); if (A.hooks.depthChanged) A.hooks.depthChanged(); }); return; }
     if (!selObj) return; const key = k.slice(2);
     selObj.o[key] = e.target.dataset.t || e.target.tagName === 'SELECT' ? v : num(v, 0);
-    if (key === 'kind') selObj.o.color = v === 'buoyR' ? 'R' : v === 'buoyG' ? 'G' : v === 'buoyY' ? 'Y' : selObj.o.color;
+    if (key === 'kind') selObj.o.color = /R$/.test(v) ? 'R' : /G$/.test(v) ? 'G' : v === 'buoyY' ? 'Y' : selObj.o.color;
     objsChanged();
   });
   $('#chartSide').addEventListener('click', (e) => {
@@ -264,6 +268,14 @@ export function initChart() {
       let rr = r; if (!rr) { o.routes = o.routes || []; o.routes.push({ name: 'Tuyến ' + (o.routes.length + 1), pts: [] }); o.routeSel = o.routes.length - 1; rr = selRoute(); }
       rr.pts.push(toWorld(la, lo)); objsChanged(); return;
     }
+  });
+  $('#chartSide').addEventListener('click', (e) => {
+    if (e.target.id === 'objExp') { const a = document.createElement('a'), d = new Date(); a.href = URL.createObjectURL(new Blob([JSON.stringify(placesFile(A.W), null, 1)], { type: 'application/json' })); a.download = 'doi-tuong-hai-do-' + d.getFullYear() + String(d.getMonth() + 1).padStart(2, '0') + String(d.getDate()).padStart(2, '0') + '.json'; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 3000); }
+  });
+  $('#chartSide').addEventListener('change', async (e) => {
+    if (e.target.id !== 'objImp' || !e.target.files.length) return; const f = e.target.files[0]; e.target.value = '';
+    try { const n = mergePlacesFile(A.W, JSON.parse(await f.text())); selObj = null; objsChanged(); alert(`Đã mở ${f.name}: ${n.lights} đèn / phao / tiêu, ${n.berths} cầu bến, ${n.routes} tuyến đi, ${n.starts} vị trí xuất phát có sẵn.`); }
+    catch (err) { alert('Không mở được file: ' + err.message); }
   });
   $('#chartSide').addEventListener('click', (e) => { if (e.target.id === 'oDel' && selObj) { const arr = selObj.t === 'light' ? A.W.objs.lights : selObj.t === 'berth' ? A.W.objs.berths : A.W.objs.sounds; arr.splice(arr.indexOf(selObj.o), 1); selObj = null; objsChanged(); } });
   drawLib(); drawSide(); drawStatus();
@@ -325,7 +337,7 @@ export function drawOverlay(v, opt) {
   if (v.mPerPx() < 3 || bt) { g.fillStyle = '#3A2A00'; g.strokeStyle = '#fff'; g.lineWidth = 1; g.font = 'bold 10px Segoe UI'; for (const b of W.bollards) { const s = v.m2s(b.x, b.y); g.fillStyle = '#3A2A00'; g.beginPath(); g.arc(s[0], s[1], bt ? 4.5 : 3, 0, 7); g.fill(); g.stroke(); if ((bt && v.mPerPx() < 1.6) || v.mPerPx() < 0.8) { g.fillStyle = '#3A2A00'; g.fillText('B' + b.n, s[0] + 6, s[1] - 5); } } }
   if (!opt) for (const b of W.objs.berths) if (bt || (selObj && selObj.o === b)) { const s = v.m2s(b.pts[0][0], b.pts[0][1]); g.fillStyle = '#E65100'; g.font = 'bold 11px Segoe UI'; g.beginPath(); g.arc(s[0], s[1], 4, 0, 7); g.fill(); g.fillText('Đầu bến', s[0] + 6, s[1] + 14); }
   const LC = { W: '#ffffff', R: '#e53935', G: '#2e9e55', Y: '#ffd600' };
-  for (const o of W.objs.lights) { const s = v.m2s(o.x, o.y); g.fillStyle = LC[o.color] || '#fff'; g.strokeStyle = '#111'; g.lineWidth = 2; g.beginPath(); if (o.kind === 'light') { g.arc(s[0], s[1], 6, 0, 7); } else { g.rect(s[0] - 5, s[1] - 5, 10, 10); } g.fill(); g.stroke(); if (!opt && selObj && selObj.o === o) { g.strokeStyle = '#00B8D4'; g.setLineDash([4, 3]); g.beginPath(); g.arc(s[0], s[1], 13, 0, 7); g.stroke(); g.setLineDash([]); } if (!opt || v.mPerPx() < 6) { g.font = '11px Segoe UI'; g.fillStyle = '#111'; g.fillText(o.name || '', s[0] + 9, s[1] - 7); } }
+  for (const o of W.objs.lights) { const s = v.m2s(o.x, o.y); g.fillStyle = LC[o.color] || '#fff'; g.strokeStyle = '#111'; g.lineWidth = 2; g.beginPath(); if (o.kind === 'light') { g.arc(s[0], s[1], 6, 0, 7); } else if (/^beacon/.test(o.kind)) { g.moveTo(s[0], s[1] - 7); g.lineTo(s[0] + 6, s[1] + 5); g.lineTo(s[0] - 6, s[1] + 5); g.closePath(); } else { g.rect(s[0] - 5, s[1] - 5, 10, 10); } g.fill(); g.stroke(); if (!opt && selObj && selObj.o === o) { g.strokeStyle = '#00B8D4'; g.setLineDash([4, 3]); g.beginPath(); g.arc(s[0], s[1], 13, 0, 7); g.stroke(); g.setLineDash([]); } if (!opt || v.mPerPx() < 6) { g.font = '11px Segoe UI'; g.fillStyle = '#111'; g.fillText(o.name || '', s[0] + 9, s[1] - 7); } }
   if (!opt && W.objs.routes) {
     W.objs.routes.forEach((r, ri) => {
       const on = ri === W.objs.routeSel; if (!r.pts.length) return;
@@ -343,6 +355,10 @@ export function drawOverlay(v, opt) {
 }
 // vẽ lại ở khung hình kế tiếp (vòng lặp chính gọi cv.redraw khi cv.dirty)
 export function drawChart() { if (cv) cv.dirty = true; }
+// vị trí tàu cho nút «Về tàu»: đang có bài thì lấy tàu, không thì vị trí xuất phát
+function shipHere() { return A.sim && A.sim.S ? { x: A.sim.S.x, y: A.sim.S.y } : startPos(); }
+// nút sáng màu cam khi tàu đã ra ngoài khung nhìn (giống hải đồ nhỏ tab 3)
+function homeBtn() { const b = $('#chartHome'); if (!b) return; const q = shipHere(), s = cv.m2s(q.x, q.y), [w, h] = cv.size(); b.classList.toggle('off', !(s[0] > 0 && s[1] > 0 && s[0] < w && s[1] < h)); }
 
 // ---------------- Tab 4: môi trường & kịch bản ----------------
 export function initEnv() {
@@ -352,6 +368,8 @@ export function initEnv() {
   <section class="card" style="flex:1 1 280px;max-width:340px"><h2>Kịch bản bài tập</h2><div class="col" style="gap:8px">${fld('name', 'Tên bài tập', '', e.name, 'data-t="1"')}${fld('startTime', 'Giờ bắt đầu (giờ:phút)', '', e.startTime, 'data-t="1"')}
   <div class="fld"><span class="lbl">Vị trí xuất phát</span><div class="mono" style="padding:7px 8px;border:1px solid #33444F;border-radius:6px;background:#0D151A">${W.start ? fmtLL(...toLL(sp.x, sp.y)) + (W.chartAt(sp.x, sp.y) ? '' : ' (ngoài vùng hải đồ)') : W.hasCharts() ? 'Chưa chọn' : 'Biển trống (chưa nạp hải đồ)'}</div></div>
   <button class="btn sm" id="pickStart">Chọn vị trí trên hải đồ (tab 2)</button>
+  ${(W.objs.starts || []).length ? sel('startPre', 'Vị trí có sẵn', [['', '— chọn để dùng —'], ...W.objs.starts.map((q, i) => [String(i), q.name])], '') : ''}
+  <div class="flex" style="gap:6px;align-items:flex-end">${fld('startName', 'Lưu vị trí đang chọn với tên', '', '', 'data-t="1" placeholder="vd. Ngoài phao số 0"')}<button class="btn sm" id="saveStart" ${W.start ? '' : 'disabled'}>Lưu</button></div>
   ${fld('startHdg', 'Hướng ban đầu', '°', num(sp.hdg, 0))}${fld('startKn', 'Tốc độ ban đầu', 'hl/h', e.startKn)}${sel('startStep', 'Máy ban đầu', stepsO, e.startStep)}
   <button class="btn pri" id="goBtn" style="min-height:42px">Bắt đầu bài tập →</button><div class="muted">Bắt đầu bài mới sẽ lưu bài đang chạy vào tab Xem lại.</div></div></section>
   <section class="card" style="flex:999 1 520px"><h2>Thủy triều — độ cao từng giờ (m, so với số 0 hải đồ)</h2>
@@ -360,7 +378,10 @@ export function initEnv() {
   <canvas id="tideCv" style="width:100%;height:170px;margin-top:10px;display:block"></canvas>
   <div class="muted" style="margin-top:6px">Bản đầu: nhập số bằng tay (gõ hoặc dán). Tự đọc bảng thủy triều từ ảnh / PDF sẽ có ở bản sau.</div></section>
   <div class="col" style="flex:1 1 280px;max-width:340px"><section class="card"><h2>Thời tiết</h2><div class="seg" id="wxSeg" style="display:flex">${[['manual', 'Tự chỉnh'], ['random', 'Ngẫu nhiên']].map((o) => `<button data-wx="${o[0]}" class="${(e.wxMode || 'manual') === o[0] ? 'on' : ''}" style="flex:1">${o[1]}</button>`).join('')}</div>
-  ${rnd ? `<div style="margin-top:8px">${sel('wxStart', 'Bắt đầu với', [['', 'Tùy app'], ['nang', 'Nắng'], ['may', 'Nhiều mây'], ['mua', 'Mưa'], ['giong', 'Mưa giông'], ['suong', 'Sương mù']], e.wxStart || '')}</div><div class="muted" style="margin-top:6px">App tự đổi gió, sóng, mưa, tầm nhìn trong lúc chạy bài: nắng có thể chuyển mây, mưa, giông bão; sáng sớm hay có sương mù, chiều hay có giông. Ngày / đêm vẫn theo đúng giờ. Thời tiết đang có hiện ở tab 3.</div>` : '<div class="muted" style="margin-top:6px">Tự nhập gió, sóng, tầm nhìn ở dưới. Chọn «Ngẫu nhiên» để app tự lo thời tiết, đổi dần theo thời gian chạy bài.</div>'}</section>
+  ${rnd ? `<div style="margin-top:8px">${sel('wxStart', 'Bắt đầu với', [['', 'Tùy app'], ['nang', 'Nắng'], ['may', 'Nhiều mây'], ['mua', 'Mưa'], ['giong', 'Mưa giông'], ['suong', 'Sương mù']], e.wxStart || '')}</div><div class="muted" style="margin-top:6px">App tự đổi gió, sóng, mưa, tầm nhìn trong lúc chạy bài: nắng có thể chuyển mây, mưa, giông bão; sáng sớm hay có sương mù, chiều hay có giông. Ngày / đêm vẫn theo đúng giờ. Thời tiết đang có hiện ở tab 3.</div>` : '<div class="muted" style="margin-top:6px">Tự nhập gió, sóng, tầm nhìn ở dưới. Chọn «Ngẫu nhiên» để app tự lo thời tiết, đổi dần theo thời gian chạy bài.</div>'}
+  <div class="lbl" style="margin-top:10px">Ánh sáng</div><div class="seg" id="lightSeg" style="display:flex;margin-top:4px">${[['auto', 'Theo giờ'], ['day', 'Ngày'], ['dusk', 'Hoàng hôn'], ['night', 'Đêm']].map((o) => `<button data-light="${o[0]}" class="${(e.light || 'auto') === o[0] ? 'on' : ''}" style="flex:1">${o[1]}</button>`).join('')}</div>
+  <button class="btn sm ${e.fogOn ? 'on' : ''}" id="fogBtn" style="width:100%;margin-top:8px">Sương mù dày (tầm nhìn 0,3 Hl): ${e.fogOn ? 'ĐANG BẬT' : 'tắt'}</button>
+  <div class="muted" style="margin-top:6px">«Theo giờ»: sáng tối theo đồng hồ bài tập. Chọn Ngày / Hoàng hôn / Đêm để xem thử nhanh, không đổi giờ. Hai nút này áp dụng ngay cả khi đang chạy bài.</div></section>
   <fieldset ${rnd ? 'disabled' : ''} style="${FS}${rnd ? 'opacity:.45' : ''}"><section class="card"><h2>Gió</h2><div class="grid g3">${fld('windDir', 'Hướng (từ)', '°', e.windDir)}${fld('windKn', 'Tốc độ', 'hl/h', e.windKn)}${fld('gustKn', 'Giật', 'hl/h', e.gustKn)}</div><label style="display:flex;gap:8px;align-items:center;margin-top:8px"><input type="checkbox" id="windVary" ${e.windVary ? 'checked' : ''} style="width:17px;height:17px"> Gió giật và đổi hướng nhẹ theo thời gian</label></section>
   </fieldset>
   <section class="card"><h2>Dòng chảy (theo con nước)</h2><div class="grid g2">${fld('floodDir', 'Triều lên: chảy về', '°', e.floodDir)}${fld('floodKn', 'Mạnh nhất', 'hl/h', e.floodKn)}${fld('ebbDir', 'Triều rút: chảy về', '°', e.ebbDir)}${fld('ebbKn', 'Mạnh nhất', 'hl/h', e.ebbKn)}</div><div class="muted" style="margin-top:6px">Tốc độ dòng tự đổi theo bảng triều: mạnh nhất giữa con nước, bằng 0 lúc nước đứng. Bản đầu dùng chung một dòng chảy cho cả vùng.</div></section>
@@ -372,6 +393,8 @@ export function initEnv() {
     if (t.id === 'windVary') { e.windVary = t.checked; saveEnv(); return; }
     if (!k || ['hwT', 'hwH', 'lwT', 'lwH'].includes(k)) return;
     if (k === 'wxStart') { e.wxStart = t.value; saveEnv(); wxApply(); return; }
+    if (k === 'startName') return;
+    if (k === 'startPre') { const q = (W.objs.starts || [])[+t.value]; if (!q || t.value === '') return; W.start = { x: q.x, y: q.y, hdg: q.hdg || 0 }; saveObjs(); if (A.sim && A.sim.t < 2 && A.hooks.resetToStart) A.hooks.resetToStart(false); initEnv(); return; }
     if (k === 'waveL') { e.waveL = Math.max(5, Math.min(600, num(t.value, envWaveL(e)))); saveEnv(); initEnv(); return; }
     if (k === 'startHdg') { A.W.start = Object.assign({}, startPos(), { hdg: ((num(t.value, 0) % 360) + 360) % 360 }); saveObjs(); if (A.sim && A.sim.t < 2 && A.hooks.resetToStart) A.hooks.resetToStart(false); return; }
     e[k] = t.dataset.t || t.tagName === 'SELECT' ? t.value : num(t.value, e[k]); saveEnv();
@@ -379,6 +402,8 @@ export function initEnv() {
   // đổi chế độ thời tiết: bài chưa chạy thì làm lại bài ngay, đang chạy thì áp dụng khi bắt đầu bài mới
   const wxApply = () => { if (A.sim && A.sim.t < 2 && A.hooks.resetToStart) A.hooks.resetToStart(false); };
   $('#wxSeg').onclick = (ev) => { const m = ev.target.dataset.wx; if (!m || m === e.wxMode) return; e.wxMode = m; saveEnv(); initEnv(); wxApply(); };
+  $('#lightSeg').onclick = (ev) => { const m = ev.target.dataset.light; if (!m) return; e.light = m; saveEnv(); initEnv(); };
+  $('#fogBtn').onclick = () => { e.fogOn = !e.fogOn; saveEnv(); initEnv(); };
   $('#tideGen').onclick = () => {
     const g = (k) => num($('#f_' + k).value, 0), hwT = g('hwT'), hwH = g('hwH'), lwT = g('lwT'), lwH = g('lwH');
     for (let h = 0; h < 24; h++) {
@@ -388,6 +413,7 @@ export function initEnv() {
     }
     saveEnv(); initEnv();
   };
+  $('#saveStart').onclick = () => { const nm = $('#f_startName').value.trim(); if (!nm || !W.start) { $('#f_startName').focus(); return; } const st = W.objs.starts || (W.objs.starts = []), q = { name: nm, x: W.start.x, y: W.start.y, hdg: W.start.hdg || 0 }, i = st.findIndex((o) => o.name === nm); if (i >= 0) st[i] = q; else st.push(q); saveObjs(); initEnv(); };
   $('#pickStart').onclick = () => { tool = 'start'; A.hooks.go('chart'); $$('#toolBtns button').forEach((b) => b.classList.toggle('pri', b.dataset.tool === 'start')); $('#chartHint').textContent = HINT.start; };
   $('#goBtn').onclick = () => A.hooks.startScenario();
   drawTide();

@@ -4,6 +4,7 @@ import { sampleWorld, DEF_CLASS_DEPTH } from './chartsys.js';
 import { body2w } from './world.js';
 import { buildModel } from './shipdraw/model.js';
 import { modelGroup } from './shipdraw/mesh3.js';
+import { makeFlags } from './flags.js';
 
 export const QUALITY = {
   // ter: [nửa vùng mịn (m), bước lưới vùng mịn (m), bước lưới xa nhất (m)]
@@ -138,9 +139,10 @@ export class View3D {
     const lp = (c, l, s) => { const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.glow, color: c, blending: THREE.AdditiveBlending, depthWrite: false, fog: false })); sp.position.set(l.y, l.z - T, -l.x); sp.scale.setScalar(s); sp.visible = false; g.add(sp); return sp; };
     const C = { sideP: COL.R, sideS: COL.G, nuc: COL.R, deck: 0xffe08a }, Z = { sideP: 4, sideS: 4, stern: 4, nuc: 4, deck: 9 };
     this.navL = {}; for (const l of geom.lights) (this.navL[l.key] || (this.navL[l.key] = [])).push(lp(C[l.key] || COL.W, l, Z[l.key] || 5));
+    const f = geom.flag; this.flags = makeFlags(g, M.p.flags || 'hq', geom.dims.L, f.x, f.z - T, f.span);
   }
   buildShip(M, anchors) {
-    const g = this.shipG; g.clear(); this.shipGeom = null;
+    const g = this.shipG; g.clear(); this.shipGeom = null; this.flags = null;
     if (M.p.model && M.p.model.parts && M.p.model.parts.length) { try { this.buildShipModel(M); return; } catch (e) { console.error('Không dựng được mô hình tàu', e); g.clear(); } }
     const L = M.loa, B = M.B, D = +M.p.D || M.d * 1.6, T = M.d, fb = D - T;
     const sh = new THREE.Shape(); const hb = B / 2, bow = L / 2, st = -L / 2;
@@ -159,6 +161,7 @@ export class View3D {
     const fmx = L * 0.3, fmh = Math.min(12, Math.max(8, B * 0.6)); const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.38, fmh, 8), new THREE.MeshLambertMaterial({ color: 0xc9d2d8 })); mast.position.set(0, fb + fmh / 2, -fmx); g.add(mast); // cột trước đứng trên boong chính, sau thượng tầng mũi
     const mast2 = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.3, 7, 6), new THREE.MeshLambertMaterial({ color: 0xc9d2d8 })); mast2.position.set(0, fb + shh + 3.5, -(sx + sl * 0.1)); g.add(mast2);
     this.dim = { L, B, fb, shh, bridgeX: sx + sl / 2 + 0.6, eye: fb + shh - 1.6 };
+    this.flags = makeFlags(g, M.p.flags || 'hq', L, sx + sl * 0.1, fb + shh + 6.4, 0.5);
     const lp = (c, x, y, z, s) => { const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.glow, color: c, blending: THREE.AdditiveBlending, depthWrite: false, fog: false })); sp.position.set(x, y, z); sp.scale.setScalar(s || 5); sp.visible = false; g.add(sp); return sp; };
     const bz = -(sx + sl * 0.3);
     this.navL = { mast1: [lp(COL.W, 0, fb + fmh + 0.3, -fmx)], mast2: [lp(COL.W, 0, fb + shh + 7, -(sx + sl * 0.1))], sideP: [lp(COL.R, -B * 0.52, fb + shh - 2, bz, 4)], sideS: [lp(COL.G, B * 0.52, fb + shh - 2, bz, 4)],
@@ -215,10 +218,15 @@ export class View3D {
     for (const o of W.objs.lights) {
       const c = COL[o.color] || COL.W, hgt = +o.height || (o.kind === 'light' ? 9 : 4);
       let base = 0;
-      if (o.kind === 'light') { base = Math.max(0, -W.depthAt(o.x, o.y)) + 1; const t = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.9, hgt, 8), new THREE.MeshLambertMaterial({ color: 0xf0f0f0 })); t.position.set(o.x, base + hgt / 2, -o.y); t.userData.fix = base + hgt / 2; g.add(t); }
+      if (/^beacon/.test(o.kind)) { // tiêu cố định trên cọc: thân sơn màu luồng, dấu đỉnh trụ (đỏ) / nón (xanh); chân đứng ở số 0 hải đồ
+        const bc = o.kind === 'beaconR' ? 0xd9362e : 0x2f9e55, M3 = new THREE.MeshLambertMaterial({ color: bc }), hb = hgt - 0.8;
+        const t = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.35, hb + 2, 8), M3); t.position.set(o.x, hb / 2 - 1, -o.y); t.userData.fix = hb / 2 - 1; g.add(t);
+        const tm = new THREE.Mesh(o.kind === 'beaconR' ? new THREE.CylinderGeometry(0.35, 0.35, 0.7, 10) : new THREE.ConeGeometry(0.45, 0.8, 10), M3); tm.position.set(o.x, hb + 0.4, -o.y); tm.userData.fix = hb + 0.4; g.add(tm);
+        base = 0;
+      } else if (o.kind === 'light') { base = Math.max(0, -W.depthAt(o.x, o.y)) + 1; const t = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.9, hgt, 8), new THREE.MeshLambertMaterial({ color: 0xf0f0f0 })); t.position.set(o.x, base + hgt / 2, -o.y); t.userData.fix = base + hgt / 2; g.add(t); }
       else { const bc = o.kind === 'buoyR' ? 0xd9362e : o.kind === 'buoyG' ? 0x2f9e55 : 0xe6c000; const t = new THREE.Mesh(o.kind === 'buoyG' ? new THREE.ConeGeometry(1.3, hgt, 10) : new THREE.CylinderGeometry(1.1, 1.3, hgt, 10), new THREE.MeshLambertMaterial({ color: bc })); t.position.set(o.x, hgt / 2 - 0.6, -o.y); t.userData.float = hgt / 2 - 0.6; g.add(t); }
       const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.glow, color: c, blending: THREE.AdditiveBlending, depthWrite: false, fog: false, sizeAttenuation: false }));
-      sp.position.set(o.x, base + hgt + 0.5, -o.y); sp.scale.setScalar(0.035); sp.userData = o.kind === 'light' ? { fix: base + hgt + 0.5 } : { float: hgt + 0.2 }; g.add(sp); this.marks.push({ sp, o });
+      sp.position.set(o.x, base + hgt + 0.5, -o.y); sp.scale.setScalar(0.035); sp.userData = o.kind === 'light' || /^beacon/.test(o.kind) ? { fix: base + hgt + 0.5 } : { float: hgt + 0.2 }; g.add(sp); this.marks.push({ sp, o });
     }
   }
   setSegs(list) {
@@ -238,7 +246,9 @@ export class View3D {
     const tz = (hb + hs + hp + hst + hc) / 5 * 0.85, tp = Math.atan2(hb - hs, d.L * 0.84) * 0.8, tr = Math.atan2(hst - hp, d.B) * 1.4;
     if (dt === 0 && Math.abs(mo.z - tz) > 3) { mo.z = tz; mo.p = tp; mo.r = tr; }
     const mk = Math.max(0.25, e.rollK || 1); mo.z += (tz - mo.z) * Math.min(1, dt * mk / 1.2); mo.p += (tp - mo.p) * Math.min(1, dt * mk / 1.5); mo.r += (tr - mo.r) * Math.min(1, dt * mk / 2.2);
-    this.shipG.position.set(st.x, mo.z, -st.y); this.shipG.rotation.set(mo.p, -st.psi, mo.r, 'YXZ'); this.shipG.updateMatrixWorld(true);
+    this.shipG.position.set(st.x, mo.z, -st.y); this.shipG.rotation.set(mo.p, -st.psi, mo.r, 'YXZ');
+    if (this.flags) { const to = e.awTo !== undefined ? e.awTo : ((e.wDir || 0) + 180) * Math.PI / 180; this.flags.update(e.t || 0, to - st.psi, e.awKn !== undefined ? e.awKn : e.wKn || 0); }
+    this.shipG.updateMatrixWorld(true);
     if (this.terrain) this.terrain.position.y = -e.tide;
     for (const o of this.objG.children) if (o.userData.fix !== undefined) o.position.y = o.userData.fix - e.tide;
     this.objG.position.y = 0;
@@ -257,9 +267,10 @@ export class View3D {
     const dark = day0 < 0.55; // đèn theo độ cao mặt trời, không theo mây
     for (const k in this.navL) for (const sp of this.navL[k]) sp.visible = !!(e.lights && e.lights[k]) && dark;
     for (const m of this.marks) {
-      const o = m.o, per = Math.max(0.5, +o.period || 3), on = Math.max(0.2, +o.flash || 0.5);
+      const o = m.o, per = Math.max(0.5, +o.period || 3), on = Math.max(0.2, +o.flash || 0.5), grp = Math.max(1, Math.round(+o.grp || 1)), gap = Math.max(on + 0.5, 1.5);
       if (m.sp.userData.fix !== undefined) m.sp.position.y = m.sp.userData.fix - e.tide;
-      m.sp.visible = dark && (((e.daySec + (o.x * 0.01)) % per) < on);
+      const ph = (e.daySec + (o.x * 0.01)) % per; // chớp nhóm: grp chớp cách nhau gap giây rồi tối tới hết chu kỳ
+      m.sp.visible = dark && ph < (grp - 1) * gap + on && (ph % gap) < on;
     }
     // camera
     const c = this.cam, sn = Math.sin(st.psi), cs = Math.cos(st.psi), lk = this.look;

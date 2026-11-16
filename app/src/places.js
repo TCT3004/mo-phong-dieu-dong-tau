@@ -1,4 +1,4 @@
-// Đối tượng người dùng đặt trên hải đồ (đèn / phao, cầu bến + cọc bích, tuyến đi, vị trí xuất phát).
+// Đối tượng người dùng đặt trên hải đồ (đèn / phao / tiêu, cầu bến + cọc bích, tuyến đi, vị trí xuất phát + các vị trí có sẵn).
 // Lưu một kho chung theo lat/lon WGS-84 (localStorage `mp_places`), không gắn với tờ hải đồ nào; trong bộ nhớ dùng mét thế giới.
 // Chuyển tự động dữ liệu v0.1 (`mp_objs:<tên tờ>`, mét cục bộ của tờ) sang lat/lon bằng georef của tờ trong kho.
 import { CS, toLL, toWorld } from './chartsys.js';
@@ -11,7 +11,7 @@ const clean = (o) => { const c = {}; for (const k in o) if (k[0] !== '_') c[k] =
 const r7 = (v) => Math.round(v * 1e7) / 1e7;
 
 export function loadPlaces() { return get(KEY, null); }
-export const emptyPlaces = () => ({ v: 2, lights: [], berths: [], routes: [], routeSel: -1, start: null });
+export const emptyPlaces = () => ({ v: 2, lights: [], berths: [], routes: [], routeSel: -1, start: null, starts: [] });
 
 // bộ nhớ (mét thế giới) → kho (lat/lon)
 export function worldToPlaces(W) {
@@ -22,6 +22,7 @@ export function worldToPlaces(W) {
     berths: o.berths.map((b) => Object.assign(clean(b), { pts: b.pts.map((q) => ll(q[0], q[1])) })),
     routes: (o.routes || []).map((r) => ({ name: r.name, pts: r.pts.map((q) => ll(q[0], q[1])) })),
     routeSel: o.routeSel === undefined ? -1 : o.routeSel,
+    starts: (o.starts || []).map((q) => { const p = ll(q.x, q.y); return { name: q.name, lat: p[0], lon: p[1], hdg: q.hdg || 0 }; }),
     start: W.start ? Object.assign(ll(W.start.x, W.start.y).reduce((a, v, i) => (a[i ? 'lon' : 'lat'] = v, a), {}), { hdg: W.start.hdg || 0 }) : null
   };
 }
@@ -32,13 +33,32 @@ export function placesToWorld(P, W) {
     lights: (P.lights || []).map((l) => { const c = Object.assign({}, l), p = toWorld(l.lat, l.lon); c.x = p[0]; c.y = p[1]; delete c.lat; delete c.lon; return c; }),
     berths: (P.berths || []).map((b) => Object.assign({}, b, { pts: b.pts.map(w) })),
     routes: (P.routes || []).map((r) => ({ name: r.name, pts: r.pts.map(w) })),
-    routeSel: P.routeSel === undefined ? -1 : P.routeSel
+    routeSel: P.routeSel === undefined ? -1 : P.routeSel,
+    starts: (P.starts || []).map((q) => { const p = toWorld(q.lat, q.lon); return { name: q.name, x: p[0], y: p[1], hdg: q.hdg || 0 }; })
   };
   if (W.objs.routeSel >= W.objs.routes.length) W.objs.routeSel = W.objs.routes.length - 1;
   W.start = P.start ? Object.assign({ hdg: P.start.hdg || 0 }, (([x, y]) => ({ x, y }))(toWorld(P.start.lat, P.start.lon))) : null;
   W.rebuild();
 }
 export function savePlaces(W) { put(KEY, worldToPlaces(W)); }
+
+// file đối tượng (.json) để chép sang máy khác: cùng dạng kho lat/lon
+export const PLACES_FILE = 'doi-tuong-hai-do';
+export function placesFile(W) { return Object.assign({ app: 'mo-phong-dieu-dong-tau', loai: PLACES_FILE }, worldToPlaces(W)); }
+// gộp file vào kho đang có: đối tượng trùng tên (đèn trùng tên và gần nhau < 50 m) thì thay bằng bản trong file
+export function mergePlacesFile(W, F) {
+  if (!F || F.loai !== PLACES_FILE) throw new Error('Không phải file đối tượng hải đồ của app');
+  const cur = worldToPlaces(W), n = { lights: 0, berths: 0, routes: 0, starts: 0 }, near = (a, b) => Math.abs(a.lat - b.lat) < 4.5e-4 && Math.abs(a.lon - b.lon) < 4.8e-4;
+  const put2 = (arr, list, same, k) => { for (const o of list || []) { const i = arr.findIndex((q) => same(q, o)); if (i >= 0) arr[i] = o; else arr.push(o); n[k]++; } };
+  put2(cur.lights, F.lights, (q, o) => q.name === o.name && near(q, o), 'lights');
+  put2(cur.berths, F.berths, (q, o) => q.name === o.name, 'berths');
+  put2(cur.routes, F.routes, (q, o) => q.name === o.name, 'routes');
+  put2(cur.starts, F.starts, (q, o) => q.name === o.name, 'starts');
+  if (!cur.start && F.start) cur.start = F.start;
+  if (cur.routeSel < 0 && cur.routes.length) cur.routeSel = 0;
+  placesToWorld(cur, W); savePlaces(W);
+  return n;
+}
 
 // chuyển dữ liệu v0.1: cần tờ hải đồ tương ứng đã có trong kho (để có georef)
 export function migrateLegacy() {

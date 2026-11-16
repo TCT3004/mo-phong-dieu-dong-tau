@@ -68,7 +68,7 @@ export function newSim() {
     helm: { mode: 'steady', ord: 0, target: Math.round(num(sp.hdg, 0)) % 360, steer: 'hand', my: 'Giữ hướng ' + pad3(num(sp.hdg, 0)) + '°', rep: 'Giữ hướng ' + pad3(num(sp.hdg, 0)) + ', rõ!' },
     anchors: makeAnchors(M), lines: makeLines(M), selLine: 'hl', lights, alarm: false, bellUntil: -1,
     log: [], rec: [], info: {}, wx, wxSeed, e: envAt(A.env, daySec0(), 0, wx), aground: false, bank: [1e4, 1e4], ukc: 99, h: 99, sq: 0, hC: 0,
-    lightMode: 'auto', fog: false, started: new Date().toISOString(), track: [], frame: { lat0: CS.frame.lat0, lon0: CS.frame.lon0 }
+    started: new Date().toISOString(), track: [], frame: { lat0: CS.frame.lat0, lon0: CS.frame.lon0 }
   };
   refreshDepth();
   logOrder('Bắt đầu bài tập', 'note');
@@ -129,7 +129,7 @@ export function helmCmd() {
 export function substep() {
   const s = A.sim, S = s.S, M = A.M, W = A.W;
   if (s.wx) s.wx.step(DT);
-  const e = s.e = envAt(A.env, s.day0 + s.t, s.t, s.wx); if (s.fog) e.vis = 550;
+  const e = s.e = envAt(A.env, s.day0 + s.t, s.t, s.wx); if (A.env.fogOn) e.vis = 550;
   const L = M.L, pts = [[0, 0], [0.45 * L, 0], [-0.45 * L, 0]];
   let hC = 1e9; for (const p of pts) { const [wx, wy] = body2w(S, p[0], p[1]); hC = Math.min(hC, W.depthAt(wx, wy)); }
   const h = hC + e.tide; s.hC = hC; s.h = h;
@@ -154,6 +154,13 @@ export function derived() {
   const sog = Math.hypot(gE, gN) / KN; let cog = Math.atan2(gE, gN) / D2R; if (cog < 0) cog += 360;
   const lat = gE * Math.cos(S.psi) - gN * Math.sin(S.psi);
   return { sog, cog, hdg: S.psi / D2R, drift: sog > 0.2 ? wrap180(cog - S.psi / D2R) : 0, rot: S.r / D2R * 60, stw: S.u / KN, bowLat: (lat + S.r * 0.45 * M.L) / KN, sternLat: (lat - S.r * 0.45 * M.L) / KN, gE, gN };
+}
+// gió biểu kiến trên tàu (cho cờ): hướng gió thổi tới (rad, từ Bắc theo chiều kim đồng hồ) và tốc độ (hl/h)
+export function appWind(e, S) {
+  const to = ((e.wDir || 0) + 180) * D2R, vt = (e.wKn || 0) * KN;
+  const gE = S.u * Math.sin(S.psi) + (S.v || 0) * Math.cos(S.psi) + (S.cE || 0), gN = S.u * Math.cos(S.psi) - (S.v || 0) * Math.sin(S.psi) + (S.cN || 0);
+  const ax = vt * Math.sin(to) - gE, ay = vt * Math.cos(to) - gN;
+  return { to: Math.atan2(ax, ay), kn: Math.hypot(ax, ay) / KN };
 }
 export function sunEl(daySec, mode) {
   if (mode === 'day') return 50; if (mode === 'dusk') return 3; if (mode === 'night') return -30;

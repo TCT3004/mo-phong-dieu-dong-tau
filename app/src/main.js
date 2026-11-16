@@ -1,4 +1,4 @@
-import { A, $, $$, clock, newSim, substep, DT, sunEl, saveSet, rebuildModel, loadObjs, checkOrigin, refreshDepth } from './app.js';
+import { A, $, $$, clock, newSim, substep, DT, sunEl, appWind, saveSet, rebuildModel, loadObjs, checkOrigin, refreshDepth } from './app.js';
 import { CS, ensureAround } from './chartsys.js';
 import { View3D } from './view3d.js';
 import { Sound } from './audio.js';
@@ -101,7 +101,8 @@ function frame(ts) {
     if (A.view) {
       const ds = s.day0 + s.t, e = s.e;
       A.view.setSegs(lineSegs3D());
-      A.view.update({ x: s.S.x, y: s.S.y, psi: s.S.psi }, runState.view, { sunEl: sunEl(ds, s.lightMode), sunAz: 2 * Math.PI * (ds / 86400), vis: s.fog ? 550 : e.vis, tide: e.tide, waveH: e.waveH, waveD: e.waveD, waveT: e.waveT, rain: e.rain, cloud: e.cloud, flash: e.flash, bolt: e.wx ? e.wx.bolt : null, wDir: e.wDir, wKn: e.wKn, rollK: A.set.rollSpeed, t: s.t, lights: s.lights, daySec: ds });
+      const aw = appWind(e, s.S);
+      A.view.update({ x: s.S.x, y: s.S.y, psi: s.S.psi }, runState.view, { awTo: aw.to, awKn: aw.kn, sunEl: sunEl(ds, A.env.light), sunAz: 2 * Math.PI * (ds / 86400), vis: e.vis, tide: e.tide, waveH: e.waveH, waveD: e.waveD, waveT: e.waveT, rain: e.rain, cloud: e.cloud, flash: e.flash, bolt: e.wx ? e.wx.bolt : null, wDir: e.wDir, wKn: e.wKn, rollK: A.set.rollSpeed, t: s.t, lights: s.lights, daySec: ds });
       A.view.render(runState.view === 'bridge' ? paneCvs() : null);
     }
     if (s.wx) for (const ev of s.wx.takeEvents()) A.snd.thunder(ev.dist, s.speed);
