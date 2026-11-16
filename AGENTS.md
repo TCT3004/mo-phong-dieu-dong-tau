@@ -81,7 +81,7 @@ Default section order:
 - Mô phỏng điều động tàu 3D cho **người điều động** (không phải người lái), offline, Windows
 - JavaScript ES modules + three.js + pdf.js, bundle bằng esbuild thành **1 file HTML**; Electron bọc thành `.exe` portable
 - Giai đoạn 1 xong (v0.1.0). Giai đoạn 2 xong (v0.2.0): hải đồ liền mạch kiểu OpenCPN (quilting), mét thế giới + gốc trôi, kho hải đồ KAP / PDF, độ sâu ghép nhiều tờ
-- Giai đoạn 3 đang làm: 0.3.0 nấc lái theo góc lái tối đa, thời tiết ngẫu nhiên; 0.3.1 vẽ tàu từ sơ đồ (dò viền + chấm tay, chọn chi tiết nhiều nấc, đo kích thước, tự suy hình chiếu thiếu); 0.3.2 cờ trên tàu, ánh sáng / sương mù sang tab 4, nút «Về tàu» tab 2, file đối tượng hải đồ + vị trí xuất phát có sẵn, dữ liệu cảng thật dựng từ hải đồ (giao riêng, không commit)
+- Giai đoạn 3 đang làm: 0.3.0 nấc lái theo góc lái tối đa, thời tiết ngẫu nhiên; 0.3.1 vẽ tàu từ sơ đồ (dò viền + chấm tay, chọn chi tiết nhiều nấc, đo kích thước, tự suy hình chiếu thiếu); 0.3.2 cờ trên tàu, ánh sáng / sương mù sang tab 4, nút «Về tàu» tab 2, file đối tượng hải đồ + vị trí xuất phát có sẵn, dữ liệu cảng thật dựng từ hải đồ (giao riêng, không commit); 0.3.3 tỷ số hộp số, câu nhắc số liệu tàu lạ, sửa quay trở ra NaN
 - Lộ trình: giai đoạn 4 (0.4.x) đọc số độ sâu trên hải đồ PDF vector, triều Hòn Dáu (nhập bảng triều từ ảnh, số hiệu chỉnh cảng phụ); giai đoạn 5 (0.5.x) các tàu khác (tàu lai, tàu trên luồng, tàu đậu sẵn ở bến, tránh va)
 
 ## Project-wide Rules

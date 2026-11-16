@@ -6,7 +6,7 @@ export function defaultShip() {
   return {
     name: 'Tàu mẫu', type: 'Hàng tổng hợp', load: 'loaded',
     loa: 119.9, lpp: 112, B: 20.2, D: 9.8, tf: 5.8, ta: 6.0, disp: 11800, cb: 0.72,
-    engines: 1, props: 1, ptype: 'fpp', rotDir: 'right', accTime: 60,
+    engines: 1, props: 1, ptype: 'fpp', rotDir: 'right', accTime: 60, gear: 1,
     steps: [
       { id: 'f4', label: 'Tiến max', rpm: 160, kn: 13.5, knB: 14.2 },
       { id: 'f3', label: 'Tiến 3', rpm: 125, kn: 10.8, knB: 11.4 },
@@ -68,7 +68,9 @@ export function buildModel(pIn, opts) {
   const kcol = p.load === 'ballast' ? 'knB' : 'kn';
   const maxS = ahead.reduce((a, s) => (num(s.rpm, 0) > num(a.rpm, 0) ? s : a), ahead[0]);
   const rpmMax = Math.max(10, num(maxS.rpm, 100)), vMax = Math.max(1, num(maxS[kcol], 12)) * KN;
-  const nMax = rpmMax / 60;
+  // bảng nấc ghi vòng quay máy; chân vịt quay chậm hơn theo tỷ số hộp số
+  M.gear = Math.max(1, num(p.gear, 1));
+  const nMax = rpmMax / 60 / M.gear;
   M.nMax = nMax; M.rpmMax = rpmMax;
   M.kR = M.nP * (1 - M.t) * thrustOf(M, nMax, vMax * (1 - M.w)) / (vMax * vMax);
   if (!(M.kR > 0)) M.kR = 0.5 * RHO * (1.7 * L * d + Cb * L * B) * 0.004;
@@ -84,7 +86,7 @@ export function buildModel(pIn, opts) {
       }
       M.steps[s.id] = { n: (lo + hi) / 2, rpm };
     } else {
-      M.steps[s.id] = { n: -Math.abs(rpm) / 60, rpm: -Math.abs(rpm) };
+      M.steps[s.id] = { n: -Math.abs(rpm) / 60 / M.gear, rpm: -Math.abs(rpm) };
     }
   }
   M.nRate = nMax / Math.max(5, num(p.accTime, 60));
@@ -95,7 +97,8 @@ export function buildModel(pIn, opts) {
   M.AR = num(p.AR, L * d / 60) * M.nR; const hR = num(p.hR, d * 0.8);
   const lam = hR * hR / num(p.AR, L * d / 60);
   M.fa = 6.13 * lam / (lam + 2.25);
-  M.eta = (M.nR === M.nP || (M.nR === 1 && M.nP % 2 === 1)) ? Math.min(1, Dp / hR) : 0;
+  // bánh lái nằm sau chân vịt thì được dòng chân vịt thổi vào: số bánh lái = số chân vịt, 1 bánh lái sau chân vịt giữa (số lẻ), 2 bánh lái sau 2 chân vịt mạn (tàu 3 máy)
+  M.eta = (M.nR === M.nP || (M.nR === 1 && M.nP % 2 === 1) || (M.nR === 2 && M.nP === 3)) ? Math.min(1, Dp / hR) : 0;
   M.gR = num(p.gammaR, 0.45); M.lR = -0.71 * L; M.xR = -0.5 * L; M.aH = 0.3; M.xH = -0.45 * L; M.tR = 0.39;
   M.rCal = 1;
   M.hand = p.rotDir === 'left' ? -1 : 1;
@@ -113,6 +116,18 @@ export function buildModel(pIn, opts) {
     M.rCal = Math.sqrt(lo * hi);
   }
   return M;
+}
+
+// số liệu lạ thường gặp khi nhập tay (giữ số của tàu mẫu…): trả về danh sách câu nhắc
+export function sanity(M) {
+  const p = M.p, w = [], ta = num(p.ta, M.d), tip = Math.PI * M.Dp * M.nMax;
+  const f1 = (v) => v.toFixed(1).replace('.', ','), pct = (v) => (v * 100).toFixed(1).replace('.', ',') + '%';
+  if (M.Dp > 0.85 * ta) w.push(`Đường kính chân vịt ${f1(M.Dp)} m lớn hơn ${f1(0.85 * ta)} m (0,85 × mớn nước lái) — chân vịt không nằm gọn dưới nước; tàu cỡ này thường 0,55–0,75 mớn lái.`);
+  if (tip > 75) w.push(`Đầu cánh chân vịt quay tới ${Math.round(tip)} m/s (π × D × vòng/giây) — quá nhanh, lực đẩy và dòng chân vịt bị tính quá lớn. Nếu bảng nấc ghi vòng quay máy thì nhập tỷ số hộp số; kiểm tra lại đường kính chân vịt.`);
+  const ar = M.AR / (M.L * M.d);
+  if (ar > 0.06 || ar < 0.008) w.push(`Tổng diện tích bánh lái = ${pct(ar)} của LPP × mớn nước; tàu thường 1,5–4% (tàu nhỏ cơ động cao tới ~5%).`);
+  if (num(p.hR, 0) > ta * 1.1) w.push(`Chiều cao bánh lái ${f1(num(p.hR, 0))} m lớn hơn mớn nước lái.`);
+  return w;
 }
 
 export function newState(M) {
@@ -135,7 +150,20 @@ export function turningDiameter(M) {
 const NS = 12;
 // env: { h (độ sâu nước, m), wS (gió m/s), wD (hướng gió THỔI TỚI TỪ, rad), cE, cN (dòng chảy m/s), bankS, bankP (m), waveH, waveD }
 // ext: { X, Y, N } ngoại lực trong hệ thân tàu (neo, dây, đệm va) hoặc null
+// Euler hiện cần bước thời gian nhỏ hơn hằng số thời gian của tàu; số liệu lạ (chân vịt quá to so với tàu…) làm hệ «cứng»
+// nên chia nhỏ bước cho khỏi nổ số. Tàu bình thường: 1 bước, không đổi gì.
 export function stepShip(S, M, ctrl, env, ext, dt) {
+  const u = Math.abs(S.u), U = Math.hypot(S.u, S.v) + 0.5, d = M.d, L = M.L, q = 0.5 * RHO * L * d;
+  let nMax = 0; for (const n of S.n) nMax = Math.max(nMax, Math.abs(n));
+  const ku = (4 * M.kR * u + M.nP * (1 - M.t) * M.kT1 * nMax * (1 - M.w)) / (M.m + M.mx);
+  const kv = q * U * (Math.abs(M.Yv) * 2 + 2 * M.Cd) / (M.m + M.my);
+  const kr = q * L * L * U * (Math.abs(M.Nr) * 2 + 0.2 * M.Cd) / (M.Iz + M.Jz);
+  const nSub = Math.min(50, Math.max(1, Math.ceil(Math.max(ku, kv, kr) * dt / 0.5)));
+  if (nSub === 1) return stepCore(S, M, ctrl, env, ext, dt);
+  for (let i = 0; i < nSub; i++) stepCore(S, M, ctrl, env, ext, dt / nSub);
+}
+
+function stepCore(S, M, ctrl, env, ext, dt) {
   const { L, d, m } = M;
   // máy
   for (let i = 0; i < M.nE; i++) {

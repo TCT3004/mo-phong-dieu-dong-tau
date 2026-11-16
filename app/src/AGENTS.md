@@ -10,7 +10,7 @@
 |---|---|
 | `main.js` | khởi động, chuyển tab, vòng lặp khung hình, phím tắt, `A.hooks` |
 | `app.js` | trạng thái chung `A`, lưu trữ (`LS`, `DB`), mô phỏng (`newSim`, `substep`), khẩu lệnh (`Orders`) |
-| `physics.js` | mô hình tàu kiểu MMG 3 bậc tự do, nấc máy, squat |
+| `physics.js` | mô hình tàu kiểu MMG 3 bậc tự do, nấc máy (vòng quay máy ÷ tỷ số hộp số = vòng quay chân vịt), hiệu chỉnh tốc độ từng nấc và đường kính quay trở, tự chia nhỏ bước thời gian khi số liệu làm hệ «cứng», câu nhắc số liệu lạ (`sanity`), squat |
 | `chartsys.js` | trung tâm hệ hải đồ `CS`: `WorldFrame` (gốc trôi, `setOrigin`), kho, renderer WebGL2 dùng chung, nguồn độ sâu (`sampleWorld`, `ensureAround`) |
 | `places.js` | kho đối tượng người dùng theo lat/lon (`mp_places`), đổi qua lại mét thế giới, file đối tượng xuất / gộp (`placesFile`, `mergePlacesFile`), chuyển dữ liệu v0.1 |
 | `world.js` | môi trường (`envAt`: gió, dòng, triều, sóng; lấy từ thời tiết ngẫu nhiên nếu có), tra độ sâu / lớp đáy qua `CS`, cầu bến, cọc bích, neo, dây, lực ngoài |

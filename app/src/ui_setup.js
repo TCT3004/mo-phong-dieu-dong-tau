@@ -1,6 +1,6 @@
 // Tab 1 (tàu), tab 2 (hải đồ), tab 4 (môi trường & kịch bản), cài đặt.
 import { A, $, $$, num, esc, LS, DB, saveShip, saveEnv, saveSet, saveObjs, loadObjs, rebuildModel, startPos, pad3 } from './app.js';
-import { defaultShip, turningDiameter, KN } from './physics.js';
+import { defaultShip, turningDiameter, sanity, KN } from './physics.js';
 import { fmtLL } from './kap.js';
 import { fmtDist, legsLL, fmtLat, fmtLon, parseCoord, parseLatLon, pad3 as p3 } from './nav.js';
 import { ChartCanvas } from './render/chartcanvas.js';
@@ -24,8 +24,8 @@ const sel = (k, label, opts, val) => `<div class="fld"><label for="f_${k}">${lab
 const SHIP = [
   ['Thông tin chung', 'g3', [['name', 'Tên tàu', '', 't'], ['type', 'Loại tàu', '', 't'], ['load', 'Trạng thái tải', [['loaded', 'Có hàng'], ['ballast', 'Ballast']]]]],
   ['Kích thước & tải trọng', 'g4', [['loa', 'Chiều dài toàn bộ (LOA)', 'm'], ['lpp', 'Chiều dài hai trụ (LPP)', 'm'], ['B', 'Chiều rộng (B)', 'm'], ['D', 'Chiều cao mạn (D)', 'm'], ['tf', 'Mớn nước mũi', 'm'], ['ta', 'Mớn nước lái', 'm'], ['disp', 'Lượng giãn nước', 't'], ['cb', 'Hệ số béo (Cb)', '']]],
-  ['Máy chính & chân vịt', 'g4', [['engines', 'Số máy & chân vịt', [[1, '1 máy · 1 chân vịt'], [2, '2 máy · 2 chân vịt'], [3, '3 máy · 3 chân vịt'], [4, '4 máy · 4 chân vịt']]], ['ptype', 'Loại chân vịt', [['fpp', 'Bước cố định'], ['cpp', 'Biến bước']]], ['rotDir', 'Chiều quay (tàu 1 hoặc 3 máy)', [['right', 'Chiều phải'], ['left', 'Chiều trái']]], ['accTime', 'Dừng → Tiến max', 's'], ['propD', 'Đường kính chân vịt', 'm'], ['PD', 'Tỷ số bước (P/D)', ''], ['wP', 'Hệ số dòng theo', ''], ['tP', 'Hệ số lực hút', '']]],
-  ['Bánh lái & quay trở', 'g4', [['rudMax', 'Góc lái tối đa', '°'], ['rudTime', 'Hết trái → hết phải', 's'], ['rudders', 'Số bánh lái', ''], ['respTime', 'Thời gian ăn lái', 's'], ['AR', 'Diện tích một bánh lái', 'm²'], ['hR', 'Chiều cao bánh lái', 'm'], ['turnDia', 'Đường kính quay trở (tiến max, lái 35°)', 'm'], ['gammaR', 'Hệ số nắn dòng', '']]],
+  ['Máy chính & chân vịt', 'g4', [['engines', 'Số máy & chân vịt', [[1, '1 máy · 1 chân vịt'], [2, '2 máy · 2 chân vịt'], [3, '3 máy · 3 chân vịt'], [4, '4 máy · 4 chân vịt']]], ['ptype', 'Loại chân vịt', [['fpp', 'Bước cố định'], ['cpp', 'Biến bước']]], ['rotDir', 'Chiều quay (tàu 1 hoặc 3 máy)', [['right', 'Chiều phải'], ['left', 'Chiều trái']]], ['accTime', 'Dừng → Tiến max', 's'], ['gear', 'Tỷ số hộp số (máy : chân vịt)', ''], ['propD', 'Đường kính chân vịt', 'm'], ['PD', 'Tỷ số bước (P/D)', ''], ['wP', 'Hệ số dòng theo', ''], ['tP', 'Hệ số lực hút', '']]],
+  ['Bánh lái & quay trở', 'g4', [['rudMax', 'Góc lái tối đa', '°'], ['rudTime', 'Hết trái → hết phải', 's'], ['rudders', 'Số bánh lái', ''], ['respTime', 'Thời gian ăn lái', 's'], ['AR', 'Diện tích một bánh lái', 'm²'], ['hR', 'Chiều cao bánh lái', 'm'], ['turnDia', 'Đường kính quay trở (tiến max, hết lái)', 'm'], ['gammaR', 'Hệ số nắn dòng', '']]],
   ['Neo & dây buộc', 'g4', [['bowAnchors', 'Số neo mũi', [[1, '1 neo (chính giữa)'], [2, '2 neo']]], ['sternAnchors', 'Số neo lái', [[0, 'Không có'], [1, '1 neo (chính giữa)'], [2, '2 neo']]], ['chainLen', 'Chiều dài xích neo', 'm'], ['anchorW', 'Trọng lượng quả neo', 't'], ['chainW', 'Trọng lượng 1 m xích', 'kg/m'], ['lineR', 'Bán kính dây buộc', 'mm'], ['lineLen', 'Chiều dài dây buộc', 'm']]],
   ['Hứng gió', 'g3', [['windAL', 'Diện tích hứng gió mạn', 'm²'], ['windAF', 'Diện tích hứng gió chính diện', 'm²'], ['windXc', 'Tâm hứng gió (+ về mũi)', 'm']]]
 ];
@@ -39,7 +39,7 @@ export function initShip() {
   <div class="col" style="flex:1 1 420px"><section class="card"><h2>Mô hình 3D tàu</h2><div class="muted" id="mdlInfo" style="margin-bottom:8px">${p.model && p.model.parts && p.model.parts.length ? 'Đang dùng mô hình vẽ từ sơ đồ: ' + p.model.parts.length + ' chi tiết trên ' + p.model.views.length + ' hình chiếu. Buồng lái, đèn hành trình theo mô hình.' : 'Đang dùng tàu đơn giản. Vẽ lại tàu theo sơ đồ (ảnh / PDF, 1–3 hình chiếu) để cảnh nhìn từ buồng lái, đèn và diện tích hứng gió giống tàu thật.'}</div><div class="flex" style="gap:8px"><button class="btn sm pri" id="mdlBtn">Vẽ tàu từ sơ đồ…</button>${p.model ? '<button class="btn sm" id="mdlOff">Bỏ mô hình (dùng tàu đơn giản)</button>' : ''}</div>
   <div style="margin-top:10px">${sel('flags', 'Cờ trên cột cao nhất', FLAG_MODES, p.flags || 'hq')}</div><div class="muted" style="margin-top:4px">Cờ Tổ quốc treo mạn phải, cờ Hải quân mạn trái thấp hơn 20 cm (nhìn từ lái lên mũi); treo ở đầu xà của cột cao nhất, bay theo gió biểu kiến.</div></section>
   <section class="card"><h2>Bảng nấc máy (tay chuông)</h2><div class="muted" style="margin-bottom:6px">Mỗi dòng là một nút trên tay chuông. Tàu nhiều máy: bảng áp dụng cho từng máy. Tốc độ lùi để trống — app tự tính.</div>
-  <table><thead><tr><th>Nấc</th><th>Vòng quay (v/ph)</th><th>Tốc độ có hàng (hl/h)</th><th>Tốc độ ballast (hl/h)</th></tr></thead><tbody>${p.steps.map((s, i) => `<tr><th>${s.label}</th><td><input class="cell mono" data-s="${i}" data-c="rpm" value="${s.rpm}" aria-label="Vòng quay ${s.label}"></td><td>${s.id[0] === 'f' ? `<input class="cell mono" data-s="${i}" data-c="kn" value="${s.kn}" aria-label="Tốc độ có hàng ${s.label}">` : '—'}</td><td>${s.id[0] === 'f' ? `<input class="cell mono" data-s="${i}" data-c="knB" value="${s.knB}" aria-label="Tốc độ ballast ${s.label}">` : '—'}</td></tr>`).join('')}</tbody></table></section>
+  <table><thead><tr><th>Nấc</th><th>Vòng quay máy (v/ph)</th><th>Tốc độ có hàng (hl/h)</th><th>Tốc độ ballast (hl/h)</th></tr></thead><tbody>${p.steps.map((s, i) => `<tr><th>${s.label}</th><td><input class="cell mono" data-s="${i}" data-c="rpm" value="${s.rpm}" aria-label="Vòng quay ${s.label}"></td><td>${s.id[0] === 'f' ? `<input class="cell mono" data-s="${i}" data-c="kn" value="${s.kn}" aria-label="Tốc độ có hàng ${s.label}">` : '—'}</td><td>${s.id[0] === 'f' ? `<input class="cell mono" data-s="${i}" data-c="knB" value="${s.knB}" aria-label="Tốc độ ballast ${s.label}">` : '—'}</td></tr>`).join('')}</tbody></table></section>
   <section class="card"><h2>Hiệu ứng tính thêm</h2>${FX.map((f) => `<label style="display:flex;gap:8px;align-items:center;padding:4px 0"><input type="checkbox" data-fx="${f[0]}" ${p.fx[f[0]] ? 'checked' : ''} style="width:17px;height:17px"> ${f[1]}</label>`).join('')}
   <div class="muted" style="margin-top:6px">Mô hình thân tàu – chân vịt – bánh lái tách rời (kiểu MMG), hệ số thân tàu ước tính theo Kijima từ L, B, mớn nước, Cb. Chưa có: tương tác tàu–tàu.</div></section></div></div>`;
   const wg = Array.from(el.querySelectorAll('section h2')).find((h) => h.textContent === 'Hứng gió');
@@ -60,10 +60,12 @@ export function initShip() {
   calcShip();
 }
 function calcShip() {
-  const M = rebuildModel(), td = turningDiameter(M);
-  const warn = M.rCal <= 0.26 || M.rCal >= 4.9;
-  $('#shipCalc').className = 'note ' + (warn ? '' : 'ok');
-  $('#shipCalc').innerHTML = `App đã hiệu chỉnh theo số bạn nhập: tốc độ từng nấc tiến khớp bảng nấc máy; đường kính quay trở tính ra <b>${td.toFixed(0)} m</b> (bạn nhập ${num(A.p.turnDia, 0)} m, hệ số hiệu chỉnh bánh lái ${M.rCal.toFixed(2)}). Mớn nước trung bình ${M.d.toFixed(2)} m.` + (warn ? ' <b>Không khớp được đường kính quay trở</b> — kiểm tra lại diện tích bánh lái hoặc đường kính quay trở.' : '');
+  const M = rebuildModel(), td = turningDiameter(M), sw = sanity(M), dec = (v, k) => v.toFixed(k).replace('.', ',');
+  const warn = M.rCal <= 0.26 || M.rCal >= 4.9 || !isFinite(td);
+  $('#shipCalc').className = 'note ' + (warn || sw.length ? '' : 'ok');
+  $('#shipCalc').innerHTML = `App đã hiệu chỉnh theo số bạn nhập: tốc độ từng nấc tiến khớp bảng nấc máy; đường kính quay trở tính ra <b>${isFinite(td) ? td.toFixed(0) : '—'} m</b> (bạn nhập ${num(A.p.turnDia, 0)} m, tiến max, lái ${M.rudMax}°; hệ số hiệu chỉnh bánh lái ${dec(M.rCal, 2)}). Sức cản ở tốc độ max ≈ ${Math.round(M.kR * (num(A.p.steps[0][A.p.load === 'ballast' ? 'knB' : 'kn'], 12) * KN) ** 2 / 1000).toLocaleString('vi-VN')} kN. Mớn nước trung bình ${dec(M.d, 2)} m.`
+    + (warn ? ' <b>Không khớp được đường kính quay trở</b> — xem các dòng nhắc dưới (nếu có), rồi kiểm tra diện tích bánh lái và đường kính quay trở.' : '')
+    + sw.map((s) => '<br>• ' + s).join('');
 }
 
 // ---------------- Tab 2: hải đồ ----------------
