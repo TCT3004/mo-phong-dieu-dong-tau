@@ -10,22 +10,22 @@
 |---|---|
 | `main.js` | khởi động, chuyển tab, vòng lặp khung hình, phím tắt, `A.hooks` |
 | `app.js` | trạng thái chung `A`, lưu trữ (`LS`, `DB`), mô phỏng (`newSim`, `substep`), khẩu lệnh (`Orders`) |
-| `physics.js` | mô hình tàu kiểu MMG 3 bậc tự do, nấc máy (vòng quay máy ÷ tỷ số hộp số = vòng quay chân vịt), hiệu chỉnh tốc độ từng nấc và đường kính quay trở, tự chia nhỏ bước thời gian khi số liệu làm hệ «cứng», câu nhắc số liệu lạ (`sanity`), squat |
+| `physics.js` | mô hình tàu kiểu MMG 3 bậc tự do, nấc máy (vòng quay máy ÷ tỷ số hộp số = vòng quay chân vịt), lực ngang theo chiều quay từng chân vịt (`propRot`), hiệu chỉnh tốc độ từng nấc và đường kính quay trở, tự chia nhỏ bước thời gian khi số liệu làm hệ «cứng», câu nhắc số liệu lạ (`sanity`), squat |
 | `chartsys.js` | trung tâm hệ hải đồ `CS`: `WorldFrame` (gốc trôi, `setOrigin`), kho, renderer WebGL2 dùng chung, nguồn độ sâu (`sampleWorld`, `ensureAround`) |
 | `places.js` | kho đối tượng người dùng theo lat/lon (`mp_places`), đổi qua lại mét thế giới, file đối tượng xuất / gộp (`placesFile`, `mergePlacesFile`), chuyển dữ liệu v0.1 |
 | `world.js` | môi trường (`envAt`: gió, dòng, triều, sóng; lấy từ thời tiết ngẫu nhiên nếu có), tra độ sâu / lớp đáy qua `CS`, cầu bến, cọc bích, neo, dây, lực ngoài |
 | `weather.js` | thời tiết ngẫu nhiên có hạt giống: chuỗi kiểu trời (nắng, nhiều mây, mưa, mưa giông, sương mù) theo giờ trong ngày, chuyển dần; gió giật, sóng gió có độ trễ, sét |
 | `flags.js` | cờ trên cột cao nhất: vẽ cờ Tổ quốc / cờ Hải quân (canvas), lưới cờ bay theo gió biểu kiến, rủ khi gió yếu |
-| `view3d.js` | cảnh three.js: nước (sóng Gerstner + texture, giữ pha liền khi sóng đổi), mưa, mây, chớp sét, địa hình dựng quanh tàu từ các tờ (lưới mịn gần, thưa xa), tàu (mô hình vẽ từ sơ đồ nếu có, không thì tàu đơn giản), đèn, camera buồng lái 3 cửa sổ đặt tại vị trí người điều động |
+| `view3d.js` | cảnh three.js: nước (sóng Gerstner + texture, giữ pha liền khi sóng đổi), mưa, mây, chớp sét, địa hình dựng quanh tàu từ các tờ (lưới mịn gần, thưa xa), tàu (mô hình vẽ từ sơ đồ nếu có, không thì tàu đơn giản), đèn, khung cửa kính buồng lái gắn trên tàu (`addBridgeFrame`, chỉ hiện ở góc nhìn buồng lái), camera buồng lái 3 ô ghép liền đặt tại vị trí người điều động |
 | `radar.js` | radar quét tia, cự ly tới 24 Hl, EBL/VRM, nhiễu sóng và nhiễu mưa |
 | `kap.js` | georef tuyến tính của v0.1 — chỉ dùng chuyển dữ liệu cũ; `fmtLL` |
 | `nav.js` | định dạng khoảng cách, đọc tọa độ, tuyến đi (`legsLL` loxodrom theo lat/lon, `legs`, `trackRoute`) |
 | `windage.js` | tính diện tích hứng gió từ sơ đồ tàu PDF / ảnh |
 | `pdfload.js` | mở PDF bằng pdf.js (worker classic từ Blob), dùng chung cho `windage.js` và hải đồ PDF |
-| `ui_shipdraw.js` | hộp thoại vẽ tàu từ sơ đồ (mở từ tab 1): hình chiếu, mốc + số đo, công cụ dò / chấm, chọn loại nhiều nấc, xem 3D, dùng cho tàu, xuất / nhập file |
+| `ui_shipdraw.js` | hộp thoại vẽ tàu từ sơ đồ (mở từ tab 1): bàn vẽ 3 hình chiếu (mạn, mặt boong, nhìn từ mũi / lái cùng tỷ lệ, thẳng hàng; vạch gióng theo chuột và theo chi tiết đang chọn; thước CAD: bắt dính lưới / điểm / vạch gióng, Shift vẽ thẳng, gõ số), chế độ một hình để đặt mốc + đo kích thước cho ảnh, dò viền / chấm tay, chọn loại nhiều nấc, xem 3D, dùng cho tàu, xuất / nhập file |
 | `ui_pdfchart.js` | hộp thoại nạp hải đồ PDF: trang, tỷ lệ, datum (mặc định VN-2000), độ nét, điểm tọa độ, khung hải đồ, sai số khớp |
 | `audio.js` | âm thanh tổng hợp: máy, còi, chuông, báo động, mưa, gió, sấm |
-| `ui_setup.js` | tab 1 Thông số tàu (kể cả chọn cờ), tab 2 Cảng & luồng (kho hải đồ, khung nhìn liền mạch, datum / dời tay từng tờ, nút «Về tàu», lưu / mở file đối tượng), tab 4 Môi trường (ánh sáng xem thử, sương mù dày, vị trí xuất phát có sẵn), Cài đặt |
+| `ui_setup.js` | tab 1 Thông số tàu (kể cả chọn cờ, chiều quay từng chân vịt), tab 2 Cảng & luồng (kho hải đồ, khung nhìn liền mạch, datum / dời tay từng tờ, nút «Về tàu», lưu / mở file đối tượng), tab 4 Môi trường (ánh sáng xem thử, sương mù dày, vị trí xuất phát có sẵn), Cài đặt |
 | `ui_run.js` | tab 3 Điều động (chọn góc nhìn, buồng lái, hải đồ nhỏ, radar, tay chuông, vô lăng, bảng tín hiệu) |
 | `ui_replay.js` | tab 5 Xem lại, ghi bài tập, xuất video |
 | `template.html` | khung HTML + CSS |
@@ -38,6 +38,7 @@
 - Kịch bản `mp_env`: `wxMode` (`manual` | `random`), `wxStart` (kiểu trời khởi đầu, rỗng = app chọn), `waveL` bước sóng (m; chu kỳ suy ra theo sóng nước sâu), `light` (`auto` | `day` | `dusk` | `night`), `fogOn` (ép tầm nhìn 550 m). Thời tiết ngẫu nhiên tạo mới mỗi bài (`A.sim.wx`), không đổi thủy triều, dòng chảy, giờ
 - Bản ghi bài tập (`rec`, 1 dòng/giây) có cả thời tiết (`wKn`, `wDir`, `wD`, `wL`, `rn`, `cl`, `wx`) để xem lại 3D đúng như lúc chạy
 - Nấc lệnh lái lấy từ `helmSteps()` theo `rudMax` của tàu
+- Thông số tàu `rot`: chiều quay từng chân vịt khi tiến, thứ tự từ trái sang phải nhìn từ lái lên mũi (`right` | `left` | `''` chưa chọn — chưa chọn thì không tính lực ngang chiếc đó và tab 1 nhắc); tàu cũ chỉ có `rotDir` thì `propRot` suy ra
 - Thông số tàu có `model` (vẽ từ sơ đồ, xem `shipdraw/AGENTS.md`) thì cảnh 3D, camera buồng lái, vị trí đèn hàng hải theo mô hình; ảnh sơ đồ lưu riêng ở IndexedDB `mp_shipimg`
 - File đối tượng `.json` = `{ app, loai: 'doi-tuong-hai-do', v: 2, lights, berths, routes, starts, start }` (cùng dạng `mp_places`); mở file là gộp, trùng tên thì thay. Đèn: `kind` `light` | `beaconR` | `beaconG` | `buoyR` | `buoyG` | `buoyY`, `period`, `flash`, `grp` (số chớp mỗi chu kỳ), `height`
 - Mọi tọa độ mét thế giới trong `W.objs` (kể cả `starts`) đổi theo gốc trôi ở `World.mapCoords`

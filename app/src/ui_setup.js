@@ -1,6 +1,6 @@
 // Tab 1 (tàu), tab 2 (hải đồ), tab 4 (môi trường & kịch bản), cài đặt.
 import { A, $, $$, num, esc, LS, DB, saveShip, saveEnv, saveSet, saveObjs, loadObjs, rebuildModel, startPos, pad3 } from './app.js';
-import { defaultShip, turningDiameter, sanity, KN } from './physics.js';
+import { defaultShip, turningDiameter, sanity, propRot, PROP_NAMES, KN } from './physics.js';
 import { fmtLL } from './kap.js';
 import { fmtDist, legsLL, fmtLat, fmtLon, parseCoord, parseLatLon, pad3 as p3 } from './nav.js';
 import { ChartCanvas } from './render/chartcanvas.js';
@@ -24,7 +24,7 @@ const sel = (k, label, opts, val) => `<div class="fld"><label for="f_${k}">${lab
 const SHIP = [
   ['Thông tin chung', 'g3', [['name', 'Tên tàu', '', 't'], ['type', 'Loại tàu', '', 't'], ['load', 'Trạng thái tải', [['loaded', 'Có hàng'], ['ballast', 'Ballast']]]]],
   ['Kích thước & tải trọng', 'g4', [['loa', 'Chiều dài toàn bộ (LOA)', 'm'], ['lpp', 'Chiều dài hai trụ (LPP)', 'm'], ['B', 'Chiều rộng (B)', 'm'], ['D', 'Chiều cao mạn (D)', 'm'], ['tf', 'Mớn nước mũi', 'm'], ['ta', 'Mớn nước lái', 'm'], ['disp', 'Lượng giãn nước', 't'], ['cb', 'Hệ số béo (Cb)', '']]],
-  ['Máy chính & chân vịt', 'g4', [['engines', 'Số máy & chân vịt', [[1, '1 máy · 1 chân vịt'], [2, '2 máy · 2 chân vịt'], [3, '3 máy · 3 chân vịt'], [4, '4 máy · 4 chân vịt']]], ['ptype', 'Loại chân vịt', [['fpp', 'Bước cố định'], ['cpp', 'Biến bước']]], ['rotDir', 'Chiều quay (tàu 1 hoặc 3 máy)', [['right', 'Chiều phải'], ['left', 'Chiều trái']]], ['accTime', 'Dừng → Tiến max', 's'], ['gear', 'Tỷ số hộp số (máy : chân vịt)', ''], ['propD', 'Đường kính chân vịt', 'm'], ['PD', 'Tỷ số bước (P/D)', ''], ['wP', 'Hệ số dòng theo', ''], ['tP', 'Hệ số lực hút', '']]],
+  ['Máy chính & chân vịt', 'g4', [['engines', 'Số máy & chân vịt', [[1, '1 máy · 1 chân vịt'], [2, '2 máy · 2 chân vịt'], [3, '3 máy · 3 chân vịt'], [4, '4 máy · 4 chân vịt']]], ['ptype', 'Loại chân vịt', [['fpp', 'Bước cố định'], ['cpp', 'Biến bước']]], ['accTime', 'Dừng → Tiến max', 's'], ['gear', 'Tỷ số hộp số (máy : chân vịt)', ''], ['propD', 'Đường kính chân vịt', 'm'], ['PD', 'Tỷ số bước (P/D)', ''], ['wP', 'Hệ số dòng theo', ''], ['tP', 'Hệ số lực hút', '']]],
   ['Bánh lái & quay trở', 'g4', [['rudMax', 'Góc lái tối đa', '°'], ['rudTime', 'Hết trái → hết phải', 's'], ['rudders', 'Số bánh lái', ''], ['respTime', 'Thời gian ăn lái', 's'], ['AR', 'Diện tích một bánh lái', 'm²'], ['hR', 'Chiều cao bánh lái', 'm'], ['turnDia', 'Đường kính quay trở (tiến max, hết lái)', 'm'], ['gammaR', 'Hệ số nắn dòng', '']]],
   ['Neo & dây buộc', 'g4', [['bowAnchors', 'Số neo mũi', [[1, '1 neo (chính giữa)'], [2, '2 neo']]], ['sternAnchors', 'Số neo lái', [[0, 'Không có'], [1, '1 neo (chính giữa)'], [2, '2 neo']]], ['chainLen', 'Chiều dài xích neo', 'm'], ['anchorW', 'Trọng lượng quả neo', 't'], ['chainW', 'Trọng lượng 1 m xích', 'kg/m'], ['lineR', 'Bán kính dây buộc', 'mm'], ['lineLen', 'Chiều dài dây buộc', 'm']]],
   ['Hứng gió', 'g3', [['windAL', 'Diện tích hứng gió mạn', 'm²'], ['windAF', 'Diện tích hứng gió chính diện', 'm²'], ['windXc', 'Tâm hứng gió (+ về mũi)', 'm']]]
@@ -42,13 +42,16 @@ export function initShip() {
   <table><thead><tr><th>Nấc</th><th>Vòng quay máy (v/ph)</th><th>Tốc độ có hàng (hl/h)</th><th>Tốc độ ballast (hl/h)</th></tr></thead><tbody>${p.steps.map((s, i) => `<tr><th>${s.label}</th><td><input class="cell mono" data-s="${i}" data-c="rpm" value="${s.rpm}" aria-label="Vòng quay ${s.label}"></td><td>${s.id[0] === 'f' ? `<input class="cell mono" data-s="${i}" data-c="kn" value="${s.kn}" aria-label="Tốc độ có hàng ${s.label}">` : '—'}</td><td>${s.id[0] === 'f' ? `<input class="cell mono" data-s="${i}" data-c="knB" value="${s.knB}" aria-label="Tốc độ ballast ${s.label}">` : '—'}</td></tr>`).join('')}</tbody></table></section>
   <section class="card"><h2>Hiệu ứng tính thêm</h2>${FX.map((f) => `<label style="display:flex;gap:8px;align-items:center;padding:4px 0"><input type="checkbox" data-fx="${f[0]}" ${p.fx[f[0]] ? 'checked' : ''} style="width:17px;height:17px"> ${f[1]}</label>`).join('')}
   <div class="muted" style="margin-top:6px">Mô hình thân tàu – chân vịt – bánh lái tách rời (kiểu MMG), hệ số thân tàu ước tính theo Kijima từ L, B, mớn nước, Cb. Chưa có: tương tác tàu–tàu.</div></section></div></div>`;
+  const eg = Array.from(el.querySelectorAll('section h2')).find((h) => h.textContent === 'Máy chính & chân vịt');
+  if (eg) { eg.parentNode.insertAdjacentHTML('beforeend', '<div id="rotBox" style="margin-top:10px"></div>'); rotBox(); }
   const wg = Array.from(el.querySelectorAll('section h2')).find((h) => h.textContent === 'Hứng gió');
   if (wg) { wg.parentNode.insertAdjacentHTML('beforeend', '<div class="flex" style="gap:10px;align-items:center;margin-top:10px"><button class="btn sm pri" id="windBtn">Tính từ sơ đồ tàu (PDF / ảnh)…</button><span class="muted">Mở bản vẽ bố trí chung, app tách bóng tàu và tính 3 số trên.</span></div>'); $('#windBtn').onclick = () => openWindage(); }
   let tm = null;
   const changed = () => { saveShip(); clearTimeout(tm); tm = setTimeout(() => { calcShip(); if (A.hooks.shipChanged) A.hooks.shipChanged(); }, 400); };
   el.addEventListener('change', (e) => {
     const t = e.target;
-    if (t.dataset.k) { p[t.dataset.k] = t.dataset.t || t.tagName === 'SELECT' && isNaN(+t.value) ? t.value : num(t.value, p[t.dataset.k]); if (t.dataset.k === 'engines') { p.engines = +t.value; p.props = p.engines; } changed(); }
+    if (t.dataset.rot !== undefined) { p.rot = propRot(p); p.rot[+t.dataset.rot] = t.value; changed(); return; }
+    if (t.dataset.k) { p[t.dataset.k] = t.dataset.t || t.tagName === 'SELECT' && isNaN(+t.value) ? t.value : num(t.value, p[t.dataset.k]); if (t.dataset.k === 'engines') { p.engines = +t.value; p.props = p.engines; p.rot = propRot(Object.assign({}, p, { rot: p.rot })); rotBox(); } changed(); }
     else if (t.dataset.s) { p.steps[+t.dataset.s][t.dataset.c] = num(t.value, 0); changed(); }
     else if (t.dataset.fx) { p.fx[t.dataset.fx] = t.checked; changed(); }
   });
@@ -58,6 +61,11 @@ export function initShip() {
   $('#shipExport').onclick = () => { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify(A.p, null, 1)], { type: 'application/json' })); a.download = (A.p.name || 'tau') + '.json'; a.click(); };
   $('#shipImport').onchange = async (e) => { try { const o = JSON.parse(await e.target.files[0].text()); A.p = Object.assign(defaultShip(), o); saveShip(); initShip(); if (A.hooks.shipChanged) A.hooks.shipChanged(); } catch (x) { alert('File không đọc được'); } };
   calcShip();
+}
+// chiều quay từng chân vịt (người dùng tự chọn, không đặt sẵn)
+function rotBox() {
+  const p = A.p, el = $('#rotBox'); if (!el) return; const r = propRot(p), names = PROP_NAMES[r.length];
+  el.innerHTML = `<div class="lbl">Chiều quay khi tiến — nhìn từ lái lên mũi (chiều phải = theo chiều kim đồng hồ)</div><div class="grid g4" style="margin-top:4px">${r.map((v, i) => `<div class="fld"><label for="rot${i}">${names[i]}</label><div class="in"><select id="rot${i}" data-rot="${i}"><option value="" ${v ? '' : 'selected'}>— chọn —</option><option value="right" ${v === 'right' ? 'selected' : ''}>Chiều phải</option><option value="left" ${v === 'left' ? 'selected' : ''}>Chiều trái</option></select></div></div>`).join('')}</div>`;
 }
 function calcShip() {
   const M = rebuildModel(), td = turningDiameter(M), sw = sanity(M), dec = (v, k) => v.toFixed(k).replace('.', ',');

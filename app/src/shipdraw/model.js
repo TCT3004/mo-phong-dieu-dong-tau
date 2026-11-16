@@ -2,6 +2,8 @@
 // Tọa độ tàu: x về mũi (gốc giữa chiều dài), y sang mạn phải, z lên từ đáy ky; đường nước ở z = T.
 // Thiếu hình chiếu thì tự suy: chỉ có hình mạn → bề rộng theo B và hệ số béo; chỉ có mặt boong → chiều cao theo mạn khô / số tầng;
 // không có mặt cắt → dáng sườn theo hệ số béo, mũi thon dần thành chữ V. Trái phải đối xứng.
+import pc from 'polygon-clipping';
+import earcut from 'earcut';
 import { resolve, SHADES, ANTIFOUL, BOOT } from './parts.js';
 import { calibrate } from './calib.js';
 
@@ -19,6 +21,58 @@ export function atH(poly, x, closed = true) {
 }
 // cắt bằng đường nằm ngang v = z → [h nhỏ nhất, h lớn nhất]
 export function atV(poly, z, closed = true) { return atH(poly.map((p) => [p[1], p[0]]), z, closed); }
+// cắt đa giác kín bằng đường đứng h = x → mọi khoảng [v0, v1] nằm trong (chỗ lõm, chỗ khuyết ra nhiều khoảng)
+export function spans(poly, x) {
+  const c = [], n = poly.length;
+  for (let i = 0; i < n; i++) { const a = poly[i], b = poly[(i + 1) % n]; if ((a[0] <= x) !== (b[0] <= x)) c.push(a[1] + (b[1] - a[1]) * (x - a[0]) / (b[0] - a[0])); }
+  c.sort((a, b) => a - b); const out = []; for (let i = 0; i + 1 < c.length; i += 2) if (c[i + 1] - c[i] > 1e-4) out.push([c[i], c[i + 1]]);
+  return out;
+}
+const merge = (iv) => { const s = iv.slice().sort((a, b) => a[0] - b[0]), o = []; for (const q of s) { const l = o[o.length - 1]; if (l && q[0] <= l[1] + 1e-6) l[1] = Math.max(l[1], q[1]); else o.push(q.slice()); } return o; };
+const sArea = (r) => { let s = 0; for (let i = 0; i < r.length; i++) { const a = r[i], b = r[(i + 1) % r.length]; s += a[0] * b[1] - b[0] * a[1]; } return s / 2; };
+// bỏ điểm trùng / thẳng hàng, xoay ngược chiều kim đồng hồ (trong mặt y–z)
+function cleanRing(r) {
+  let q = r.slice(); if (q.length > 1 && Math.hypot(q[0][0] - q[q.length - 1][0], q[0][1] - q[q.length - 1][1]) < 1e-6) q.pop();
+  for (let pass = 0; pass < 2; pass++) { const o = []; for (let i = 0; i < q.length; i++) { const a = q[(i + q.length - 1) % q.length], b = q[i], c = q[(i + 1) % q.length]; const cr = (b[0] - a[0]) * (c[1] - b[1]) - (b[1] - a[1]) * (c[0] - b[0]); if (Math.hypot(b[0] - a[0], b[1] - a[1]) < 1e-5 || Math.abs(cr) < 1e-7) continue; o.push(b); } q = o; }
+  if (q.length >= 3 && sArea(q) < 0) q.reverse();
+  return q.length >= 3 ? q : null;
+}
+// lấy mẫu lại vòng theo độ dài cung tại các tham số t ∈ [0, 1)
+function resample(r, ts) {
+  const n = r.length, cum = [0]; for (let i = 0; i < n; i++) { const a = r[i], b = r[(i + 1) % n]; cum.push(cum[i] + Math.hypot(b[0] - a[0], b[1] - a[1])); }
+  const P = cum[n] || 1; let j = 0;
+  return ts.map((t) => { const s = t * P; while (j < n - 1 && cum[j + 1] < s) j++; const a = r[j], b = r[(j + 1) % n], f = (s - cum[j]) / ((cum[j + 1] - cum[j]) || 1); return [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f]; });
+}
+const params = (r) => { const n = r.length, cum = [0]; for (let i = 0; i < n; i++) { const a = r[i], b = r[(i + 1) % n]; cum.push(cum[i] + Math.hypot(b[0] - a[0], b[1] - a[1])); } return cum.slice(0, n).map((c) => c / (cum[n] || 1)); };
+// nối hai mặt cắt kề nhau: cùng số đỉnh thì nối đỉnh–đỉnh (giữ góc sắc), khác thì lấy mẫu theo cả hai bộ tham số
+function pairRings(A, B) {
+  let k0 = 0, bd = Infinity; for (let k = 0; k < B.length; k++) { const d = Math.hypot(B[k][0] - A[0][0], B[k][1] - A[0][1]); if (d < bd) { bd = d; k0 = k; } }
+  const Bs = B.slice(k0).concat(B.slice(0, k0));
+  if (A.length === Bs.length) return [A, Bs];
+  const ts = [...new Set([...params(A), ...params(Bs)].map((t) => Math.round(t * 1e6) / 1e6))].sort((a, b) => a - b);
+  return [resample(A, ts), resample(Bs, ts)];
+}
+// mặt đầu / cuối: tam giác hóa (earcut), hướng ra ngoài theo phía (−x ở đầu, +x ở cuối)
+function cap(acc, x, ring, end) {
+  const flat = ring.flat(), tri = earcut(flat), I = ring.map((p) => acc.v(x, p[0], p[1]));
+  for (let t = 0; t < tri.length; t += 3) { let a = tri[t], b = tri[t + 1], c = tri[t + 2]; const cr = (ring[b][0] - ring[a][0]) * (ring[c][1] - ring[a][1]) - (ring[b][1] - ring[a][1]) * (ring[c][0] - ring[a][0]); if ((cr > 0) === end) [b, c] = [c, b]; acc.tri(I[a], I[b], I[c]); }
+}
+// nối các mặt cắt (mỗi mặt cắt có thể gồm nhiều mảnh) dọc theo x: slices [{ x, rings: [[[y, z]…]…] }]
+export function loftRings(acc, slices) {
+  const cen = (r) => { let y = 0, z = 0; for (const p of r) { y += p[0]; z += p[1]; } return [y / r.length, z / r.length]; };
+  const norm = (s) => ({ x: s.x, rings: s.rings.map(cleanRing).filter(Boolean).sort((a, b) => { const p = cen(a), q = cen(b); return p[0] - q[0] || p[1] - q[1]; }) });
+  const S = slices.map(norm).filter((s) => s.rings.length);
+  for (let i = 0; i < S.length; i++) {
+    const a = S[i], b = S[i + 1], prev = S[i - 1];
+    const joinPrev = prev && prev.rings.length === a.rings.length, joinNext = b && b.rings.length === a.rings.length;
+    if (!joinPrev) for (const r of a.rings) cap(acc, a.x, r, false);
+    if (!joinNext) { for (const r of a.rings) cap(acc, a.x, r, true); continue; }
+    for (let k = 0; k < a.rings.length; k++) {
+      const [A, B] = pairRings(a.rings[k], b.rings[k]), IA = A.map((p) => acc.v(a.x, p[0], p[1])), IB = B.map((p) => acc.v(b.x, p[0], p[1])), n = A.length;
+      for (let j = 0; j < n; j++) { const j2 = (j + 1) % n; acc.quad(IA[j], IB[j], IB[j2], IA[j2]); }
+    }
+  }
+}
 const bbox = (p) => { let a = Infinity, b = Infinity, c = -Infinity, d = -Infinity; for (const q of p) { a = Math.min(a, q[0]); b = Math.min(b, q[1]); c = Math.max(c, q[0]); d = Math.max(d, q[1]); } return [a, b, c, d]; };
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 export function polyArea(p) { let s = 0; for (let i = 0; i < p.length; i++) { const a = p[i], b = p[(i + 1) % p.length]; s += a[0] * b[1] - b[0] * a[1]; } return Math.abs(s) / 2; }
@@ -127,42 +181,60 @@ export function buildModel(model, ship) {
   const accs = { hull: new Acc(sh.hull, true), super: new Acc(sh.super, true), dark: new Acc(sh.dark, true), deck: new Acc(sh.deck, true), metal: new Acc(0x3a3f44, true), white: new Acc(0xd8dcdf, true), orange: new Acc(0xd9762b, true) };
   const accFor = (node) => accs[node.color] || accs.super;
   const match = (q, kind) => { let best = null, bo = 0; for (const o of P) { if (o === q || o.key !== q.key || o.vk !== kind || !o.closed) continue; const ov = Math.min(q.bb[2], o.bb[2]) - Math.max(q.bb[0], o.bb[0]); if (kind !== 'side' && kind !== 'top') return o; if (ov > bo) { bo = ov; best = o; } } return best; };
-  const used = new Set(); const lights = [], blocks = []; let eye = null;
-  // bề rộng mặc định khi không có mặt boong / mặt cắt
-  const defY = (q, x, zr) => {
+  const used = new Set(); const lights = [], blocks = []; let eye = null; const links = {}, src = {};
+  // bề rộng mặc định khi không có mặt boong / hình nhìn từ mũi
+  const defY = (q, x) => {
     const n = q.node, w = q.p.num && q.p.num.w > 0 ? q.p.num.w : null, hb = hbAt(x), len = q.bb[2] - q.bb[0];
     if (q.role === 'wing') { const s = n.side || 1, inner = Math.max(0.5, hb - 1.4), outer = hb + 0.6; return s < 0 ? [-outer, -inner] : [inner, outer]; }
     if (n.side && q.key.startsWith('khoi')) { const ww = w || clamp(len * 0.45, 0.6, hb * 0.6), c = n.side * hb * 0.4; return [c - ww / 2, c + ww / 2]; }
     let ww = w; if (!ww) { if (q.key.startsWith('khoi')) ww = clamp(len * 0.55, 1, hb); else if (q.key.startsWith('than/')) ww = 2 * hb; else if (q.key.startsWith('khac')) ww = 1.2 * hb; else ww = Math.max(1.5, 2 * hb - 1.8); }
     return [-ww / 2, ww / 2];
   };
+  // ghép các hình chiếu của cùng một khối theo VỊ TRÍ (chồng lên nhau theo chiều dài / chiều cao) và nhóm loại; cùng loại đầy đủ thì ưu tiên
+  const SOLID = new Set(['block', 'wing', 'bulwark']), STRUCT = new Set(['tang', 'buong', 'khac']);
+  const cat = (q) => q.p.type[0], compat = (a, b) => cat(a) === cat(b) || (STRUCT.has(cat(a)) && STRUCT.has(cat(b)));
+  const ovl = (a0, a1, b0, b1) => Math.max(0, Math.min(a1, b1) - Math.max(a0, b0)) / Math.max(1e-6, Math.min(a1 - a0, b1 - b0));
+  const pick = (q, kinds, score) => { let best = null, bs = 0.3; for (const o of P) { if (o === q || !kinds.includes(o.vk) || !o.closed || !SOLID.has(o.role) || !compat(q, o) || o.pts.length < 3) continue; const sc = score(o) * (o.key === q.key ? 1.6 : cat(o) === cat(q) ? 1.2 : 1); if (sc > bs) { bs = sc; best = o; } } return best; };
   const solid = (q) => {
-    used.add(q); const top = q.vk === 'side' ? match(q, 'top') : q.vk === 'top' ? q : null, side = q.vk === 'side' ? q : q.vk === 'top' ? match(q, 'side') : null, front = match(q, 'front') || match(q, 'back');
-    if (top) used.add(top); if (side) used.add(side); if (front) used.add(front);
-    const ref = side || top; if (!ref) return; const bb = ref.bb, xs = new Set(), st = Math.max(0.25, (bb[2] - bb[0]) / 40);
-    for (let x = bb[0] + 0.005; x < bb[2]; x += st) xs.add(+x.toFixed(4));
-    for (const p of ref.pts) for (const e of [-0.006, 0.006]) if (p[0] + e > bb[0] && p[0] + e < bb[2]) xs.add(+(p[0] + e).toFixed(4));
+    used.add(q);
+    const side = q.vk === 'side' ? q : pick(q, ['side'], (o) => ovl(q.bb[0], q.bb[2], o.bb[0], o.bb[2]));
+    const top = q.vk === 'top' ? q : side ? pick(side, ['top'], (o) => ovl(side.bb[0], side.bb[2], o.bb[0], o.bb[2])) : null;
+    const front = pick(side || top, ['front', 'back'], (o) => { const zs = side ? ovl(side.bb[1], side.bb[3], o.bb[1], o.bb[3]) : 1, ys = top ? ovl(top.bb[1], top.bb[3], o.bb[0], o.bb[2]) || (q.node.side ? 0 : 0.5) : 1; return zs * Math.max(0.35, ys); });
+    for (const o of [side, top, front]) if (o) used.add(o);
+    const grp = [side, top, front].filter(Boolean), ids = grp.map((o) => o.p.id); for (const id of ids) links[id] = ids;
+    const info = (side ? 'mạn' : '') + (top ? (side ? ' + ' : '') + 'boong' : '') + (front ? ' + ' + (front.vk === 'back' ? 'lái' : 'mũi') : ''); for (const id of ids) src[id] = info + (!top && !front ? ' — bề rộng mặc định' : '');
+    const ref = side || top; if (!ref) return;
+    const centered = !q.node.side && q.role !== 'wing';
+    // hình nhìn từ mũi / lái (y, z): chi tiết giữa tàu vẽ một nửa vẫn đủ (lấy đối xứng)
+    let F = null; if (front) { const r = front.pts.map((p) => [p[0], p[1]]); F = [[[...r, r[0]]]]; if (centered) { const m = r.map((p) => [-p[0], p[1]]); try { F = pc.union(F, [[[...m, m[0]]]]); } catch (e) { /* đa giác lỗi: dùng nguyên bản */ } } }
+    const bb = ref.bb, xs = new Set(), stp = Math.max(0.25, (bb[2] - bb[0]) / 40);
+    for (let x = bb[0] + 0.005; x < bb[2]; x += stp) xs.add(+x.toFixed(4));
+    for (const o of [side, top]) if (o) for (const p of o.pts) for (const e of [-0.006, 0.006]) if (p[0] + e > bb[0] && p[0] + e < bb[2]) xs.add(+(p[0] + e).toFixed(4));
     xs.add(+(bb[2] - 0.005).toFixed(4));
     const lev = q.node.level ? (q.node.level - 1) * 2.6 : 0, hgt = (q.p.num && q.p.num.h > 0 && q.p.num.h) || q.node.defH || 2.6;
-    const secs = [];
+    const slices = []; let x0 = Infinity, x1 = -Infinity, z1 = -Infinity, ym = 0;
     for (const x of [...xs].sort((a, b) => a - b)) {
-      let zr = side ? atH(side.pts, x) : [deckZ(x) + lev, deckZ(x) + lev + hgt]; if (!zr || zr[1] - zr[0] < 0.02) continue;
-      let yr = top ? atH(top.pts, x) : null; if (top && !yr) continue;
-      if (!yr && front) yr = atV(front.pts, (zr[0] + zr[1]) / 2);
-      // chi tiết nằm giữa tàu: lấy đối xứng trái phải (vẽ / dò được một nửa vẫn đủ bề rộng)
-      if (yr && !q.node.side && q.role !== 'wing') { const m = Math.max(Math.abs(yr[0]), Math.abs(yr[1])); yr = [-m, m]; }
-      if (!yr) yr = defY(q, x, zr);
-      if (q.role === 'bulwark') { const hb = hbAt(x); secs.push({ x, y0: hb - 0.08, y1: hb, z0: zr[0], z1: zr[1], m: true }); continue; }
-      secs.push({ x, y0: yr[0], y1: yr[1], z0: zr[0], z1: zr[1] });
+      let Z = side ? spans(side.pts, x) : F ? [[front.bb[1], front.bb[3]]] : [[deckZ(x) + lev, deckZ(x) + lev + hgt]];
+      Z = Z.filter((z) => z[1] - z[0] > 0.02); if (!Z.length) continue;
+      let Y = top ? spans(top.pts, x) : null; if (top && !Y.length) continue;
+      if (Y && centered) Y = merge([...Y, ...Y.map((y) => [-y[1], -y[0]])]);
+      if (q.role === 'bulwark') { const hb = hbAt(x); for (const z of Z) for (const sg of [-1, 1]) slices.push({ x, rings: [[[sg > 0 ? hb - 0.08 : -hb, z[0]], [sg > 0 ? hb : -hb + 0.08, z[0]], [sg > 0 ? hb : -hb + 0.08, z[1]], [sg > 0 ? hb - 0.08 : -hb, z[1]]]] }); continue; }
+      if (!Y) Y = F ? [[-1e3, 1e3]] : [defY(q, x)];
+      let rings = [];
+      for (const y of Y) for (const z of Z) rings.push([[y[0], z[0]], [y[1], z[0]], [y[1], z[1]], [y[0], z[1]]]);
+      if (F) { try { const R = rings.map((r) => [[...r, r[0]]]), I = pc.intersection(F, ...R.map((r) => [r])); rings = I.map((poly) => poly[0].slice(0, -1)); } catch (e) { /* giữ hình chữ nhật */ } }
+      rings = rings.filter((r) => r.length >= 3 && Math.abs(sArea(r)) > 1e-4); if (!rings.length) continue;
+      slices.push({ x, rings });
+      x0 = Math.min(x0, x); x1 = Math.max(x1, x); for (const r of rings) for (const p of r) { z1 = Math.max(z1, p[1]); ym = Math.max(ym, Math.abs(p[0])); }
     }
-    if (q.role === 'bulwark') { loft(accs.hull, secs); loft(accs.hull, secs.map((s) => ({ x: s.x, y0: -s.y1, y1: -s.y0, z0: s.z0, z1: s.z1 }))); return; }
-    loft(accFor(q.node), secs);
-    if (secs.length) { let x0 = Infinity, x1 = -Infinity, z1 = -Infinity; for (const s of secs) { x0 = Math.min(x0, s.x); x1 = Math.max(x1, s.x); z1 = Math.max(z1, s.z1); } blocks.push({ q, x0, x1, z1, bridge: !!q.node.bridge }); }
+    if (q.role === 'bulwark') { const sl = (sg) => slices.filter((s) => (s.rings[0][0][0] > 0) === (sg > 0)); loftRings(accs.hull, sl(1)); loftRings(accs.hull, sl(-1)); return; }
+    loftRings(accFor(q.node), slices);
+    if (slices.length) blocks.push({ q, x0, x1, z1, ym, bridge: !!q.node.bridge });
   };
   for (const q of P) {
     if (used.has(q)) continue; const n = q.node, num = q.p.num || {};
     switch (q.role) {
-      case 'block': case 'wing': case 'bulwark': if (q.vk === 'side' || q.vk === 'top') solid(q); break;
+      case 'block': case 'wing': case 'bulwark': if (q.vk === 'side') solid(q); break;
       case 'mast': {
         if (q.vk !== 'side') break; const thin = !!n.thin;
         if (!q.closed || q.pts.length < 3) { const pts = q.pts.slice().sort((a, b) => a[1] - b[1]), r0 = num.w > 0 ? num.w / 2 : thin ? 0.08 : 0.22; tubeV(accs.white, pts.map((p, i) => ({ x: p[0], y: 0, z: p[1], r: r0 * (1 - 0.45 * i / Math.max(1, pts.length - 1)) }))); break; }
@@ -192,6 +264,8 @@ export function buildModel(model, ship) {
       default: break;
     }
   }
+  // chi tiết chỉ vẽ ở mặt boong (không có hình mạn): dựng sau cùng; chỉ có ở hình mũi / lái thì báo
+  for (const q of P) { if (used.has(q) || !SOLID.has(q.role) || !q.closed) continue; if (q.vk === 'top') solid(q); else if (q.vk === 'front' || q.vk === 'back') { used.add(q); src[q.p.id] = 'chưa dựng — cần thêm hình mạn hoặc mặt boong'; warn.push('Có chi tiết chỉ vẽ ở hình nhìn từ ' + (q.vk === 'back' ? 'lái' : 'mũi') + ' — vẽ thêm ở hình mạn hoặc mặt boong để app biết nằm ở đâu dọc tàu'); } }
   // lan can mép boong
   if ((model.opts || {}).rails !== false) {
     const st = Math.max(1.5, H.L / 40); for (let x = H.xa + 1; x < H.xf - 1; x += st) { const w = H.hb(x) * H.S(x, 1) - 0.06, z = deckZ(x); if (w < 0.3) continue; for (const s of [-1, 1]) cyl(accs.white, [x, s * w, z], [x, s * w, z + 1], 0.025, 0.025, 4); }
@@ -219,7 +293,7 @@ export function buildModel(model, ship) {
     else flag = { x: xt, z: zt - 0.5, span: 0.45 };
   } else { const m1 = lights.find((l) => l.key === 'mast1'); flag = { x: m1.x, z: m1.z - 1, span: 0.45, auto: true }; }
   for (const a of Object.values(accs)) if (a.idx.length) items.push(a);
-  return { items, lights, eye, flag, hull: H, areas: areas(items, ship.T), warn, dims: { L: H.L, B: 2 * Math.max(...Array.from({ length: 41 }, (_, i) => H.hb(H.xa + H.L * i / 40))), xa: H.xa, xf: H.xf, fb: deckZ(0) - ship.T, T: ship.T } };
+  return { items, lights, eye, flag, links, src, bridge: br ? { xf: br.x1, hb: br.ym, z1: br.z1 } : null, hull: H, areas: areas(items, ship.T), warn: [...new Set(warn)], dims: { L: H.L, B: 2 * Math.max(...Array.from({ length: 41 }, (_, i) => H.hb(H.xa + H.L * i / 40))), xa: H.xa, xf: H.xf, fb: deckZ(0) - ship.T, T: ship.T } };
 }
 
 // diện tích hứng gió (phần trên đường nước): chiếu các tam giác lên mặt mạn (x, z) và mặt trước (y, z), đếm ô lưới

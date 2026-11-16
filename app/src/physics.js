@@ -6,7 +6,7 @@ export function defaultShip() {
   return {
     name: 'Tàu mẫu', type: 'Hàng tổng hợp', load: 'loaded',
     loa: 119.9, lpp: 112, B: 20.2, D: 9.8, tf: 5.8, ta: 6.0, disp: 11800, cb: 0.72,
-    engines: 1, props: 1, ptype: 'fpp', rotDir: 'right', accTime: 60, gear: 1,
+    engines: 1, props: 1, ptype: 'fpp', rotDir: 'right', rot: ['right'], accTime: 60, gear: 1,
     steps: [
       { id: 'f4', label: 'Tiến max', rpm: 160, kn: 13.5, knB: 14.2 },
       { id: 'f3', label: 'Tiến 3', rpm: 125, kn: 10.8, knB: 11.4 },
@@ -33,6 +33,15 @@ export function stepLabel(p, id) {
 
 const num = (v, d) => { const n = parseFloat(v); return isFinite(n) ? n : d; };
 
+// chiều quay từng chân vịt (thứ tự từ trái sang phải, nhìn từ lái lên mũi): 'right' | 'left' | '' (chưa chọn)
+// tàu cũ chỉ có rotDir: 1 chân vịt lấy rotDir, 3 chân vịt lấy cho chân vịt giữa
+export const PROP_NAMES = { 1: ['Chân vịt'], 2: ['Chân vịt trái', 'Chân vịt phải'], 3: ['Chân vịt trái', 'Chân vịt giữa', 'Chân vịt phải'], 4: ['Trái ngoài', 'Trái trong', 'Phải trong', 'Phải ngoài'] };
+export function propRot(p) {
+  const n = Math.max(1, Math.min(4, Math.round(num(p.engines, 1))));
+  if (Array.isArray(p.rot)) return Array.from({ length: n }, (_, i) => p.rot[i] || '');
+  const old = p.rotDir === 'left' ? 'left' : p.rotDir === 'right' ? 'right' : '';
+  return Array.from({ length: n }, (_, i) => (n === 1 || (n === 3 && i === 1) ? old : ''));
+}
 export function engineOffsets(n, B) {
   if (n === 2) return [-B / 4, B / 4];
   if (n === 3) return [-B / 3, 0, B / 3];
@@ -101,8 +110,8 @@ export function buildModel(pIn, opts) {
   M.eta = (M.nR === M.nP || (M.nR === 1 && M.nP % 2 === 1) || (M.nR === 2 && M.nP === 3)) ? Math.min(1, Dp / hR) : 0;
   M.gR = num(p.gammaR, 0.45); M.lR = -0.71 * L; M.xR = -0.5 * L; M.aH = 0.3; M.xH = -0.45 * L; M.tR = 0.39;
   M.rCal = 1;
-  M.hand = p.rotDir === 'left' ? -1 : 1;
-  M.walk = (M.nP % 2 === 1 || M.nP === 1) ? 1 : 0;
+  // hiệu ứng chân vịt theo chiều quay từng chiếc; chưa chọn thì tạm không tính chiếc đó
+  M.hands = propRot(p).map((r) => (r === 'left' ? -1 : r === 'right' ? 1 : 0));
   M.AL = num(p.windAL, L * 10); M.AF = num(p.windAF, B * 12); M.xc = num(p.windXc, 0);
   M.fx = Object.assign({ shallow: true, bank: true, prop: true, env: true }, p.fx || {});
   // hiệu chỉnh hiệu lực bánh lái theo đường kính quay trở đã nhập
@@ -127,6 +136,8 @@ export function sanity(M) {
   const ar = M.AR / (M.L * M.d);
   if (ar > 0.06 || ar < 0.008) w.push(`Tổng diện tích bánh lái = ${pct(ar)} của LPP × mớn nước; tàu thường 1,5–4% (tàu nhỏ cơ động cao tới ~5%).`);
   if (num(p.hR, 0) > ta * 1.1) w.push(`Chiều cao bánh lái ${f1(num(p.hR, 0))} m lớn hơn mớn nước lái.`);
+  const miss = propRot(p).map((r, i) => (r ? '' : PROP_NAMES[M.nP][i])).filter(Boolean);
+  if (miss.length) w.push(`Chưa chọn chiều quay: ${miss.join(', ')} — tạm không tính lực ngang của chiếc đó (chọn ở «Máy chính & chân vịt»).`);
   return w;
 }
 
@@ -199,8 +210,8 @@ function stepCore(S, M, ctrl, env, ext, dt) {
     const T = thrustOf(M, S.n[i], uA);
     Tsum += T;
     X += (1 - M.t) * T; N += -M.yE[i] * (1 - M.t) * T;
-    if (M.fx.prop && M.walk) {
-      const yp = -M.hand * (S.n[i] < 0 ? 0.1 : -0.0015) * Math.abs(T);
+    if (M.fx.prop && M.hands[i]) {
+      const yp = -M.hands[i] * (S.n[i] < 0 ? 0.1 : -0.0015) * Math.abs(T);
       Y += yp; N += yp * (-0.48 * L);
     }
   }

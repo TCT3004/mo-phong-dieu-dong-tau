@@ -24,13 +24,13 @@ button:disabled{opacity:.4;cursor:not-allowed}
 .band{position:relative;min-height:0;border-radius:10px;overflow:hidden;border:1px solid #1d2a33;background:linear-gradient(180deg,#05080b 0%,#0c141a 60%,#141f26 100%)}
 .band .glhold{position:absolute;inset:0;height:auto;min-height:0;border-radius:0;background:#16222C}
 .band.br .glhold{background:transparent}.band.br .glhold canvas.gl{opacity:0}
-.wins{position:absolute;inset:0;display:none;align-items:center;justify-content:center;gap:0;padding:0 1%;pointer-events:none;perspective:1000px}
+.wins{position:absolute;inset:0;display:none;align-items:stretch;justify-content:center;gap:0;pointer-events:none}
 .band.br .wins{display:flex}
-.win{height:74%;background:#000;border:7px solid #1b262e;border-radius:3px;box-shadow:0 8px 22px rgba(0,0,0,.7),inset 0 0 0 1px #2c3a44;margin-top:2.2%}
+.win{height:100%;background:#000}
 .win canvas{width:100%;height:100%;display:block}
-.wl{flex:0 0 26%;transform:rotateY(32deg);transform-origin:right center}
-.wc{flex:0 0 40%;margin-left:-2px;margin-right:-2px;position:relative;z-index:1}
-.wr{flex:0 0 26%;transform:rotateY(-32deg);transform-origin:left center}
+.wl{flex:0 0 30%}
+.wc{flex:0 0 40%}
+.wr{flex:0 0 30%}
 .btop{position:absolute;top:6px;left:6px;right:6px;display:flex;justify-content:space-between;align-items:flex-start;pointer-events:none;z-index:3}
 .btop>*{pointer-events:auto}.btop .seg button{min-height:24px;padding:0 8px;font-size:11.5px;background:rgba(24,35,42,.88)}.btop .seg button.on{background:#5CD6FF}
 .btop .btn.sm{min-height:26px;background:rgba(24,35,42,.88)}.btop .btn.sm.on{background:#5CD6FF}

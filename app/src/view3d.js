@@ -140,9 +140,11 @@ export class View3D {
     const C = { sideP: COL.R, sideS: COL.G, nuc: COL.R, deck: 0xffe08a }, Z = { sideP: 4, sideS: 4, stern: 4, nuc: 4, deck: 9 };
     this.navL = {}; for (const l of geom.lights) (this.navL[l.key] || (this.navL[l.key] = [])).push(lp(C[l.key] || COL.W, l, Z[l.key] || 5));
     const f = geom.flag; this.flags = makeFlags(g, M.p.flags || 'hq', geom.dims.L, f.x, f.z - T, f.span);
+    const br = geom.bridge, eyeHb = Math.max(1.5, geom.hull.hb(Math.max(geom.hull.xa, Math.min(geom.hull.xf, e.x))));
+    this.addBridgeFrame(g, e.x, e.z - T, br && br.xf > e.x + 0.7 ? br.xf : e.x + 1.4, br && br.hb > 1 ? Math.min(br.hb, eyeHb) : Math.min(eyeHb * 0.8, 4.5), e.y || 0);
   }
   buildShip(M, anchors) {
-    const g = this.shipG; g.clear(); this.shipGeom = null; this.flags = null;
+    const g = this.shipG; g.clear(); this.shipGeom = null; this.flags = null; this.bridgeFrame = null;
     if (M.p.model && M.p.model.parts && M.p.model.parts.length) { try { this.buildShipModel(M); return; } catch (e) { console.error('Không dựng được mô hình tàu', e); g.clear(); } }
     const L = M.loa, B = M.B, D = +M.p.D || M.d * 1.6, T = M.d, fb = D - T;
     const sh = new THREE.Shape(); const hb = B / 2, bow = L / 2, st = -L / 2;
@@ -162,6 +164,7 @@ export class View3D {
     const mast2 = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.3, 7, 6), new THREE.MeshLambertMaterial({ color: 0xc9d2d8 })); mast2.position.set(0, fb + shh + 3.5, -(sx + sl * 0.1)); g.add(mast2);
     this.dim = { L, B, fb, shh, bridgeX: sx + sl / 2 + 0.6, eye: fb + shh - 1.6 };
     this.flags = makeFlags(g, M.p.flags || 'hq', L, sx + sl * 0.1, fb + shh + 6.4, 0.5);
+    this.addBridgeFrame(g, this.dim.bridgeX, this.dim.eye, this.dim.bridgeX + 1.3, Math.min(B / 2 - 0.4, 4.5), 0);
     const lp = (c, x, y, z, s) => { const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.glow, color: c, blending: THREE.AdditiveBlending, depthWrite: false, fog: false })); sp.position.set(x, y, z); sp.scale.setScalar(s || 5); sp.visible = false; g.add(sp); return sp; };
     const bz = -(sx + sl * 0.3);
     this.navL = { mast1: [lp(COL.W, 0, fb + fmh + 0.3, -fmx)], mast2: [lp(COL.W, 0, fb + shh + 7, -(sx + sl * 0.1))], sideP: [lp(COL.R, -B * 0.52, fb + shh - 2, bz, 4)], sideS: [lp(COL.G, B * 0.52, fb + shh - 2, bz, 4)],
@@ -297,6 +300,7 @@ export class View3D {
       R.uT.value = e.t; R.uCam.value.copy(c.position); R.uVel.value.set(-Math.sin(wd) * ws, -8.5, Math.cos(wd) * ws); R.uOp.value = Math.min(0.55, 0.12 + 0.4 * rn) * (0.35 + 0.65 * Math.max(day, fl));
       R.uIn.value = view === 'bridge' || view === 'wingP' || view === 'wingS' ? 4.5 : 0;
     }
+    if (this.bridgeFrame) this.bridgeFrame.visible = view === 'bridge';
     const bo = e.bolt; if (bo && fl > 0.25) { if (this.boltT !== bo.t) { this.boltT = bo.t; const a = bo.az * Math.PI / 180, pts = []; let x = st.x + Math.sin(a) * bo.dist, z = -(st.y + Math.cos(a) * bo.dist);
         for (let i = 0; i < 26; i++) { pts.push(new THREE.Vector3(x, 1400 * (1 - i / 25), z)); x += (Math.random() - 0.5) * 110; z += (Math.random() - 0.5) * 110; }
         this.bolt.geometry.dispose(); this.bolt.geometry = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts, false, 'catmullrom', 0.1), 60, Math.max(3, bo.dist / 900), 4, false); }
@@ -309,6 +313,23 @@ export class View3D {
     c.up.set(0, 1, 0).applyQuaternion(sp.q); c.position.copy(sp.pos); c.lookAt(sp.pos.x + dir.x * 100, sp.pos.y + dir.y * 100, sp.pos.z + dir.z * 100);
   }
   // panes: 3 canvas 2D của 3 ô cửa sổ buồng lái (trái, giữa, phải) — cùng một vị trí đứng, nhìn ghép liền
+  // khung cửa kính buồng lái gắn trên tàu (chỉ hiện khi nhìn từ buồng lái): quay đầu nhìn sang thì khung trôi theo cảnh như khung thật.
+  // ex: vị trí mắt (mũi +), eh: độ cao mắt trên đường nước, xf: mặt kính phía trước, hb: nửa bề rộng buồng lái, ey: mắt lệch ngang
+  addBridgeFrame(g, ex, eh, xf, hb, ey) {
+    const grp = new THREE.Group(), M = new THREE.MeshBasicMaterial({ color: 0x1b262e }), lo = eh - 0.55, hi = eh + 0.6, back = Math.min(ex - 1.2, xf - 3.5);
+    const bar = (x0, x1, y0, y1, z0, z1) => { const m = new THREE.Mesh(new THREE.BoxGeometry(Math.max(0.02, y1 - y0), Math.max(0.02, z1 - z0), Math.max(0.02, x1 - x0)), M); m.position.set((y0 + y1) / 2, (z0 + z1) / 2, -(x0 + x1) / 2); grp.add(m); };
+    // kính trước: cột đứng cách nhau ~1,1 m, gờ dưới (bàn điều khiển) và mái trên
+    let n = Math.max(3, Math.round(2 * hb / 1.1)); if (n % 2 === 0) n++; // số ô lẻ: ô kính giữa nằm trên đường tâm, không có cột chắn mũi tàu
+    for (let k = 0; k <= n; k++) { const y = -hb + 2 * hb * k / n; bar(xf - 0.06, xf + 0.06, y - (k % n ? 0.07 : 0.11), y + (k % n ? 0.07 : 0.11), lo - 0.05, hi + 0.05); }
+    bar(xf - 0.9, xf + 0.06, -hb - 0.1, hb + 0.1, lo - 0.75, lo); bar(xf - 1.2, xf + 0.06, -hb - 0.1, hb + 0.1, hi, hi + 0.7);
+    // kính hai bên: cột cách nhau ~1,4 m
+    for (const s of [-1, 1]) {
+      const y = s * hb, m = Math.max(1, Math.round((xf - back) / 1.4));
+      for (let k = 1; k <= m; k++) { const x = xf - (xf - back) * k / m; bar(x - 0.07, x + 0.07, y - 0.06, y + 0.06, lo - 0.05, hi + 0.05); }
+      bar(back, xf, y - 0.5 * s - 0.25, y - 0.5 * s + 0.25, lo - 0.75, lo); bar(back, xf, y - 0.6 * s - 0.3, y - 0.6 * s + 0.3, hi, hi + 0.7);
+    }
+    grp.visible = false; g.add(grp); this.bridgeFrame = grp;
+  }
   render(panes) {
     const cv = this.canvas, pr = this.q.pr, sp = this.spec, r = this.r, c = this.cam;
     if (sp && sp.panes === 3 && panes) {
