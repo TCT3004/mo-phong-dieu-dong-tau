@@ -43,13 +43,15 @@ const HINT = {
 export function openShipDraw() {
   // bản đang vẽ giữ qua các lần mở; chưa sửa gì thì lấy lại theo thông số tàu hiện tại
   if (st && !st.edited && JSON.stringify(A.p.model || null) !== st.src) st = null;
-  if (!st) st = { src: JSON.stringify(A.p.model || null), edited: false, model: A.p.model ? clone(A.p.model) : emptyModel(), mode: 'board', cur: null, tool: 'edit', sel: null, draft: null, chain: null, drag: null, mouse: null, img: new Map(), data: new Map(), v: { cx: 0, cy: 0, sc: 1 }, b: null, tol: 40, lastPoint: null, grid: 0.5, snap: { grid: true, pts: true, guides: true }, showBack: false, typed: '', ver: 0, cc: new Map(), active: {} };
+  if (!st) st = { src: JSON.stringify(A.p.model || null), edited: false, model: A.p.model ? clone(A.p.model) : emptyModel(), mode: 'board', cur: null, tool: 'edit', sel: null, draft: null, chain: null, drag: null, mouse: null, img: new Map(), data: new Map(), v: { cx: 0, cy: 0, sc: 1 }, b: null, tol: 40, lastPoint: null, grid: 0.5, snap: { grid: true, pts: true, guides: true }, showBack: false, typed: '', ver: 0, cc: new Map(), active: {}, cam3: 'orbit', hist: [], hi: -1 };
   st.model.guides = st.model.guides || [];
+  if (!st.hist.length) { st.hist = [JSON.stringify(st.model)]; st.hi = 0; }
   if (!st.cur && st.model.views.length) st.cur = st.model.views[0].id;
   if (st.model.views.some((v) => v.kind === 'back')) st.showBack = true;
   let d = $('#sdlg'); if (!d) { d = document.createElement('div'); d.id = 'sdlg'; d.className = 'modal'; $('#app').appendChild(d); }
   d.innerHTML = `<div class="mbox" role="dialog" aria-label="Vẽ tàu từ sơ đồ">
   <div class="mhead"><b>Vẽ tàu từ sơ đồ</b><span class="muted" id="sdName"></span>
+    <button class="btn sm" id="sdUndo" title="Hoàn tác (Ctrl+Z)">↶ Hoàn tác</button><button class="btn sm" id="sdRedo" title="Làm lại (Ctrl+Y)">↷ Làm lại</button>
     <button class="btn sm" id="sdTpl">Mẫu tàu pháo (chung chung)</button><button class="btn sm" id="sdExp">Xuất file…</button><label class="btn sm" style="display:inline-flex;align-items:center">Nhập file…<input type="file" id="sdImp" accept=".json" hidden></label>
     <button class="btn sm pri" id="sdApply">Dùng mô hình cho tàu</button><button class="btn sm" id="sdClose">Đóng</button></div>
   <div class="mbody" style="grid-template-columns:262px minmax(0,1fr) 300px">
@@ -74,7 +76,7 @@ export function openShipDraw() {
     <div class="mright">
       <section class="wst"><b>Chi tiết đang chọn</b><div id="sdSel" style="margin-top:5px"></div></section>
       <section class="wst"><b>Các chi tiết</b><div id="sdParts" style="margin-top:5px;max-height:170px;overflow:auto"></div></section>
-      <section class="wst"><b>Xem 3D</b> <span class="muted">(kéo để xoay)</span><canvas id="sd3d" style="width:100%;height:210px;display:block;border-radius:6px;margin-top:5px;background:#0b1116;touch-action:none"></canvas><div class="muted" id="sd3dInfo" style="margin-top:4px"></div>
+      <section class="wst"><b>Xem 3D</b> <span class="muted" id="sd3dTip">(kéo để xoay, bấm khối để chọn)</span><div id="sd3dHome"><div id="sd3dWrap" style="position:relative;margin-top:5px"><div class="seg" id="sd3dBar" style="position:absolute;left:6px;top:6px;z-index:2"></div><canvas id="sd3d" style="width:100%;height:210px;display:block;border-radius:6px;background:#0b1116;touch-action:none" tabindex="0"></canvas></div></div><div class="muted" id="sd3dInfo" style="margin-top:4px"></div>
         <div class="flex" style="gap:6px;margin-top:6px;align-items:center;flex-wrap:nowrap"><select id="sdShade" style="flex:1;min-width:0" aria-label="Tông màu">${Object.entries(SHADES).map(([k, s]) => `<option value="${k}" ${(st.model.opts.shade || 'haze') === k ? 'selected' : ''}>${s.name}</option>`).join('')}</select><label style="display:flex;gap:4px;align-items:center;white-space:nowrap"><input type="checkbox" id="sdRails" ${st.model.opts.rails !== false ? 'checked' : ''}> Lan can</label></div>
         <label style="display:flex;gap:6px;align-items:center;margin-top:6px"><input type="checkbox" id="sdWind" checked> Cập nhật diện tích hứng gió (tab 1) theo mô hình</label><div class="muted" id="sdMsg" style="margin-top:4px"></div></section>
     </div></div></div>`;
@@ -83,18 +85,37 @@ export function openShipDraw() {
   for (const v of st.model.views) loadImg(v);
 }
 function close() { const d = $('#sdlg'); if (d) d.style.display = 'none'; if (st && st.p3) { st.p3.r.dispose(); st.p3.r.forceContextLoss(); st.p3 = null; } document.removeEventListener('keydown', onKey); }
-function refreshAll() { drawMode(); drawViews(); drawRefs(); drawGuides(); drawParts(); drawSel(); paint(); $('#sdName').textContent = st.model.name + (st.model.template ? ' — mẫu chung chung' : ''); }
-function changed(panels = true) { st.edited = true; st.ver++; if (panels) { drawRefs(); drawParts(); drawGuides(); } paint(); clearTimeout(st.t3); st.t3 = setTimeout(rebuild3d, 250); }
+function refreshAll() { drawBar3(); drawMode(); drawViews(); drawRefs(); drawGuides(); drawParts(); drawSel(); paint(); $('#sdName').textContent = st.model.name + (st.model.template ? ' — mẫu chung chung' : ''); }
+function changed(panels = true) { st.edited = true; st.ver++; if (panels) { drawRefs(); drawParts(); drawGuides(); } paint(); clearTimeout(st.t3); st.t3 = setTimeout(rebuild3d, 250); if (!st.restoring) { clearTimeout(st.th); st.th = setTimeout(pushHist, 350); } }
+// ---------- hoàn tác / làm lại: lưu ảnh chụp mô hình sau mỗi lần sửa ----------
+function pushHist() { const j = JSON.stringify(st.model); if (st.hist[st.hi] === j) return; st.hist = st.hist.slice(0, st.hi + 1); st.hist.push(j); if (st.hist.length > 120) st.hist.shift(); st.hi = st.hist.length - 1; histBtns(); }
+function histBtns() { const u = $('#sdUndo'), r = $('#sdRedo'); if (u) u.disabled = st.hi <= 0; if (r) r.disabled = st.hi >= st.hist.length - 1; }
+function undo(dir) {
+  if (st.th) { clearTimeout(st.th); st.th = null; pushHist(); }
+  const k = st.hi + dir; if (k < 0 || k >= st.hist.length) return; st.hi = k;
+  st.restoring = true; st.model = JSON.parse(st.hist[k]); st.model.guides = st.model.guides || [];
+  if (!st.model.parts.some((p) => p.id === st.sel)) st.sel = null; if (!view()) st.cur = st.model.views[0] ? st.model.views[0].id : null; if (st.mode === 'single' && !view()) st.mode = 'board';
+  st.draft = null; st.h3 = null; changed(); refreshAll(); st.restoring = false; histBtns(); st.edited = true;
+}
 // tỷ lệ từng hình (nhớ theo phiên bản dữ liệu)
 const C = (v) => { let e = st.cc.get(v.id); if (!e || e.ver !== st.ver) { e = { ver: st.ver, c: calibrate(v, ship()) }; st.cc.set(v.id, e); } return e.c; };
 
 // ---------- chế độ: bàn vẽ 3 hình chiếu / một hình ----------
 function drawMode() {
   const v = view(), el = $('#sdMode');
-  el.innerHTML = `<button data-m="board" class="${st.mode === 'board' ? 'on' : ''}">Bàn vẽ 3 hình chiếu</button><button data-m="single" class="${st.mode === 'single' ? 'on' : ''}" ${v ? '' : 'disabled'}>Một hình${v ? ': ' + esc(v.name) : ''}</button>`;
+  el.innerHTML = `<button data-m="board" class="${st.mode === 'board' ? 'on' : ''}">Bàn vẽ 3 hình chiếu</button><button data-m="single" class="${st.mode === 'single' ? 'on' : ''}" ${v ? '' : 'disabled'}>Một hình${v ? ': ' + esc(v.name) : ''}</button><button data-m="big3d" class="${st.mode === 'big3d' ? 'on' : ''}">3D lớn (sửa được)</button>`;
   const e = $('#sdEmpty'); e.style.display = st.mode === 'single' && !v ? 'flex' : 'none'; e.textContent = 'Chọn một ảnh ở bước 1 để đặt mốc, đo kích thước.';
 }
-function setMode(m, vid) { if (vid) st.cur = vid; if (m === 'single' && !view()) return; st.mode = m; st.draft = null; st.chain = null; st.typed = ''; if (m === 'single') { fitView(); if (st.tool === 'guide') setTool('edit'); } else { if (st.tool === 'dim' || st.tool.startsWith('ref:')) setTool('edit'); fitBoard(); } refreshAll(); }
+function setMode(m, vid) {
+  if (vid) st.cur = vid; if (m === 'single' && !view()) return; const was = st.mode; st.mode = m; st.draft = null; st.chain = null; st.typed = '';
+  // 3D lớn: chuyển khung 3D vào giữa, chỗ bàn vẽ
+  const wrap = $('#sd3dWrap'), cv3 = $('#sd3d');
+  if (m === 'big3d') { $('.wcv').appendChild(wrap); wrap.style.cssText = 'position:absolute;inset:0;margin:0'; cv3.style.height = '100%'; cv3.style.borderRadius = '0'; $('#sdCv').style.visibility = 'hidden'; $('#sd3dTip').textContent = '— đang mở lớn ở giữa'; $('#sdHint').textContent = HINT3; }
+  else if (was === 'big3d') { $('#sd3dHome').appendChild(wrap); wrap.style.cssText = 'position:relative;margin-top:5px'; cv3.style.height = '210px'; cv3.style.borderRadius = '6px'; $('#sdCv').style.visibility = ''; $('#sd3dTip').textContent = '(kéo để xoay, bấm khối để chọn)'; st.h3 = null; setTool(st.tool); }
+  if (m === 'single') { fitView(); if (st.tool === 'guide') setTool('edit'); } else if (m === 'board') { if (st.tool === 'dim' || st.tool.startsWith('ref:')) setTool('edit'); fitBoard(); }
+  refreshAll(); if (st.p3) { if (m === 'big3d') build3dExtras(); render3d(); }
+}
+const HINT3 = '3D lớn: bấm vào khối để chọn — các điểm nắm hiện trên khối (cam: từ hình mạn, xanh dương: từ mặt boong, xanh lá: từ hình mũi / lái). Kéo điểm nắm để sửa (Shift: khóa một trục), Shift + kéo khối để dời cả khối. Kéo chỗ trống: xoay (hoặc dời khi xem thẳng), lăn chuột: phóng to. Ctrl+Z hoàn tác.';
 
 // ---------- danh sách ảnh / hình chiếu ----------
 function drawViews() {
@@ -104,7 +125,7 @@ function drawViews() {
 // ---------- mốc & kích thước ----------
 function drawRefs() {
   const el = $('#sdRefs');
-  if (st.mode === 'board') {
+  if (st.mode !== 'single') {
     const imgs = st.model.views.filter((v) => v.imgId);
     el.innerHTML = imgs.length ? imgs.map((v) => { const c = C(v); return `<div class="flex" style="gap:5px;align-items:center;margin-bottom:4px;flex-wrap:nowrap"><span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(v.name)}">${esc(v.name)}</span><span class="${c.ok ? 'muted' : ''}" style="${c.ok ? '' : 'color:#FFB547'}">${c.ok ? '✓ có tỷ lệ' : 'chưa đặt mốc'}</span><button class="btn sm" data-cal="${v.id}">Đặt mốc</button></div>`; }).join('') + '<div class="muted">Ảnh phải có mốc (mũi, lái, đáy ky / hai mép) mới hiện đúng chỗ trên bàn vẽ.</div>' : '<div class="muted">Vẽ trên lưới thì không cần mốc. Có ảnh sơ đồ thì đặt mốc ở đây.</div>';
     return;
@@ -133,7 +154,8 @@ function drawParts() {
 // ---------- chi tiết đang chọn: chọn loại nhiều nấc ----------
 function drawSel() {
   const el = $('#sdSel'), p = st.model.parts.find((q) => q.id === st.sel);
-  if (!p) { el.innerHTML = '<div class="muted">Bấm vào một chi tiết trên bàn vẽ để chọn, hoặc vẽ mới ở bước 3.</div>'; return; }
+  if (st.p3 && st.selShown !== st.sel + '|' + (st.h3sel ? st.h3sel.pid + st.h3sel.k : '') + '|' + st.mode) { st.selShown = st.sel + '|' + (st.h3sel ? st.h3sel.pid + st.h3sel.k : '') + '|' + st.mode; build3dExtras(); }
+  if (!p) { el.innerHTML = '<div class="muted">Bấm vào một chi tiết trên bàn vẽ hoặc trên 3D để chọn, hoặc vẽ mới ở bước 3.</div>'; return; }
   let h = ''; const r = resolve(p.type);
   for (let dpt = 0; dpt < 5; dpt++) { const opts = childrenAt(p.type, dpt); if (!opts) break; h += `<select data-lv="${dpt}" style="width:100%;margin-bottom:4px" aria-label="Loại chi tiết nấc ${dpt + 1}"><option value="">— chọn ${dpt ? 'tiếp' : 'loại'} —</option>${opts.map((o) => `<option value="${o.id}" ${p.type[dpt] === o.id ? 'selected' : ''}>${o.name}</option>`).join('')}</select>`; if (p.type[dpt] === undefined) break; }
   const pt = r.leaf && r.node.kind === 'point', src = st.geom && st.geom.src ? st.geom.src[p.id] : '';
@@ -141,7 +163,11 @@ function drawSel() {
   h += `<input id="sdNote" class="cell" value="${esc(p.note || '')}" placeholder="Ghi chú (tùy ý)" style="width:100%;margin-bottom:5px;text-align:left;height:28px">`;
   if (!pt) h += `<div class="grid g3" style="gap:4px">${[['h', 'Cao'], ['w', 'Rộng'], ['l', 'Dài']].map(([k, n]) => `<div class="fld"><label for="sdN${k}">${n} (m)</label><div class="in"><input id="sdN${k}" data-num="${k}" value="${p.num && p.num[k] ? fmt(p.num[k], 2) : ''}" placeholder="tự tính"></div></div>`).join('')}</div>`;
   h += `<div class="flex" style="gap:5px;margin-top:6px"><button class="btn sm" id="sdDup" style="flex:1">Nhân bản${/(^|canh)[TP]$/.test(p.type[p.type.length - 1] || '') ? ' sang mạn kia' : ''}</button><button class="btn sm warn" id="sdDelP" style="flex:1">Xóa chi tiết</button></div>`;
+  // điểm nắm đang chọn trên 3D: gõ tọa độ
+  const hs = st.h3sel && st.h3sel.pid === p.id ? p : null, hv = hs && viewById(p.view), hc = hv && C(hv);
+  if (hs && hc.ok && p.pts[st.h3sel.k]) { const a = hc.toShip(p.pts[st.h3sel.k]), lab = AX[hv.kind]; h += `<div class="lbl" style="margin-top:7px">Điểm đang chọn (${{ side: 'hình mạn', top: 'mặt boong', front: 'hình mũi', back: 'hình lái' }[hv.kind]})</div><div class="grid g2" style="gap:4px;margin-top:3px">${[0, 1].map((i) => `<div class="fld"><label for="sdH${i}">${lab[i]} (m)</label><div class="in"><input id="sdH${i}" data-hc="${i}" value="${fmt(a[i], 2)}"></div></div>`).join('')}</div>`; }
   el.innerHTML = h;
+  $$('#sdSel [data-hc]').forEach((i) => { i.onchange = () => { const a = hc.toShip(p.pts[st.h3sel.k]); a[+i.dataset.hc] = num(i.value.replace(',', '.'), a[+i.dataset.hc]); p.pts[st.h3sel.k] = hc.toPx(a); changed(); }; });
   $$('#sdSel select').forEach((s) => { s.onchange = () => { const dpt = +s.dataset.lv; p.type = p.type.slice(0, dpt); if (s.value) p.type.push(s.value); if (isPointType(p.type) && p.kind === 'point') st.lastPoint = p.type.slice(); drawSel(); changed(); }; });
   $('#sdNote').oninput = (e) => { p.note = e.target.value; drawParts(); };
   $$('#sdSel [data-num]').forEach((i) => { i.onchange = () => { p.num = p.num || {}; const v = num(i.value, 0); if (v > 0) p.num[i.dataset.num] = v; else delete p.num[i.dataset.num]; changed(false); }; });
@@ -160,6 +186,8 @@ function setTool(t) {
 }
 function bind() {
   $('#sdClose').onclick = close;
+  $('#sdUndo').onclick = () => undo(-1); $('#sdRedo').onclick = () => undo(1); histBtns();
+  $('#sd3dBar').onclick = (e) => { const b = e.target.closest('button'); if (!b) return; st.cam3 = b.dataset.c; if (st.p3) { st.p3.oz = 1; st.p3.ox = 0; st.p3.oy = 0; } drawBar3(); render3d(); };
   $('#sdTools').onclick = (e) => { const t = e.target.dataset.t; if (t) setTool(st.tool === t && t !== 'edit' ? 'edit' : t); };
   $('#sdMode').onclick = (e) => { const b = e.target.closest('button'); if (b && !b.disabled) setMode(b.dataset.m); };
   $('#sdFit').onclick = () => { if (st.mode === 'board') fitBoard(); else fitView(); paint(); };
@@ -202,6 +230,7 @@ function bind() {
 function onKey(e) {
   if (!st || $('#sdlg').style.display === 'none') return; const typing = /INPUT|SELECT|TEXTAREA/.test(document.activeElement && document.activeElement.tagName);
   if (typing) return;
+  if ((e.ctrlKey || e.metaKey) && (e.key === 'z' || e.key === 'Z' || e.key === 'y' || e.key === 'Y')) { undo(e.key.toLowerCase() === 'y' || e.shiftKey ? 1 : -1); e.preventDefault(); e.stopPropagation(); return; }
   const drawing = st.draft || st.tool === 'guide';
   if (drawing && /^[0-9.,;\-]$/.test(e.key)) { st.typed += e.key; paint(); e.preventDefault(); e.stopPropagation(); return; }
   if (e.key === 'Backspace' && st.typed) { st.typed = st.typed.slice(0, -1); paint(); e.preventDefault(); e.stopPropagation(); return; }
@@ -297,8 +326,8 @@ function ptsM(kinds, skip) { const out = []; for (const p of st.model.parts) { i
 
 // ---------- thước CAD: bắt dính ----------
 // m: điểm (mét) theo trục của ô; prev: điểm trước (mét) để vẽ thẳng; trả { a, hit: { pt, h, v } }
-function snapM(kind, m, prev, shift, skip) {
-  const s = ship(), tol = 9 / pxPerM(), a = m.slice(), hit = {};
+function snapM(kind, m, prev, shift, skip, tolM) {
+  const s = ship(), tol = tolM || 9 / pxPerM(), a = m.slice(), hit = {};
   if (shift && prev) { if (Math.abs(a[0] - prev[0]) > Math.abs(a[1] - prev[1])) { a[1] = prev[1]; hit.v = 'thẳng'; } else { a[0] = prev[0]; hit.h = 'thẳng'; } }
   if (st.snap.pts && !(shift && prev)) { let bd = tol, bp = null; for (const q of ptsM([kind], skip)) { const d = Math.hypot(q[0] - a[0], q[1] - a[1]); if (d < bd) { bd = d; bp = q; } } if (bp) { hit.pt = bp; return { a: bp.slice(), hit }; } }
   // ứng viên theo từng trục: vạch gióng, điểm của các hình khác có chung trục, đường chuẩn
@@ -530,15 +559,18 @@ function ctx(p) {
   const sp = st.model.parts.find((o) => o.id === st.sel), sv = sp && viewById(sp.view); if (!sp) return; const k = sp.pts.findIndex((z) => near(i2sV(sv, z), p)); if (k >= 0 && sp.pts.length > (sp.kind === 'line' ? 2 : 3)) { sp.pts.splice(k, 1); changed(false); }
 }
 
-// ---------- xem 3D ----------
+// ---------- xem 3D: xoay tự do hoặc xem thẳng (trên / mạn / mũi); 3D lớn thì sửa được ----------
+// tọa độ tàu (x mũi, y mạn phải, z từ đáy ky) ↔ cảnh three (X = y, Y = z − T, Z = −x)
+const toW = (x, y, z) => new THREE.Vector3(y, z - ship().T, -x);
+const fromW = (v) => [-v.z, v.x, v.y + ship().T];
+function drawBar3() { const el = $('#sd3dBar'); if (el) el.innerHTML = [['orbit', 'Xoay'], ['top', 'Trên'], ['side', 'Mạn'], ['front', 'Mũi']].map(([k, n]) => `<button data-c="${k}" class="${st.cam3 === k ? 'on' : ''}" style="padding:2px 8px">${n}</button>`).join(''); }
 function initPreview() {
   const c = $('#sd3d'); if (!c) return; let r; try { r = new THREE.WebGLRenderer({ canvas: c, antialias: true }); } catch (e) { $('#sd3dInfo').textContent = 'Máy không mở thêm được khung 3D.'; return; }
   const scene = new THREE.Scene(); scene.background = new THREE.Color(0x0b1116); scene.add(new THREE.HemisphereLight(0xffffff, 0x334455, 1.4)); const sun = new THREE.DirectionalLight(0xffffff, 1.3); sun.position.set(-60, 90, 40); scene.add(sun);
   const water = new THREE.Mesh(new THREE.CircleGeometry(400, 48), new THREE.MeshBasicMaterial({ color: 0x1d4a63, transparent: true, opacity: 0.55, depthWrite: false })); water.rotation.x = -Math.PI / 2; scene.add(water);
-  st.p3 = { r, scene, cam: new THREE.PerspectiveCamera(32, 1, 0.5, 6000), yaw: -2.25, pitch: 0.32, dist: 1, grp: null, L: 60 };
-  let drag = null; c.onpointerdown = (e) => { drag = [e.clientX, e.clientY]; c.setPointerCapture(e.pointerId); };
-  c.onpointermove = (e) => { if (!drag || !st.p3) return; st.p3.yaw -= (e.clientX - drag[0]) * 0.01; st.p3.pitch = Math.max(-0.2, Math.min(1.45, st.p3.pitch + (e.clientY - drag[1]) * 0.008)); drag = [e.clientX, e.clientY]; render3d(); };
-  c.onpointerup = () => { drag = null; }; c.onwheel = (e) => { e.preventDefault(); if (!st.p3) return; st.p3.dist = Math.max(0.3, Math.min(3, st.p3.dist * (e.deltaY > 0 ? 1.12 : 0.89))); render3d(); };
+  st.p3 = { r, scene, water, cam: new THREE.PerspectiveCamera(32, 1, 0.5, 6000), ocam: new THREE.OrthographicCamera(-1, 1, 1, -1, -5000, 5000), yaw: -2.25, pitch: 0.32, dist: 1, oz: 1, ox: 0, oy: 0, grp: null, hl: null, hd: null, L: 60, ray: new THREE.Raycaster() };
+  c.onpointerdown = (e) => down3(e); c.onpointermove = (e) => move3(e); c.onpointerup = (e) => up3(e);
+  c.onwheel = (e) => { e.preventDefault(); if (!st.p3) return; const f = e.deltaY > 0 ? 1.12 : 0.89; if (st.cam3 === 'orbit') st.p3.dist = Math.max(0.08, Math.min(3, st.p3.dist * f)); else st.p3.oz = Math.max(0.3, Math.min(60, st.p3.oz / f)); render3d(); };
   rebuild3d();
 }
 function rebuild3d() {
@@ -549,14 +581,100 @@ function rebuild3d() {
   if (P.grp) { P.scene.remove(P.grp); P.grp.traverse((o) => { if (o.geometry) o.geometry.dispose(); if (o.material) o.material.dispose(); }); }
   P.grp = modelGroup(THREE, geom); P.scene.add(P.grp); P.L = geom.dims.L;
   const a = geom.areas; $('#sd3dInfo').innerHTML = `Dài ${fmt(geom.dims.L)} m · rộng ${fmt(geom.dims.B)} m · tĩnh không ${fmt(a.air)} m<br>Hứng gió: mạn ${Math.round(a.AL)} m² · trước ${Math.round(a.AF)} m² · tâm ${fmt(a.xc)} m${geom.warn.length ? '<br><span style="color:#FFB547">' + geom.warn.map(esc).join('<br>') + '</span>' : ''}`;
-  render3d();
+  build3dExtras(); render3d();
 }
+const cam3 = () => (st.cam3 === 'orbit' ? st.p3.cam : st.p3.ocam);
 function render3d() {
   const P = st && st.p3; if (!P) return; const c = $('#sd3d'), w = c.clientWidth | 0, h = c.clientHeight | 0; if (!w || !h) return;
-  P.r.setPixelRatio(Math.min(2, window.devicePixelRatio || 1)); P.r.setSize(w, h, false); P.cam.aspect = w / h;
-  const R = P.L * 1.25 * P.dist; P.cam.position.set(Math.sin(P.yaw) * Math.cos(P.pitch) * R, Math.sin(P.pitch) * R + 2, Math.cos(P.yaw) * Math.cos(P.pitch) * R); P.cam.lookAt(0, 3, 0); P.cam.updateProjectionMatrix();
-  P.r.render(P.scene, P.cam);
+  P.r.setPixelRatio(Math.min(2, window.devicePixelRatio || 1)); P.r.setSize(w, h, false);
+  if (st.cam3 === 'orbit') { P.cam.aspect = w / h; const R = P.L * 1.25 * P.dist; P.cam.position.set(Math.sin(P.yaw) * Math.cos(P.pitch) * R + P.ox, Math.sin(P.pitch) * R + 2 + P.oy, Math.cos(P.yaw) * Math.cos(P.pitch) * R); P.cam.lookAt(P.ox, 3 + P.oy, 0); P.cam.updateProjectionMatrix(); }
+  else {
+    // xem thẳng, cùng hướng với bàn vẽ: mạn — mũi bên phải; trên — mũi bên phải, mạn phải ở dưới; mũi — mạn phải bên trái
+    const o = P.ocam, hh = P.L * 0.34 / P.oz; o.left = -hh * w / h; o.right = hh * w / h; o.top = hh; o.bottom = -hh;
+    const cx = P.ox, cy = P.oy, T = ship().T;
+    if (st.cam3 === 'side') { o.up.set(0, 1, 0); o.position.set(1000, cy + 3, -cx); o.lookAt(0, cy + 3, -cx); }
+    else if (st.cam3 === 'top') { o.up.set(-1, 0, 0); o.position.set(-cy, 1000, -cx); o.lookAt(-cy, 0, -cx); }
+    else { o.up.set(0, 1, 0); o.position.set(-cx, cy + 3, -1000); o.lookAt(-cx, cy + 3, 0); }
+    o.updateProjectionMatrix(); P.water.visible = st.cam3 === 'top';
+  }
+  if (st.cam3 === 'orbit') P.water.visible = true;
+  P.r.render(P.scene, cam3());
 }
+// khối của nhóm chi tiết đang chọn sáng lên; ở 3D lớn hiện điểm nắm
+function build3dExtras() {
+  const P = st && st.p3; if (!P || !st.geom) return; const g = st.geom;
+  for (const k of ['hl', 'hd']) if (P[k]) { P.scene.remove(P[k]); P[k].traverse((o) => { if (o.geometry) o.geometry.dispose(); if (o.material) o.material.dispose(); }); P[k] = null; }
+  const ids = st.sel ? (g.links[st.sel] || [st.sel]) : []; if (!ids.length) { render3d(); return; }
+  // vùng tam giác của các chi tiết trong nhóm
+  const pos = [], bb = [Infinity, Infinity, Infinity, -Infinity, -Infinity, -Infinity], seen = new Set();
+  for (const id of ids) for (const r of g.ranges[id] || []) { const key = r.it + ':' + r.t0; if (seen.has(key)) continue; seen.add(key); const it = g.items[r.it]; for (let t = r.t0; t < r.t1; t++) for (let k = 0; k < 3; k++) { const v = it.idx[t * 3 + k], x = it.pos[v * 3], y = it.pos[v * 3 + 1], z = it.pos[v * 3 + 2]; const w = toW(x, y, z); pos.push(w.x, w.y, w.z); bb[0] = Math.min(bb[0], x); bb[1] = Math.min(bb[1], y); bb[2] = Math.min(bb[2], z); bb[3] = Math.max(bb[3], x); bb[4] = Math.max(bb[4], y); bb[5] = Math.max(bb[5], z); } }
+  if (pos.length) { const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); const grp = new THREE.Group(); grp.add(new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: 0x00e5ff, transparent: true, opacity: 0.32, depthWrite: false, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2 }))); grp.add(new THREE.Mesh(geo.clone(), new THREE.MeshBasicMaterial({ color: 0x00e5ff, wireframe: true, transparent: true, opacity: 0.35, depthWrite: false }))); grp.renderOrder = 5; P.hl = grp; P.scene.add(grp); }
+  st.bb3 = pos.length ? bb : null;
+  if (st.mode === 'big3d') { P.hd = new THREE.Group(); P.hd.renderOrder = 10; P.scene.add(P.hd); st.h3 = handles(ids); const rr = Math.max(0.12, Math.min(0.5, P.L / 160)); for (const h of st.h3) { const sel = st.h3sel && st.h3sel.pid === h.p.id && st.h3sel.k === h.k; const m = new THREE.Mesh(new THREE.SphereGeometry(rr * (sel ? 1.5 : 1), 12, 8), new THREE.MeshBasicMaterial({ color: sel ? 0xffffff : h.col, depthTest: false, transparent: true, opacity: 0.95 })); m.position.copy(h.w); m.renderOrder = 11; m.userData.h = h; P.hd.add(m); } }
+  render3d();
+}
+// điểm nắm: đỉnh nét vẽ của từng hình chiếu, đặt trên mặt khối nhìn về phía hình chiếu đó
+function handles(ids) {
+  const out = [], bb = st.bb3, KC = { side: 0xFF9100, top: 0x2979FF, front: 0x00C853, back: 0x00C853 };
+  for (const id of ids) {
+    const p = st.model.parts.find((q) => q.id === id), v = p && viewById(p.view); if (!v) continue; const c = C(v); if (!c.ok) continue;
+    p.pts.forEach((q, k) => {
+      const a = c.toShip(q); let x, y, z;
+      if (v.kind === 'side') { x = a[0]; z = a[1]; y = bb ? bb[4] + 0.05 : 0; }
+      else if (v.kind === 'top') { x = a[0]; y = a[1]; z = bb ? bb[5] + 0.05 : ship().D + 1; }
+      else { y = a[0]; z = a[1]; x = bb ? (v.kind === 'front' ? bb[3] + 0.05 : bb[0] - 0.05) : 0; }
+      out.push({ p, v, k, kind: v.kind, col: KC[v.kind], w: toW(x, y, z), plane: v.kind === 'side' ? ['y', y] : v.kind === 'top' ? ['z', z] : ['x', x] });
+    });
+  }
+  return out;
+}
+function ray3(e) { const P = st.p3, c = $('#sd3d'), r = c.getBoundingClientRect(); P.ray.setFromCamera(new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1), cam3()); return P.ray; }
+// giao tia chuột với mặt phẳng (theo trục tàu x / y / z = hằng số) → tọa độ tàu
+function hitPlane(e, ax, val) { const ray = ray3(e).ray, T = ship().T; let n, d; if (ax === 'y') { n = new THREE.Vector3(1, 0, 0); d = -val; } else if (ax === 'z') { n = new THREE.Vector3(0, 1, 0); d = -(val - T); } else { n = new THREE.Vector3(0, 0, 1); d = val; } const pl = new THREE.Plane(n, d), out = new THREE.Vector3(); return ray.intersectPlane(pl, out) ? fromW(out) : null; }
+function partAt3(e) {
+  const P = st.p3; if (!P.grp || !st.geom) return null; const hit = ray3(e).intersectObjects(P.grp.children, false)[0]; if (!hit) return null;
+  const it = P.grp.children.indexOf(hit.object), t = hit.faceIndex; let best = null;
+  for (const [id, rs] of Object.entries(st.geom.ranges)) for (const r of rs) if (r.it === it && t >= r.t0 && t < r.t1) { const p = st.model.parts.find((q) => q.id === id); const v = p && viewById(p.view); const pr = v ? { side: 0, top: 1, front: 2, back: 2 }[v.kind] : 3; if (!best || pr < best.pr || (r.t1 - r.t0) < best.n) best = { id, pr, n: r.t1 - r.t0 }; }
+  return best ? { id: best.id, point: fromW(hit.point) } : null;
+}
+function down3(e) {
+  const P = st.p3, c = $('#sd3d'); c.setPointerCapture(e.pointerId); c.focus({ preventScroll: true }); st.d3 = { x: e.clientX, y: e.clientY, moved: false };
+  if (st.mode === 'big3d' && P.hd) { const h = ray3(e).intersectObjects(P.hd.children, false)[0]; if (h) { const hd = h.object.userData.h; st.h3sel = { pid: hd.p.id, k: hd.k }; st.d3.handle = hd; st.d3.start = fromW(hd.w); drawSel(); return; } }
+  const pa = partAt3(e);
+  if (st.mode === 'big3d' && e.shiftKey && pa && st.sel && (st.geom.links[st.sel] || [st.sel]).includes(pa.id)) { const ax = st.cam3 === 'side' ? 'y' : st.cam3 === 'front' ? 'x' : 'z', val = ax === 'y' ? pa.point[1] : ax === 'x' ? pa.point[0] : pa.point[2]; st.d3.group = { ax, val, start: pa.point, ids: st.geom.links[st.sel] || [st.sel], orig: new Map((st.geom.links[st.sel] || [st.sel]).map((id) => { const p = st.model.parts.find((q) => q.id === id); return [id, p.pts.map((q) => q.slice())]; })) }; return; }
+  st.d3.pick = pa;
+}
+function move3(e) {
+  const P = st.p3, d = st.d3; if (!d) return; const dx = e.clientX - d.x, dy = e.clientY - d.y; if (Math.hypot(dx, dy) > 3) d.moved = true;
+  if (d.handle) {
+    const h = d.handle, a = hitPlane(e, h.plane[0], h.plane[1]); if (!a) return; const c = C(h.v);
+    let m = h.kind === 'side' ? [a[0], a[2]] : h.kind === 'top' ? [a[0], a[1]] : [a[1], a[2]];
+    const s0 = h.kind === 'side' ? [d.start[0], d.start[2]] : h.kind === 'top' ? [d.start[0], d.start[1]] : [d.start[1], d.start[2]];
+    if (e.shiftKey) { if (Math.abs(m[0] - s0[0]) > Math.abs(m[1] - s0[1])) m[1] = s0[1]; else m[0] = s0[0]; }
+    else m = snapM(h.kind, m, null, false, h.p, Math.max(0.05, st.grid * 0.6)).a;
+    h.p.pts[h.k] = c.toPx(m); st.edited = true; st.ver++; paint();
+    if (!st.tq) st.tq = setTimeout(() => { st.tq = null; liveRebuild(); }, 70);
+    return;
+  }
+  if (d.group) {
+    const g = d.group, a = hitPlane(e, g.ax, g.val); if (!a) return; const gs = st.grid; let D = [a[0] - g.start[0], a[1] - g.start[1], a[2] - g.start[2]].map((v) => Math.round(v / gs) * gs);
+    if (g.ax === 'y') D[1] = 0; else if (g.ax === 'x') D[0] = 0; else D[2] = 0;
+    for (const id of g.ids) { const p = st.model.parts.find((q) => q.id === id), v = p && viewById(p.view); if (!v) continue; const c = C(v), o = g.orig.get(id), dv = v.kind === 'side' ? [D[0], D[2]] : v.kind === 'top' ? [D[0], D[1]] : [D[1], D[2]]; p.pts = o.map((q) => { const s = c.toShip(q); return c.toPx([s[0] + dv[0], s[1] + dv[1]]); }); }
+    st.edited = true; st.ver++; paint(); if (!st.tq) st.tq = setTimeout(() => { st.tq = null; liveRebuild(); }, 70);
+    return;
+  }
+  if (!d.moved) return;
+  if (st.cam3 === 'orbit') { P.yaw -= (e.clientX - d.x) * 0.01; P.pitch = Math.max(-0.2, Math.min(1.45, P.pitch + (e.clientY - d.y) * 0.008)); }
+  else { const c = $('#sd3d'), k = (P.L * 0.68 / P.oz) / c.clientHeight; P.ox -= (e.clientX - d.x) * k; P.oy += (e.clientY - d.y) * k; }
+  d.x = e.clientX; d.y = e.clientY; render3d();
+}
+function up3(e) {
+  const d = st.d3; st.d3 = null; if (!d) return;
+  if (d.handle || d.group) { clearTimeout(st.tq); st.tq = null; changed(); return; }
+  if (!d.moved) { const pa = d.pick; st.sel = pa ? pa.id : null; st.h3sel = null; drawSel(); drawParts(); paint(); }
+}
+// dựng lại nhanh khi đang kéo (không ghi lịch sử)
+function liveRebuild() { let geom; try { geom = buildModel(st.model, ship()); } catch (e) { return; } st.geom = geom; const P = st.p3; if (P.grp) { P.scene.remove(P.grp); P.grp.traverse((o) => { if (o.geometry) o.geometry.dispose(); if (o.material) o.material.dispose(); }); } P.grp = modelGroup(THREE, geom); P.scene.add(P.grp); build3dExtras(); }
 
 // ---------- dùng cho tàu, xuất / nhập ----------
 function apply() {
@@ -585,4 +703,6 @@ async function importFile(f) {
   } catch (e) { $('#sdMsg').textContent = 'Không nhập được: ' + (e.message || e); }
 }
 // cho kiểm thử tự động
-export const shipDrawTest = { st: () => st, rebuild: () => { refreshAll(); rebuild3d(); }, atH, layout: () => st && st.lay, S2s: (P) => S2s(P), m2s: (k, a) => m2s(k, a) };
+export const shipDrawTest = { st: () => st, rebuild: () => { refreshAll(); rebuild3d(); }, atH, layout: () => st && st.lay, S2s: (P) => S2s(P), m2s: (k, a) => m2s(k, a), mode: (m) => setMode(m), undo: (d) => undo(d),
+  // vị trí màn hình (so với khung 3D) của một điểm tàu
+  w2s: (x, y, z) => { const v = toW(x, y, z).project(cam3()), c = $('#sd3d'); return [(v.x + 1) / 2 * c.clientWidth, (1 - v.y) / 2 * c.clientHeight]; }, handles: () => (st.h3 || []).map((h) => ({ pid: h.p.id, k: h.k, kind: h.kind, w: fromW(h.w) })) };

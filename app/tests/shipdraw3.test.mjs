@@ -69,3 +69,30 @@ test('chi tiết chỉ vẽ ở hình nhìn từ mũi: báo cần thêm hình m�
   const g = buildModel({ views: [side, top, front], parts: [{ id: 'f9', view: 'vf', type: ['khac', 'hop'], kind: 'poly', pts: px(front, [[-1, 6], [1, 6], [1, 8], [-1, 8]]) }], opts: { rails: false } }, ship);
   assert.ok(g.warn.some((w) => /chỉ vẽ ở hình nhìn từ mũi/.test(w))); assert.match(g.src.f9, /chưa dựng/);
 });
+
+test('đối xứng thông minh: vẽ đủ hai mạn thì giữ chỗ lõm một bên; vẽ một nửa thì lấy đối xứng', () => {
+  const [side, top] = views(), sp = px(side, [[-10, 5], [10, 5], [10, 7.5], [-10, 7.5]]);
+  const run = (topPts) => { const g = buildModel({ views: [side, top], parts: [{ id: 's', view: 'vs', type: ['tang', 't1', 'khoi'], kind: 'poly', pts: sp }, { id: 't', view: 'vt', type: ['tang', 't1', 'khoi'], kind: 'poly', pts: px(top, topPts) }], opts: { rails: false } }, ship); const v = verts(g).filter((p) => p[0] > -5 && p[0] < 1 && p[2] > 5.1); return [Math.max(...v.map((p) => p[1])), Math.min(...v.map((p) => p[1]))]; };
+  // đủ hai mạn ±4, mạn phải lõm vào tới 1,5 từ x −6 đến 2 (chỗ để xuồng)
+  const [yS, yP] = run([[-10, -4], [10, -4], [10, 4], [2, 4], [2, 1.5], [-6, 1.5], [-6, 4], [-10, 4]]);
+  assert.ok(Math.abs(yS - 1.5) < 0.05 && Math.abs(yP + 4) < 0.05, `mạn phải ${yS}, mạn trái ${yP}`);
+  // chỉ vẽ nửa mạn phải có chỗ lõm → hai mạn cùng lõm
+  const [hS, hP] = run([[-10, 0], [10, 0], [10, 4], [2, 4], [2, 1.5], [-6, 1.5], [-6, 4], [-10, 4]]);
+  assert.ok(Math.abs(hS - 1.5) < 0.05 && Math.abs(hP + 1.5) < 0.05, `nửa: ${hS} / ${hP}`);
+});
+
+test('mặt boong thân tàu vẽ đủ hai mạn: mỗi mạn theo nét của mạn đó', () => {
+  const [side, top] = views();
+  const deck = [[-30, -5], [20, -5], [30, 0], [20, 5], [6, 5], [6, 3.5], [-6, 3.5], [-6, 5], [-30, 5]];
+  const g = buildModel({ views: [side, top], parts: [{ id: 'h', view: 'vt', type: ['than', 'matboong'], kind: 'poly', pts: px(top, deck) }], opts: { rails: false } }, ship);
+  assert.ok(Math.abs(g.hull.hbs(0, 1) - 3.5) < 0.05 && Math.abs(g.hull.hbs(0, -1) - 5) < 0.05, `phải ${g.hull.hbs(0, 1)}, trái ${g.hull.hbs(0, -1)}`);
+  assert.ok(g.ranges.h && g.ranges.h.length === 2, 'thân tàu có vùng tam giác để chọn trên 3D');
+});
+
+test('vùng tam giác: mỗi chi tiết dựng được đều chỉ ra khối 3D của nó (để chọn / sáng trên 3D)', async () => {
+  const { makeTemplate } = await import('../src/shipdraw/template.js');
+  const m = makeTemplate(), g = buildModel(m, { L: 62, B: 9.5, D: 5, T: 2.8, cb: 0.48 });
+  const solid = m.parts.filter((p) => p.kind !== 'point' && ['tang', 'buong', 'khoi', 'cot', 'radar', 'vukhi', 'xuong'].includes(p.type[0]));
+  const miss = solid.filter((p) => !(g.ranges[p.id] || []).length); assert.equal(miss.length, 0, 'thiếu: ' + miss.map((p) => p.type.join('/')).join(', '));
+  for (const [id, rs] of Object.entries(g.ranges)) for (const r of rs) assert.ok(r.it >= 0 && r.t1 > r.t0 && r.t1 * 3 <= g.items[r.it].idx.length, id);
+});
