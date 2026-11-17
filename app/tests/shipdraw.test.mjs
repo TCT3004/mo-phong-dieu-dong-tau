@@ -118,7 +118,7 @@ test('đổi sang three.js: mặt tam giác hướng ra ngoài, mũi về −Z, 
   const g = buildModel(makeTemplate(), ship), grp = modelGroup(THREE, g);
   const box = new THREE.Box3().setFromObject(grp); assert.ok(box.min.z < -30 && box.max.z > 30 && Math.abs(box.min.y + ship.T) < 0.05);
   // thân tàu: pháp tuyến các tam giác ở nửa mạn phải phải hướng sang +X
-  const hull = grp.children[0].geometry, P = hull.attributes.position, I = hull.index.array; let out = 0, tot = 0;
+  const hull = grp.children[0].geometry, P = hull.attributes.position, I = hull.index ? hull.index.array : Array.from({ length: P.count }, (_, i) => i); let out = 0, tot = 0;
   const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3();
   for (let t = 0; t < I.length; t += 3) { a.fromBufferAttribute(P, I[t]); b.fromBufferAttribute(P, I[t + 1]); c.fromBufferAttribute(P, I[t + 2]); const n = b.clone().sub(a).cross(c.clone().sub(a)); if (n.length() < 1e-6) continue; const cx = (a.x + b.x + c.x) / 3; if (cx > 1) { tot++; if (n.x > 0) out++; } }
   assert.ok(out / tot > 0.95, 'mạn phải hướng ra ngoài: ' + out + '/' + tot);

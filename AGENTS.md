@@ -81,7 +81,7 @@ Default section order:
 - Mô phỏng điều động tàu 3D cho **người điều động** (không phải người lái), offline, Windows
 - JavaScript ES modules + three.js + pdf.js, bundle bằng esbuild thành **1 file HTML**; Electron bọc thành `.exe` portable
 - Giai đoạn 1 xong (v0.1.0). Giai đoạn 2 xong (v0.2.0): hải đồ liền mạch kiểu OpenCPN (quilting), mét thế giới + gốc trôi, kho hải đồ KAP / PDF, độ sâu ghép nhiều tờ
-- Giai đoạn 3 đang làm: 0.3.0 nấc lái theo góc lái tối đa, thời tiết ngẫu nhiên; 0.3.1 vẽ tàu từ sơ đồ (dò viền + chấm tay, chọn chi tiết nhiều nấc, đo kích thước, tự suy hình chiếu thiếu); 0.3.2 cờ trên tàu, ánh sáng / sương mù sang tab 4, nút «Về tàu» tab 2, file đối tượng hải đồ + vị trí xuất phát có sẵn, dữ liệu cảng thật dựng từ hải đồ (giao riêng, không commit); 0.3.3 tỷ số hộp số, câu nhắc số liệu tàu lạ, sửa quay trở ra NaN; 0.3.4 bàn vẽ 3 hình chiếu + thước CAD, 3D giao 3 hình chiếu, chiều quay từng chân vịt; 0.3.5 sửa trên 3D + hoàn tác, đối xứng thông minh, buồng lái 3 ô gắn trên tàu (quay đầu thì cụm ô trượt)
+- Giai đoạn 3 đang làm: 0.3.0 nấc lái theo góc lái tối đa, thời tiết ngẫu nhiên; 0.3.1 vẽ tàu từ sơ đồ (dò viền + chấm tay, chọn chi tiết nhiều nấc, đo kích thước, tự suy hình chiếu thiếu); 0.3.2 cờ trên tàu, ánh sáng / sương mù sang tab 4, nút «Về tàu» tab 2, file đối tượng hải đồ + vị trí xuất phát có sẵn, dữ liệu cảng thật dựng từ hải đồ (giao riêng, không commit); 0.3.3 tỷ số hộp số, câu nhắc số liệu tàu lạ, sửa quay trở ra NaN; 0.3.4 bàn vẽ 3 hình chiếu + thước CAD, 3D giao 3 hình chiếu, chiều quay từng chân vịt; 0.3.5 sửa trên 3D + hoàn tác, đối xứng thông minh, buồng lái 3 ô gắn trên tàu (quay đầu thì cụm ô trượt); 0.3.6 tàu đẹp giống thật: mặt mượt (pháp tuyến theo góc gãy, nét cong mềm, bo góc, chân khối ngập boong), màu + số hiệu mạn + cửa kính, ánh sáng PBR + bóng đổ, thư viện chi tiết đặt trên 3D, điểm nắm hai đầu khối, hình mũi / lái tự sinh
 - Lộ trình: giai đoạn 4 (0.4.x) đọc số độ sâu trên hải đồ PDF vector, triều Hòn Dáu (nhập bảng triều từ ảnh, số hiệu chỉnh cảng phụ); giai đoạn 5 (0.5.x) các tàu khác (tàu lai, tàu trên luồng, tàu đậu sẵn ở bến, tránh va)
 
 ## Project-wide Rules
@@ -124,6 +124,8 @@ Default section order:
 - Chiều quay chân vịt: người dùng tự chọn cho từng chiếc (1–4 chân vịt), app không đặt sẵn
 - Buồng lái giữ 3 ô cửa sổ như cũ (viền đen, hai ô bên nghiêng), gắn trên tàu: mỗi ô nhìn cố định so với tàu; kéo chuột = quay đầu, cả cụm 3 ô trượt trên màn hình; không dựng khung bằng thanh 3D
 - Vẽ tàu: bàn vẽ 3 hình chiếu kiểu bản vẽ kỹ thuật với vạch gióng và thước kiểu CAD, sửa được trên 3D như CAD; vẽ đủ hai mạn thì dựng đúng như vẽ (chỗ lõm một bên vẫn giữ)
+- Tàu phải giống thật hết mức có thể; «mượt» nghĩa là mặt tàu không gấp khúc, không bị chia cắt; tàu mẫu tham khảo là kiểu vỏ trắng xám, boong xanh, nhiều chi tiết nhỏ (người dùng tự lắp từ thư viện, không chép mô hình tàu thật)
+- Hình nhìn từ mũi / lái phải tự hiện khi khối đã có hình mạn + mặt boong; ô «Nhìn từ lái» luôn hiện
 - Người dùng muốn bàn trước, khi nào bảo «làm» mới làm (trừ khi nói làm luôn)
 
 ## Child DOX Index

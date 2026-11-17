@@ -45,7 +45,15 @@ export function makeTemplate() {
   add(side, ['den', 'neo', 'mui'], [[29.6, 8.6]]); add(side, ['den', 'neo', 'lai'], [[-29.2, 7.0]]);
   add(side, ['den', 'tinhieu'], [[0.6, 16.4]]);
   add(side, ['buong', 'mat'], [[2.6, 11.7]]);
-  return { v: 1, name: 'Tàu pháo mẫu (chung chung)', views: [side, top, front], parts, opts: { shade: 'haze', rails: true }, template: true };
+  // chi tiết thư viện (mét, theo tàu dài 62 m): cột bích, đèn pha cánh gà, ăng-ten roi, còi, vòm quang điện, cầu thang
+  let fn = 0; const fits = [], fit = (kind, x, y, z, o) => fits.push(Object.assign({ id: 'f' + (++fn).toString(36) + Date.now().toString(36).slice(-4), kind, x, y, z, rot: 0 }, o));
+  for (const s of [-1, 1]) {
+    fit('bollard', 26.2, s * 2.1, 6.55, { l: 0.9, w: 0.4, h: 0.55 }); fit('bollard', -27.5, s * 3.3, 4.97, { l: 0.9, w: 0.4, h: 0.55 }); fit('bollard', 10.5, s * 4.0, 5.32, { l: 0.8, w: 0.36, h: 0.5 });
+    fit('searchlight', 3.7, s * 4.9, 10.5, { l: 0.6, w: 0.5, h: 1.1 }); fit('whip', -1.4, s * 2.7, 12.4, { l: 0.15, w: 0.15, h: 4.6 });
+    fit('ladder', -17.2, s * 1.5, 5.0, { l: 2.6, w: 0.7, h: 2.6 });
+  }
+  fit('horn', 3.2, 0.9, 12.4, { l: 0.8, w: 0.35, h: 0.5 }); fit('dome', -4.6, 0, 10.0, { l: 1.2, w: 1.2, h: 1.9 });
+  return { v: 1, name: 'Tàu pháo mẫu (chung chung)', views: [side, top, front], parts, fits, opts: { shade: 'haze', rails: true }, template: true };
 }
 // thông số tab 1 gợi ý cho mẫu
 export const TEMPLATE_SHIP = { loa: 62, lpp: 58, B: 9.5, D: 5.0, tf: 2.7, ta: 2.9, cb: 0.48, engines: 2, props: 2, ptype: 'fpp', rudMax: 25, rudders: 2 };

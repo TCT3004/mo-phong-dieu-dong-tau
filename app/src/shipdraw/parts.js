@@ -57,3 +57,19 @@ export const SHADES = {
   blue: { name: 'Xám xanh', hull: 0x7b8995, super: 0x8a98a3, deck: 0x56626c, dark: 0x434d55 }
 };
 export const ANTIFOUL = 0x5a2e2a, BOOT = 0x1d2124;
+// bảng màu có sẵn (người dùng sửa từng màu được): vỏ, thượng tầng, boong, dải sơn đường nước
+const hx = (n) => '#' + n.toString(16).padStart(6, '0');
+export const COLOR_PRESETS = {
+  ...Object.fromEntries(Object.entries(SHADES).map(([k, s]) => [k, { name: s.name, hull: hx(s.hull), super: hx(s.super), deck: hx(s.deck), boot: hx(BOOT) }])),
+  xanh: { name: 'Xám nhạt · boong xanh', hull: '#a6adb2', super: '#b5bbbf', deck: '#4d7a57', boot: '#1d2124' },
+  trang: { name: 'Trắng xám · boong xanh', hull: '#d3d7da', super: '#e1e4e6', deck: '#3f7a4c', boot: '#23282b' },
+  trangdo: { name: 'Trắng · đường nước đỏ', hull: '#e4e6e8', super: '#eceeef', deck: '#6b7378', boot: '#8b2a22' }
+};
+const toN = (s, d) => { const n = parseInt(String(s || '').replace('#', ''), 16); return isFinite(n) ? n : d; };
+const shade = (n, k) => { const r = Math.round(((n >> 16) & 255) * k), g = Math.round(((n >> 8) & 255) * k), b = Math.round((n & 255) * k); return (r << 16) | (g << 8) | b; };
+// màu dùng khi dựng: opts.colors (người dùng chọn) hoặc tông xám cũ opts.shade
+export function shipColors(opts = {}) {
+  const s = SHADES[opts.shade] || SHADES.haze, c = opts.colors || {};
+  const sup = toN(c.super, s.super);
+  return { hull: toN(c.hull, s.hull), super: sup, deck: toN(c.deck, s.deck), boot: toN(c.boot, BOOT), anti: ANTIFOUL, dark: c.super ? shade(sup, 0.5) : s.dark };
+}

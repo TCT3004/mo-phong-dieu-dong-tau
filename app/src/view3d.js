@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { sampleWorld, DEF_CLASS_DEPTH } from './chartsys.js';
 import { body2w } from './world.js';
 import { buildModel } from './shipdraw/model.js';
-import { modelGroup } from './shipdraw/mesh3.js';
+import { modelGroup, skyEnv } from './shipdraw/mesh3.js';
 import { makeFlags } from './flags.js';
 
 export const QUALITY = {
@@ -25,10 +25,15 @@ export class View3D {
   constructor(canvas, q) {
     this.canvas = canvas; this.q = QUALITY[q] || QUALITY.high; this.qn = q;
     this.r = new THREE.WebGLRenderer({ canvas, antialias: q !== 'low', preserveDrawingBuffer: true });
+    // bóng đổ (chỉ quanh tàu): mức Thấp tắt; vẽ bóng một lần mỗi khung hình dù buồng lái vẽ 3 ô
+    this.shadows = q !== 'low'; this.r.shadowMap.enabled = this.shadows; this.r.shadowMap.type = THREE.PCFSoftShadowMap; this.r.shadowMap.autoUpdate = false;
     this.scene = new THREE.Scene(); this.scene.fog = new THREE.Fog(0x9db8cc, 100, 10000);
+    this.scene.environment = skyEnv(THREE, this.r); this.spin = [];
     this.cam = new THREE.PerspectiveCamera(55, 2, 0.5, 60000);
     this.hemi = new THREE.HemisphereLight(0xffffff, 0x445566, 1.2); this.scene.add(this.hemi);
     this.sun = new THREE.DirectionalLight(0xffffff, 1.6); this.scene.add(this.sun);
+    if (this.shadows) { this.sun.castShadow = true; const ms = q === 'max' ? 4096 : q === 'high' ? 2048 : 1024; this.sun.shadow.mapSize.set(ms, ms); this.sun.shadow.bias = -0.0004; this.sun.shadow.normalBias = 0.03; }
+    this.scene.add(this.sun.target);
     this.glow = glowTex(); this.time = 0;
     this.look = { yaw: 0, pitch: 0, fov: 55, dist: 1 };
     this.mkWater(); this.mkRain(); this.mkBolt();
@@ -133,7 +138,8 @@ export class View3D {
   // tàu vẽ từ sơ đồ (thông số tàu có `model`): dựng theo mô hình; lỗi thì quay về tàu đơn giản
   buildShipModel(M) {
     const T = M.d, geom = buildModel(M.p.model, { L: M.loa, B: M.B, D: +M.p.D || M.d * 1.6, T, cb: +M.p.cb || 0.6 }), g = this.shipG;
-    g.add(modelGroup(THREE, geom, { inside: true })); this.shipGeom = geom;
+    const mg = modelGroup(THREE, geom, { inside: true, shadows: this.shadows }); g.add(mg); this.shipGeom = geom; this.spin = mg.userData.spin || [];
+    if (this.shadows) { const sc = this.sun.shadow.camera, R = Math.max(20, geom.dims.L * 0.62); sc.left = -R; sc.right = R; sc.top = R; sc.bottom = -R; sc.near = 1; sc.far = Math.max(400, geom.dims.L * 8); sc.updateProjectionMatrix(); }
     const e = geom.eye, H = geom.hull, hbE = H.hb(Math.max(H.xa, Math.min(H.xf, e.x)));
     this.dim = { L: geom.dims.L, B: geom.dims.B, fb: geom.dims.fb, shh: Math.max(3, e.z - T - geom.dims.fb + 1.6), bridgeX: e.x, eye: e.z - T, eyeY: e.y || 0, wingY: hbE + 0.4 };
     const lp = (c, l, s) => { const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.glow, color: c, blending: THREE.AdditiveBlending, depthWrite: false, fog: false })); sp.position.set(l.y, l.z - T, -l.x); sp.scale.setScalar(s); sp.visible = false; g.add(sp); return sp; };
@@ -142,7 +148,7 @@ export class View3D {
     const f = geom.flag; this.flags = makeFlags(g, M.p.flags || 'hq', geom.dims.L, f.x, f.z - T, f.span);
   }
   buildShip(M, anchors) {
-    const g = this.shipG; g.clear(); this.shipGeom = null; this.flags = null;
+    const g = this.shipG; g.clear(); this.shipGeom = null; this.flags = null; this.spin = [];
     if (M.p.model && M.p.model.parts && M.p.model.parts.length) { try { this.buildShipModel(M); return; } catch (e) { console.error('Không dựng được mô hình tàu', e); g.clear(); } }
     const L = M.loa, B = M.B, D = +M.p.D || M.d * 1.6, T = M.d, fb = D - T;
     const sh = new THREE.Shape(); const hb = B / 2, bow = L / 2, st = -L / 2;
@@ -262,8 +268,10 @@ export class View3D {
     this.scene.background = fogC; this.scene.fog.color.copy(fogC); this.scene.fog.near = Math.min(e.vis * 0.15, 800); this.scene.fog.far = Math.min(e.vis * 1.6, this.q.far);
     this.hemi.intensity = 0.12 + 1.2 * day + 2.2 * fl; this.sun.intensity = 1.7 * day * (1 - 0.85 * Math.max(0, cl - 0.2));
     const az = e.sunAz, er = Math.max(el, 5) * Math.PI / 180; const sd = new THREE.Vector3(Math.sin(az) * Math.cos(er), Math.sin(er), -Math.cos(az) * Math.cos(er));
-    this.sun.position.copy(sd.clone().multiplyScalar(1000).add(this.shipG.position));
-    this.sun.target = this.shipG;
+    const sdist = Math.max(150, (this.dim ? this.dim.L : 100) * 3);
+    this.sun.position.copy(sd.clone().multiplyScalar(sdist).add(this.shipG.position)); this.sun.target.position.copy(this.shipG.position); this.sun.target.updateMatrixWorld();
+    this.scene.environmentIntensity = 0.05 + 0.4 * day; if (this.shadows) this.r.shadowMap.needsUpdate = true;
+    for (const m of this.spin) m.rotation.y = -(e.t || 0) * m.userData.spin * Math.PI / 30;
     const dark = day0 < 0.55; // đèn theo độ cao mặt trời, không theo mây
     for (const k in this.navL) for (const sp of this.navL[k]) sp.visible = !!(e.lights && e.lights[k]) && dark;
     for (const m of this.marks) {

@@ -4,11 +4,12 @@
 import * as THREE from 'three';
 import { A, $, $$, num, esc, saveShip } from './app.js';
 import { openPdf } from './pdfload.js';
-import { resolve, childrenAt, partLabel, isPointType, SHADES } from './shipdraw/parts.js';
+import { resolve, childrenAt, partLabel, isPointType, COLOR_PRESETS, shipColors } from './shipdraw/parts.js';
 import { calibrate, measure, VIEW_KINDS, REFS, REF_NAMES } from './shipdraw/calib.js';
 import { traceWand, traceBox } from './shipdraw/trace.js';
-import { buildModel, atH } from './shipdraw/model.js';
-import { modelGroup } from './shipdraw/mesh3.js';
+import { buildModel, atH, atV, partShape } from './shipdraw/model.js';
+import { modelGroup, skyEnv } from './shipdraw/mesh3.js';
+import { FIT_KINDS, fitDefaults, mirrorFit } from './shipdraw/fittings.js';
 import { makeTemplate, TEMPLATE_SHIP } from './shipdraw/template.js';
 import { putImg, getImg } from './shipdraw/store.js';
 
@@ -16,7 +17,10 @@ let st = null;
 const uid = (p) => p + Math.random().toString(36).slice(2, 9);
 const clone = (o) => JSON.parse(JSON.stringify(o));
 const ship = () => { const p = A.p; return { L: num(p.loa, 100), B: num(p.B, 15), D: num(p.D, 8), T: (num(p.tf, 4) + num(p.ta, 4)) / 2, cb: num(p.cb, 0.6) }; };
-const emptyModel = () => ({ v: 1, name: A.p.name || 'Tàu', views: [], parts: [], guides: [], opts: { shade: 'haze', rails: true } });
+const emptyModel = () => ({ v: 1, name: A.p.name || 'Tàu', views: [], parts: [], guides: [], fits: [], opts: { shade: 'haze', rails: true } });
+const fitOf = (id) => st && (st.model.fits || []).find((f) => f.id === id);
+const partOf = (id) => st && st.model.parts.find((q) => q.id === id);
+const r2 = (v) => Math.round(v * 100) / 100;
 const view = () => st && st.model.views.find((v) => v.id === st.cur);
 const viewById = (id) => st.model.views.find((v) => v.id === id);
 const fmt = (v, d = 1) => (+v).toFixed(d).replace('.', ',');
@@ -43,11 +47,10 @@ const HINT = {
 export function openShipDraw() {
   // bản đang vẽ giữ qua các lần mở; chưa sửa gì thì lấy lại theo thông số tàu hiện tại
   if (st && !st.edited && JSON.stringify(A.p.model || null) !== st.src) st = null;
-  if (!st) st = { src: JSON.stringify(A.p.model || null), edited: false, model: A.p.model ? clone(A.p.model) : emptyModel(), mode: 'board', cur: null, tool: 'edit', sel: null, draft: null, chain: null, drag: null, mouse: null, img: new Map(), data: new Map(), v: { cx: 0, cy: 0, sc: 1 }, b: null, tol: 40, lastPoint: null, grid: 0.5, snap: { grid: true, pts: true, guides: true }, showBack: false, typed: '', ver: 0, cc: new Map(), active: {}, cam3: 'orbit', hist: [], hi: -1 };
-  st.model.guides = st.model.guides || [];
+  if (!st) st = { src: JSON.stringify(A.p.model || null), edited: false, model: A.p.model ? clone(A.p.model) : emptyModel(), mode: 'board', cur: null, tool: 'edit', sel: null, draft: null, chain: null, drag: null, mouse: null, img: new Map(), data: new Map(), v: { cx: 0, cy: 0, sc: 1 }, b: null, tol: 40, lastPoint: null, grid: 0.5, snap: { grid: true, pts: true, guides: true }, showBack: true, typed: '', ver: 0, cc: new Map(), active: {}, cam3: 'orbit', hist: [], hi: -1, place: null };
+  st.model.guides = st.model.guides || []; st.model.fits = st.model.fits || []; st.showBack = true;
   if (!st.hist.length) { st.hist = [JSON.stringify(st.model)]; st.hi = 0; }
   if (!st.cur && st.model.views.length) st.cur = st.model.views[0].id;
-  if (st.model.views.some((v) => v.kind === 'back')) st.showBack = true;
   let d = $('#sdlg'); if (!d) { d = document.createElement('div'); d.id = 'sdlg'; d.className = 'modal'; $('#app').appendChild(d); }
   d.innerHTML = `<div class="mbox" role="dialog" aria-label="Vẽ tàu từ sơ đồ">
   <div class="mhead"><b>Vẽ tàu từ sơ đồ</b><span class="muted" id="sdName"></span>
@@ -58,8 +61,7 @@ export function openShipDraw() {
     <div class="mleft">
       <section class="wst"><b>1 · Ảnh sơ đồ (làm nền)</b><div id="sdViews" style="margin-top:5px"></div>
         <label class="btn sm pri" style="display:flex;align-items:center;justify-content:center;margin-top:5px">+ Thêm ảnh / PDF sơ đồ<input type="file" id="sdFile" accept="image/*,.pdf,application/pdf" hidden></label>
-        <div class="muted" style="margin-top:5px">Không có ảnh thì vẽ thẳng lên ô lưới của bàn vẽ. Có 1, 2 hay 3 hình chiếu đều được — thiếu hình nào app tự suy.</div>
-        <label style="display:flex;gap:6px;align-items:center;margin-top:5px"><input type="checkbox" id="sdBack" ${st.showBack ? 'checked' : ''}> Hiện ô «Nhìn từ lái»</label></section>
+        <div class="muted" style="margin-top:5px">Không có ảnh thì vẽ thẳng lên ô lưới của bàn vẽ. Có 1, 2 hay 3 hình chiếu đều được — thiếu hình nào app tự suy: nét đứt mờ là hình app tự sinh, kéo một điểm của nó là thành nét thật để sửa.</div></section>
       <section class="wst"><b>2 · Mốc &amp; tỷ lệ của ảnh</b><div id="sdRefs" style="margin-top:5px"></div></section>
       <section class="wst"><b>3 · Vẽ</b><div class="grid g2" id="sdTools" style="gap:4px;margin-top:5px">${[['edit', 'Chọn / sửa'], ['pan', 'Kéo hình'], ['poly', 'Chấm đường bao'], ['line', 'Kẻ đường'], ['point', 'Chấm 1 điểm'], ['guide', 'Vạch gióng'], ['wand', 'Đũa thần'], ['box', 'Dò trong khung']].map(([k, n]) => `<button class="btn sm" data-t="${k}">${n}</button>`).join('')}</div>
         <div class="lbl" style="margin-top:7px">Bắt dính (thước CAD)</div>
@@ -70,14 +72,16 @@ export function openShipDraw() {
         <details style="margin-top:6px"><summary class="muted">Đũa thần</summary>
         <label class="lbl" for="sdTol" style="display:block;margin-top:6px">Độ nhạy: <b id="sdTolV">${st.tol}</b></label><input type="range" id="sdTol" min="10" max="120" step="5" value="${st.tol}" style="width:100%">
         <label style="display:flex;gap:6px;align-items:center;margin-top:4px"><input type="checkbox" id="sdSkip" ${st.skip !== false ? 'checked' : ''}> Vượt qua nét màu (đường nước, kích thước)</label></details></section>
+      <section class="wst"><b>4 · Thư viện chi tiết</b><div class="muted" style="margin-top:3px">Bấm một loại rồi bấm lên tàu ở khung 3D để đặt (giữ Shift để đặt nhiều cái liền). Đặt xong kéo để dời, sửa cỡ ở khung bên phải.</div><div class="grid g2" id="sdLib" style="gap:4px;margin-top:5px"></div></section>
     </div>
-    <div class="mmain"><div class="flex" style="gap:6px;align-items:center;flex-wrap:nowrap"><div class="seg" id="sdMode"></div><button class="btn sm" id="sdFit">Vừa khung</button><div class="note" id="sdHint" style="flex:1;margin:0;padding:4px 8px;min-width:0"></div></div>
+    <div class="mmain"><div class="flex" style="gap:6px;align-items:center;flex-wrap:nowrap"><div class="seg" id="sdMode"></div><button class="btn sm" id="sdFit">Vừa khung</button><div class="note" id="sdHint" style="flex:1;margin:0;padding:4px 8px;min-width:0;height:50px;overflow-y:auto;box-sizing:border-box;line-height:1.3"></div></div>
       <div class="wcv"><canvas id="sdCv" tabindex="0"></canvas><div class="wempty" id="sdEmpty"></div></div><div class="muted mono" id="sdPos" style="min-height:16px"></div></div>
     <div class="mright">
       <section class="wst"><b>Chi tiết đang chọn</b><div id="sdSel" style="margin-top:5px"></div></section>
       <section class="wst"><b>Các chi tiết</b><div id="sdParts" style="margin-top:5px;max-height:170px;overflow:auto"></div></section>
       <section class="wst"><b>Xem 3D</b> <span class="muted" id="sd3dTip">(kéo để xoay, bấm khối để chọn)</span><div id="sd3dHome"><div id="sd3dWrap" style="position:relative;margin-top:5px"><div class="seg" id="sd3dBar" style="position:absolute;left:6px;top:6px;z-index:2"></div><canvas id="sd3d" style="width:100%;height:210px;display:block;border-radius:6px;background:#0b1116;touch-action:none" tabindex="0"></canvas></div></div><div class="muted" id="sd3dInfo" style="margin-top:4px"></div>
-        <div class="flex" style="gap:6px;margin-top:6px;align-items:center;flex-wrap:nowrap"><select id="sdShade" style="flex:1;min-width:0" aria-label="Tông màu">${Object.entries(SHADES).map(([k, s]) => `<option value="${k}" ${(st.model.opts.shade || 'haze') === k ? 'selected' : ''}>${s.name}</option>`).join('')}</select><label style="display:flex;gap:4px;align-items:center;white-space:nowrap"><input type="checkbox" id="sdRails" ${st.model.opts.rails !== false ? 'checked' : ''}> Lan can</label></div>
+        <div class="flex" style="gap:10px;margin-top:6px;align-items:center;flex-wrap:wrap"><label style="display:flex;gap:4px;align-items:center;white-space:nowrap"><input type="checkbox" id="sdRails" ${st.model.opts.rails !== false ? 'checked' : ''}> Lan can mép boong</label><label style="display:flex;gap:4px;align-items:center;white-space:nowrap"><input type="checkbox" id="sdRoofRails" ${st.model.opts.roofRails !== false ? 'checked' : ''}> Lan can nóc tầng</label></div>
+        <details id="sdColBox" style="margin-top:6px"><summary>Màu tàu, số hiệu mạn</summary><div id="sdCols" style="margin-top:5px"></div></details>
         <label style="display:flex;gap:6px;align-items:center;margin-top:6px"><input type="checkbox" id="sdWind" checked> Cập nhật diện tích hứng gió (tab 1) theo mô hình</label><div class="muted" id="sdMsg" style="margin-top:4px"></div></section>
     </div></div></div>`;
   d.style.display = 'flex';
@@ -85,7 +89,25 @@ export function openShipDraw() {
   for (const v of st.model.views) loadImg(v);
 }
 function close() { const d = $('#sdlg'); if (d) d.style.display = 'none'; if (st && st.p3) { st.p3.r.dispose(); st.p3.r.forceContextLoss(); st.p3 = null; } document.removeEventListener('keydown', onKey); }
-function refreshAll() { drawBar3(); drawMode(); drawViews(); drawRefs(); drawGuides(); drawParts(); drawSel(); paint(); $('#sdName').textContent = st.model.name + (st.model.template ? ' — mẫu chung chung' : ''); }
+function refreshAll() { drawLib(); drawCols(); drawBar3(); drawMode(); drawViews(); drawRefs(); drawGuides(); drawParts(); drawSel(); paint(); $('#sdName').textContent = st.model.name + (st.model.template ? ' — mẫu chung chung' : ''); }
+// ---------- thư viện chi tiết, màu tàu ----------
+function drawLib() { const el = $('#sdLib'); if (el) el.innerHTML = Object.entries(FIT_KINDS).map(([k, K]) => `<button class="btn sm ${st.place === k ? 'pri' : ''}" data-fk="${k}" title="${esc(K.tip || K.name)}" style="text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(K.name)}</button>`).join(''); }
+function startPlace(k) {
+  st.place = k || null; drawLib();
+  if (k) { if (st.mode !== 'big3d') setMode('big3d'); const K = FIT_KINDS[k]; $('#sdHint').textContent = 'Bấm lên tàu ở khung 3D để đặt «' + K.name + '»' + (K.side ? ' (bấm lên mạn tàu)' : '') + '. Giữ Shift để đặt nhiều cái liền, Esc để thôi.' + (K.tip ? ' ' + K.tip + '.' : ''); }
+  else if (st.mode === 'big3d') $('#sdHint').textContent = HINT3;
+}
+const hexOf = (n) => '#' + n.toString(16).padStart(6, '0');
+function curColors() { const c = shipColors(st.model.opts); return { hull: hexOf(c.hull), super: hexOf(c.super), deck: hexOf(c.deck), boot: hexOf(c.boot) }; }
+function drawCols() {
+  const el = $('#sdCols'); if (!el) return; const o = st.model.opts, c = curColors();
+  const pk = Object.entries(COLOR_PRESETS).find(([, pr]) => ['hull', 'super', 'deck', 'boot'].every((k) => pr[k].toLowerCase() === c[k].toLowerCase()));
+  el.innerHTML = `<select id="sdPreset" style="width:100%" aria-label="Bảng màu có sẵn">${pk ? '' : '<option value="">— màu tự chọn —</option>'}${Object.entries(COLOR_PRESETS).map(([k, pr]) => `<option value="${k}" ${pk && pk[0] === k ? 'selected' : ''}>${pr.name}</option>`).join('')}</select>
+  <div class="grid g2" style="gap:4px 8px;margin-top:5px">${[['hull', 'Vỏ tàu'], ['super', 'Thượng tầng'], ['deck', 'Boong'], ['boot', 'Dải đường nước']].map(([k, n]) => `<label style="display:flex;gap:6px;align-items:center"><input type="color" data-col="${k}" value="${c[k]}" style="width:34px;height:22px;padding:0;border:0;background:none"> ${n}</label>`).join('')}</div>
+  <label style="display:flex;gap:6px;align-items:center;margin-top:5px"><input type="checkbox" id="sdRoofDeck" ${o.roofDeck !== false ? 'checked' : ''}> Nóc các tầng cùng màu boong</label>
+  <div class="flex" style="gap:6px;margin-top:5px;flex-wrap:nowrap"><input id="sdHullNo" class="cell" value="${esc(o.hullNo || '')}" placeholder="Số hiệu mạn" maxlength="8" style="flex:1;min-width:0;text-align:left;height:26px" aria-label="Số hiệu mạn"><select id="sdHullNoCol" aria-label="Màu chữ số hiệu"><option value="" ${!o.hullNoCol ? 'selected' : ''}>Chữ tự chọn</option><option value="w" ${o.hullNoCol === 'w' ? 'selected' : ''}>Chữ trắng</option><option value="k" ${o.hullNoCol === 'k' ? 'selected' : ''}>Chữ đen</option></select></div>
+  <div class="muted" style="margin-top:4px">Số hiệu sơn hai bên mạn phía mũi. Cửa kính: chọn khối, tick «Cửa kính» ở khung chi tiết (buồng lái chính có sẵn).</div>`;
+}
 function changed(panels = true) { st.edited = true; st.ver++; if (panels) { drawRefs(); drawParts(); drawGuides(); } paint(); clearTimeout(st.t3); st.t3 = setTimeout(rebuild3d, 250); if (!st.restoring) { clearTimeout(st.th); st.th = setTimeout(pushHist, 350); } }
 // ---------- hoàn tác / làm lại: lưu ảnh chụp mô hình sau mỗi lần sửa ----------
 function pushHist() { const j = JSON.stringify(st.model); if (st.hist[st.hi] === j) return; st.hist = st.hist.slice(0, st.hi + 1); st.hist.push(j); if (st.hist.length > 120) st.hist.shift(); st.hi = st.hist.length - 1; histBtns(); }
@@ -115,7 +137,7 @@ function setMode(m, vid) {
   if (m === 'single') { fitView(); if (st.tool === 'guide') setTool('edit'); } else if (m === 'board') { if (st.tool === 'dim' || st.tool.startsWith('ref:')) setTool('edit'); fitBoard(); }
   refreshAll(); if (st.p3) { if (m === 'big3d') build3dExtras(); render3d(); }
 }
-const HINT3 = '3D lớn: bấm vào khối để chọn — các điểm nắm hiện trên khối (cam: từ hình mạn, xanh dương: từ mặt boong, xanh lá: từ hình mũi / lái). Kéo điểm nắm để sửa (Shift: khóa một trục), Shift + kéo khối để dời cả khối. Kéo chỗ trống: xoay (hoặc dời khi xem thẳng), lăn chuột: phóng to. Ctrl+Z hoàn tác.';
+const HINT3 = '3D lớn: bấm vào khối để chọn — điểm nắm hiện ở cả hai đầu khối (cam: hình mạn, xanh dương: mặt boong, xanh lá: hình mũi / lái; màu nhạt: hình tự sinh). Kéo điểm nắm để sửa (Shift: khóa một trục), bấm đúp lên cạnh để thêm điểm, Shift + kéo khối để dời cả khối. Chi tiết thư viện: kéo để dời, điểm vàng đổi cỡ, điểm tím xoay. Kéo chỗ trống: xoay (hoặc dời khi xem thẳng), lăn chuột: phóng to. Ctrl+Z hoàn tác.';
 
 // ---------- danh sách ảnh / hình chiếu ----------
 function drawViews() {
@@ -149,32 +171,66 @@ function drawParts() {
   const el = $('#sdParts'), kinds = st.mode === 'single' ? null : ['side', 'top', 'front', 'back'];
   const ps = st.model.parts.filter((p) => { const v = viewById(p.view); return v && (kinds ? kinds.includes(v.kind) : v.id === st.cur); });
   const vk = (p) => { const v = viewById(p.view); return v ? { side: 'Mạn', top: 'Boong', front: 'Mũi', back: 'Lái' }[v.kind] : ''; };
-  el.innerHTML = ps.length ? ps.map((p) => `<div class="flex" style="gap:5px;align-items:center;margin-bottom:3px;flex-wrap:nowrap"><span style="width:10px;height:10px;border-radius:2px;background:${colOf(p)};flex:0 0 10px"></span><span class="muted" style="width:38px;flex:0 0 38px">${vk(p)}</span><button class="btn sm ${p.id === st.sel ? 'pri' : ''}" data-p="${p.id}" style="flex:1;min-width:0;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(partLabel(p))}</button></div>`).join('') : '<div class="muted">Chưa có chi tiết nào.</div>';
+  const fs = st.mode === 'single' ? [] : st.model.fits || [];
+  el.innerHTML = ps.length || fs.length ? ps.map((p) => `<div class="flex" style="gap:5px;align-items:center;margin-bottom:3px;flex-wrap:nowrap"><span style="width:10px;height:10px;border-radius:2px;background:${colOf(p)};flex:0 0 10px"></span><span class="muted" style="width:38px;flex:0 0 38px">${vk(p)}</span><button class="btn sm ${p.id === st.sel ? 'pri' : ''}" data-p="${p.id}" style="flex:1;min-width:0;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(partLabel(p))}${p.curve ? ' ∿' : ''}</button></div>`).join('')
+    + fs.map((f) => `<div class="flex" style="gap:5px;align-items:center;margin-bottom:3px;flex-wrap:nowrap"><span style="width:10px;height:10px;border-radius:50%;background:#B0BEC5;flex:0 0 10px"></span><span class="muted" style="width:38px;flex:0 0 38px">TV</span><button class="btn sm ${f.id === st.sel ? 'pri' : ''}" data-p="${f.id}" style="flex:1;min-width:0;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc((FIT_KINDS[f.kind] || {}).name || f.kind)}${f.note ? ' — ' + esc(f.note) : ''}</button></div>`).join('') : '<div class="muted">Chưa có chi tiết nào.</div>';
 }
 // ---------- chi tiết đang chọn: chọn loại nhiều nấc ----------
 function drawSel() {
-  const el = $('#sdSel'), p = st.model.parts.find((q) => q.id === st.sel);
+  const el = $('#sdSel'), p = partOf(st.sel), f = fitOf(st.sel);
   if (st.p3 && st.selShown !== st.sel + '|' + (st.h3sel ? st.h3sel.pid + st.h3sel.k : '') + '|' + st.mode) { st.selShown = st.sel + '|' + (st.h3sel ? st.h3sel.pid + st.h3sel.k : '') + '|' + st.mode; build3dExtras(); }
-  if (!p) { el.innerHTML = '<div class="muted">Bấm vào một chi tiết trên bàn vẽ hoặc trên 3D để chọn, hoặc vẽ mới ở bước 3.</div>'; return; }
+  if (f) { drawFitSel(el, f); return; }
+  if (!p) { el.innerHTML = '<div class="muted">Bấm vào một chi tiết trên bàn vẽ hoặc trên 3D để chọn, hoặc vẽ mới ở bước 3, hoặc đặt từ thư viện ở bước 4.</div>'; return; }
   let h = ''; const r = resolve(p.type);
   for (let dpt = 0; dpt < 5; dpt++) { const opts = childrenAt(p.type, dpt); if (!opts) break; h += `<select data-lv="${dpt}" style="width:100%;margin-bottom:4px" aria-label="Loại chi tiết nấc ${dpt + 1}"><option value="">— chọn ${dpt ? 'tiếp' : 'loại'} —</option>${opts.map((o) => `<option value="${o.id}" ${p.type[dpt] === o.id ? 'selected' : ''}>${o.name}</option>`).join('')}</select>`; if (p.type[dpt] === undefined) break; }
   const pt = r.leaf && r.node.kind === 'point', src = st.geom && st.geom.src ? st.geom.src[p.id] : '';
   h += r.leaf ? `<div class="muted" style="margin:2px 0 6px">${esc(r.names.join(' › '))}${r.node.key ? ' — đèn nối với bảng Đèn ở tab 3' : ''}${src ? '<br>Dựng từ: ' + esc(src) : ''}</div>` : '<div style="color:#FF8A8A;margin:2px 0 6px">Chọn đến nấc cuối để app biết dựng chi tiết này.</div>';
   h += `<input id="sdNote" class="cell" value="${esc(p.note || '')}" placeholder="Ghi chú (tùy ý)" style="width:100%;margin-bottom:5px;text-align:left;height:28px">`;
   if (!pt) h += `<div class="grid g3" style="gap:4px">${[['h', 'Cao'], ['w', 'Rộng'], ['l', 'Dài']].map(([k, n]) => `<div class="fld"><label for="sdN${k}">${n} (m)</label><div class="in"><input id="sdN${k}" data-num="${k}" value="${p.num && p.num[k] ? fmt(p.num[k], 2) : ''}" placeholder="tự tính"></div></div>`).join('')}</div>`;
+  // nét thẳng / cong mềm, bo góc; cửa kính cho khối
+  if (p.kind === 'poly' || p.kind === 'line') {
+    h += `<div class="flex" style="gap:6px;align-items:center;margin-top:6px;flex-wrap:nowrap"><span class="muted" style="white-space:nowrap">Nét</span><div class="seg" id="sdCurve"><button data-cv="0" class="${p.curve ? '' : 'on'}">Thẳng</button><button data-cv="1" class="${p.curve ? 'on' : ''}">Cong mềm</button></div><span class="muted" style="white-space:nowrap">Bo góc</span><div class="in" style="width:58px"><input id="sdFillet" class="cell" value="${p.fillet > 0 ? fmt(p.fillet, 2) : ''}" placeholder="0" style="width:100%;height:24px" aria-label="Bán kính bo góc (m)"></div><span class="muted">m</span></div>
+    <div class="muted" style="margin-top:3px">Cong mềm: đường cong đi qua các điểm. Bo góc: bo tròn các góc theo bán kính. Chọn một điểm rồi tick «Góc sắc» để giữ góc ở đó (chân khối sát boong tự giữ góc).</div>`;
+    if (r.leaf && ['block', 'wing'].includes(r.node.role)) { const g = st.geom && st.geom.links ? st.geom.links[p.id] || [p.id] : [p.id], wv = g.map((id) => partOf(id)).filter(Boolean).map((q) => q.win).find((v) => v !== undefined), on = wv !== undefined ? !!wv : !!r.node.bridge; h += `<label style="display:flex;gap:6px;align-items:center;margin-top:5px"><input type="checkbox" id="sdWin" ${on ? 'checked' : ''}> Cửa kính (dải kính quanh khối, sát nóc)</label>`; }
+  }
   h += `<div class="flex" style="gap:5px;margin-top:6px"><button class="btn sm" id="sdDup" style="flex:1">Nhân bản${/(^|canh)[TP]$/.test(p.type[p.type.length - 1] || '') ? ' sang mạn kia' : ''}</button><button class="btn sm warn" id="sdDelP" style="flex:1">Xóa chi tiết</button></div>`;
-  // điểm nắm đang chọn trên 3D: gõ tọa độ
+  // điểm đang chọn (trên bàn vẽ hoặc 3D): gõ tọa độ, góc sắc
   const hs = st.h3sel && st.h3sel.pid === p.id ? p : null, hv = hs && viewById(p.view), hc = hv && C(hv);
-  if (hs && hc.ok && p.pts[st.h3sel.k]) { const a = hc.toShip(p.pts[st.h3sel.k]), lab = AX[hv.kind]; h += `<div class="lbl" style="margin-top:7px">Điểm đang chọn (${{ side: 'hình mạn', top: 'mặt boong', front: 'hình mũi', back: 'hình lái' }[hv.kind]})</div><div class="grid g2" style="gap:4px;margin-top:3px">${[0, 1].map((i) => `<div class="fld"><label for="sdH${i}">${lab[i]} (m)</label><div class="in"><input id="sdH${i}" data-hc="${i}" value="${fmt(a[i], 2)}"></div></div>`).join('')}</div>`; }
+  if (hs && hc.ok && p.pts[st.h3sel.k]) { const a = hc.toShip(p.pts[st.h3sel.k]), lab = AX[hv.kind]; h += `<div class="lbl" style="margin-top:7px">Điểm ${st.h3sel.k + 1} đang chọn (${{ side: 'hình mạn', top: 'mặt boong', front: 'hình mũi', back: 'hình lái' }[hv.kind]})</div><div class="grid g2" style="gap:4px;margin-top:3px">${[0, 1].map((i) => `<div class="fld"><label for="sdH${i}">${lab[i]} (m)</label><div class="in"><input id="sdH${i}" data-hc="${i}" value="${fmt(a[i], 2)}"></div></div>`).join('')}</div>${p.curve || p.fillet > 0 ? `<label style="display:flex;gap:6px;align-items:center;margin-top:4px"><input type="checkbox" id="sdSharp" ${(p.sharp || []).includes(st.h3sel.k) ? 'checked' : ''}> Góc sắc ở điểm này</label>` : ''}`; }
   el.innerHTML = h;
   $$('#sdSel [data-hc]').forEach((i) => { i.onchange = () => { const a = hc.toShip(p.pts[st.h3sel.k]); a[+i.dataset.hc] = num(i.value.replace(',', '.'), a[+i.dataset.hc]); p.pts[st.h3sel.k] = hc.toPx(a); changed(); }; });
-  $$('#sdSel select').forEach((s) => { s.onchange = () => { const dpt = +s.dataset.lv; p.type = p.type.slice(0, dpt); if (s.value) p.type.push(s.value); if (isPointType(p.type) && p.kind === 'point') st.lastPoint = p.type.slice(); drawSel(); changed(); }; });
+  const shp = $('#sdSharp'); if (shp) shp.onchange = () => { const k = st.h3sel.k, s0 = new Set(p.sharp || []); if (shp.checked) s0.add(k); else s0.delete(k); p.sharp = [...s0].sort((x, y) => x - y); changed(false); };
+  const cv = $('#sdCurve'); if (cv) cv.onclick = (e) => { const b = e.target.closest('button'); if (!b) return; p.curve = b.dataset.cv === '1'; if (!p.curve) delete p.curve; drawSel(); changed(false); };
+  const fi = $('#sdFillet'); if (fi) fi.onchange = () => { const v = num(fi.value.replace(',', '.'), 0); if (v > 0) p.fillet = v; else delete p.fillet; changed(false); };
+  const wi = $('#sdWin'); if (wi) wi.onchange = () => { const g = st.geom && st.geom.links ? st.geom.links[p.id] || [p.id] : [p.id]; for (const id of g) { const q = partOf(id); if (q) delete q.win; } p.win = wi.checked; changed(false); };
+  $$('#sdSel select').forEach((s) => { if (!s.dataset.lv) return; s.onchange = () => { const dpt = +s.dataset.lv; p.type = p.type.slice(0, dpt); if (s.value) p.type.push(s.value); if (isPointType(p.type) && p.kind === 'point') st.lastPoint = p.type.slice(); drawSel(); changed(); }; });
   $('#sdNote').oninput = (e) => { p.note = e.target.value; drawParts(); };
   $$('#sdSel [data-num]').forEach((i) => { i.onchange = () => { p.num = p.num || {}; const v = num(i.value, 0); if (v > 0) p.num[i.dataset.num] = v; else delete p.num[i.dataset.num]; changed(false); }; });
   $('#sdDelP').onclick = () => delPart(p.id);
-  $('#sdDup').onclick = () => { const q = clone(p); q.id = uid('p'); const last = q.type[q.type.length - 1] || ''; const sw = { T: 'P', P: 'T', canhT: 'canhP', canhP: 'canhT' }; if (sw[last]) q.type[q.type.length - 1] = sw[last]; else { const v = viewById(p.view), c = v && C(v), k = c && c.ok ? 1 / c.su : 12; q.pts = q.pts.map(([x, y]) => [x + k, y + k]); } st.model.parts.push(q); st.sel = q.id; drawSel(); changed(); };
+  $('#sdDup').onclick = () => { const q = clone(p); q.id = uid('p'); delete q.grp; const last = q.type[q.type.length - 1] || ''; const sw = { T: 'P', P: 'T', canhT: 'canhP', canhP: 'canhT' }; if (sw[last]) q.type[q.type.length - 1] = sw[last]; else { const v = viewById(p.view), c = v && C(v), k = c && c.ok ? 1 / c.su : 12; q.pts = q.pts.map(([x, y]) => [x + k, y + k]); } st.model.parts.push(q); st.sel = q.id; drawSel(); changed(); };
 }
-function delPart(id) { st.model.parts = st.model.parts.filter((q) => q.id !== id); if (st.sel === id) st.sel = null; drawSel(); changed(); }
+// chi tiết thư viện đang chọn: kích thước, hướng, vị trí
+function drawFitSel(el, f) {
+  const K = FIT_KINDS[f.kind] || { name: f.kind }, fld = (k, n, v, d = 2) => `<div class="fld"><label for="sdF${k}">${n}</label><div class="in"><input id="sdF${k}" data-fk="${k}" value="${fmt(v, d)}"></div></div>`;
+  let h = `<div><b>${esc(K.name)}</b> <span class="muted">(thư viện)</span></div>${K.tip ? `<div class="muted" style="margin:2px 0 4px">${esc(K.tip)}</div>` : ''}`;
+  h += `<input id="sdFNote" class="cell" value="${esc(f.note || '')}" placeholder="Ghi chú (tùy ý)" style="width:100%;margin:4px 0 5px;text-align:left;height:28px">`;
+  h += `<div class="grid g3" style="gap:4px">${fld('l', 'Dài (m)', f.l)}${fld('w', 'Rộng (m)', f.w)}${fld('h', 'Cao (m)', f.h)}</div>`;
+  h += `<div class="grid g3" style="gap:4px;margin-top:4px">${fld('rot', 'Xoay (°)', f.rot || 0, 0)}`;
+  if (f.kind === 'turret') h += fld('n', 'Số nòng', f.n || 1, 0) + fld('bl', 'Dài nòng (m)', f.bl || 4);
+  else if (f.kind === 'launcher') h += fld('rows', 'Số hàng', f.rows || 2, 0) + fld('cols', 'Số cột', f.cols || 4, 0) + '</div><div class="grid g3" style="gap:4px;margin-top:4px">' + fld('el', 'Góc ngóc (°)', f.el === undefined ? 15 : f.el, 0);
+  else if (f.kind === 'radar') h += fld('rpm', 'Vòng / phút', f.rpm || 24, 0);
+  h += '</div>';
+  h += `<div class="lbl" style="margin-top:6px">Vị trí (m)</div><div class="grid g3" style="gap:4px;margin-top:3px">${fld('x', 'Dọc (mũi +)', f.x)}${fld('y', 'Ngang (phải +)', f.y)}${fld('z', 'Cao từ ky', f.z)}</div>`;
+  h += `<div class="flex" style="gap:5px;margin-top:6px"><button class="btn sm" id="sdFMir" style="flex:1">Nhân bản sang mạn kia</button><button class="btn sm" id="sdFDup" style="flex:1">Nhân bản</button></div><button class="btn sm warn" id="sdFDel" style="width:100%;margin-top:5px">Xóa chi tiết</button>`;
+  h += `<div class="muted" style="margin-top:5px">Trên 3D lớn: kéo chi tiết để dời (tự bám mặt boong / nóc), kéo điểm vàng để đổi cỡ, điểm tím để xoay. Phím R / Shift+R: xoay 15°.</div>`;
+  el.innerHTML = h;
+  $$('#sdSel [data-fk]').forEach((i) => { i.onchange = () => { const k = i.dataset.fk, v = num(i.value.replace(',', '.'), f[k] || 0); if (['l', 'w', 'h', 'bl'].includes(k) && !(v > 0.02)) return; f[k] = ['n', 'rows', 'cols'].includes(k) ? Math.max(1, Math.round(v)) : v; changed(); }; });
+  $('#sdFNote').oninput = (e) => { f.note = e.target.value; drawParts(); };
+  $('#sdFDel').onclick = () => delPart(f.id);
+  $('#sdFMir').onclick = () => { const g = mirrorFit(f); g.id = uid('f'); st.model.fits.push(g); st.sel = g.id; drawSel(); changed(); };
+  $('#sdFDup').onclick = () => { const g = clone(f); g.id = uid('f'); g.x = r2(f.x - Math.max(1, f.l * 1.3)); st.model.fits.push(g); st.sel = g.id; drawSel(); changed(); };
+}
+function delPart(id) { st.model.parts = st.model.parts.filter((q) => q.id !== id); st.model.fits = (st.model.fits || []).filter((q) => q.id !== id); if (st.sel === id) st.sel = null; if (st.h3sel && st.h3sel.pid === id) st.h3sel = null; drawSel(); changed(); }
 
 // ---------- công cụ ----------
 function setTool(t) {
@@ -193,7 +249,6 @@ function bind() {
   $('#sdFit').onclick = () => { if (st.mode === 'board') fitBoard(); else fitView(); paint(); };
   $('#sdTol').oninput = (e) => { st.tol = +e.target.value; $('#sdTolV').textContent = st.tol; };
   $('#sdSkip').onchange = (e) => { st.skip = e.target.checked; };
-  $('#sdBack').onchange = (e) => { st.showBack = e.target.checked; fitBoard(); paint(); };
   $('#sdGrid').onchange = (e) => { st.grid = +e.target.value; paint(); };
   $$('[data-snap]').forEach((i) => { i.onchange = () => { st.snap[i.dataset.snap] = i.checked; }; });
   $('#sdGuides').onclick = (e) => { const b = e.target.closest('button'); if (b && b.dataset.gdel !== undefined) { st.model.guides.splice(+b.dataset.gdel, 1); changed(); } };
@@ -204,11 +259,19 @@ function bind() {
   $('#sdRefs').onchange = (e) => { const i = e.target.dataset.dim; if (i === undefined) return; const q = view().dims[+i]; q.m = num(e.target.value, 0); changed(); };
   $('#sdParts').onclick = (e) => { const b = e.target.closest('button'); if (b && b.dataset.p) { st.sel = b.dataset.p; drawParts(); drawSel(); paint(); } };
   $('#sdFile').onchange = (e) => { const f = e.target.files[0]; e.target.value = ''; if (f) addFile(f); };
-  $('#sdShade').onchange = (e) => { st.model.opts.shade = e.target.value; changed(false); };
   $('#sdRails').onchange = (e) => { st.model.opts.rails = e.target.checked; changed(false); };
+  $('#sdRoofRails').onchange = (e) => { st.model.opts.roofRails = e.target.checked; changed(false); };
+  $('#sdLib').onclick = (e) => { const b = e.target.closest('button'); if (!b) return; startPlace(st.place === b.dataset.fk ? null : b.dataset.fk); };
+  $('#sdCols').onchange = (e) => { const t = e.target, o = st.model.opts;
+    if (t.id === 'sdPreset') { const pr = COLOR_PRESETS[t.value]; if (pr) { o.colors = { hull: pr.hull, super: pr.super, deck: pr.deck, boot: pr.boot }; o.shade = COLOR_PRESETS[t.value] && ['haze', 'dark', 'light', 'blue'].includes(t.value) ? t.value : o.shade; } }
+    else if (t.dataset.col) { o.colors = o.colors || curColors(); o.colors[t.dataset.col] = t.value; }
+    else if (t.id === 'sdRoofDeck') o.roofDeck = t.checked; else if (t.id === 'sdHullNoCol') { if (t.value) o.hullNoCol = t.value; else delete o.hullNoCol; } else return;
+    drawCols(); changed(false); };
+  $('#sdCols').oninput = (e) => { if (e.target.id !== 'sdHullNo') return; st.model.opts.hullNo = e.target.value; clearTimeout(st.tn); st.tn = setTimeout(() => changed(false), 400); };
   $('#sdTpl').onclick = () => {
     if (st.model.parts.length && !confirm('Thay mô hình đang vẽ bằng mẫu tàu pháo chung chung?')) return;
-    st.model = makeTemplate(); st.model.guides = []; st.cur = st.model.views[0].id; st.sel = null; st.img.clear(); st.data.clear(); st.active = {};
+    st.model = makeTemplate(); st.model.guides = []; st.cur = st.model.views[0].id;
+    { const k = ship().L / TEMPLATE_SHIP.loa; if (Math.abs(k - 1) > 1e-3) for (const f of st.model.fits || []) for (const q of ['x', 'y', 'z', 'l', 'w', 'h', 'bl']) if (f[q] !== undefined) f[q] = r2(f[q] * k); } st.sel = null; st.img.clear(); st.data.clear(); st.active = {};
     if (confirm('Đặt luôn thông số tàu ở tab 1 theo mẫu (dài 62 m, rộng 9,5 m, mớn 2,8 m, 2 máy, hết lái 25°)?\nKhông đặt thì mẫu tự co giãn theo chiều dài, chiều rộng tàu hiện có.')) { Object.assign(A.p, TEMPLATE_SHIP, { name: 'Tàu pháo mẫu' }); saveShip(); }
     st.mode = 'board'; st.ver++; fitBoard(); refreshAll(); changed();
   };
@@ -234,6 +297,8 @@ function onKey(e) {
   const drawing = st.draft || st.tool === 'guide';
   if (drawing && /^[0-9.,;\-]$/.test(e.key)) { st.typed += e.key; paint(); e.preventDefault(); e.stopPropagation(); return; }
   if (e.key === 'Backspace' && st.typed) { st.typed = st.typed.slice(0, -1); paint(); e.preventDefault(); e.stopPropagation(); return; }
+  if (e.key === 'Escape' && st.place) { startPlace(null); e.preventDefault(); e.stopPropagation(); return; }
+  if ((e.key === 'r' || e.key === 'R') && !e.ctrlKey && !e.metaKey && fitOf(st.sel)) { const f = fitOf(st.sel); f.rot = ((f.rot || 0) + (e.shiftKey ? -15 : 15) + 540) % 360 - 180; changed(); drawSel(); e.preventDefault(); e.stopPropagation(); return; }
   if (e.key === 'Escape') { if (st.typed) st.typed = ''; else if (st.draft || st.chain || st.drag) { st.draft = null; st.chain = null; st.drag = null; } else if (st.sel) { st.sel = null; drawSel(); drawParts(); } else if (st.tool !== 'edit') setTool('edit'); paint(); e.preventDefault(); e.stopPropagation(); return; }
   if (e.key === 'Enter') { if (st.typed) typedEnter(e.shiftKey); else if (st.draft) finishDraft(); e.preventDefault(); }
   else if ((e.key === 'Delete' || e.key === 'Backspace') && st.sel) { delPart(st.sel); e.preventDefault(); }
@@ -381,6 +446,7 @@ function rangeM(kind) {
 function paint() {
   const c = $('#sdCv'); if (!c) return; sizeCv(); const g = c.getContext('2d'); g.setTransform(1, 0, 0, 1, 0, 0); g.fillStyle = '#2a3238'; g.fillRect(0, 0, c.width, c.height);
   if (st.mode === 'single') { paintSingle(g); return; }
+  if (st.mode === 'big3d') return;
   st.lay = layout(); if (!st.b) fitBoard();
   for (const k of kindsOn()) paintPane(g, k);
   paintCross(g);
@@ -393,7 +459,10 @@ function paintPane(g, kind) {
   // ảnh sơ đồ đã có tỷ lệ: biến đổi afin điểm ảnh → màn hình
   for (const v of viewsOf(kind)) { const img = st.img.get(v.id); if (!img) continue; const o = i2sV(v, [0, 0]), ex = i2sV(v, [1, 0]), ey = i2sV(v, [0, 1]); g.save(); g.setTransform(ex[0] - o[0], ex[1] - o[1], ey[0] - o[0], ey[1] - o[1], o[0], o[1]); g.globalAlpha = 0.85; g.imageSmoothingEnabled = true; g.drawImage(img, 0, 0); g.restore(); }
   paintGrid(g, kind);
+  if (kind === 'front' || kind === 'back') paintGhost(g, kind);
+  paintAuto(g, kind);
   paintParts(g, kind);
+  paintFits(g, kind);
   g.restore();
   g.strokeStyle = '#5b6b76'; g.lineWidth = 1; g.strokeRect(p0[0] + 0.5, p0[1] + 0.5, w - 1, h - 1);
   g.font = 'bold 11px Segoe UI'; const t = PANE_NAME[kind], tw = g.measureText(t).width; g.fillStyle = 'rgba(14,22,28,.85)'; g.fillRect(p0[0] + 1, p0[1] + 1, tw + 10, 17); g.fillStyle = '#E6EDF2'; g.fillText(t, p0[0] + 6, p0[1] + 13);
@@ -420,15 +489,57 @@ function paintGrid(g, kind) {
   if (ah === 'x') for (const x of [-s.L / 2, s.L / 2]) line(g, P(x, R[1]), P(x, R[3]), 'rgba(170,0,255,.35)', 1, [2, 4]);
   for (const q of st.model.guides || []) { if (q.ax === ah) line(g, P(q.v, R[1]), P(q.v, R[3]), '#E040FB', 1.2, [6, 3]); else if (q.ax === av) line(g, P(R[0], q.v), P(R[2], q.v), '#E040FB', 1.2, [6, 3]); }
 }
+// nét đã làm mượt (cong / bo góc) theo mét của hình; null nếu hình chưa có tỷ lệ
+function shapedM(p, v) { const c = C(v); if (!c.ok) return null; const r = resolve(p.type); return partShape(p.pts.map((q) => c.toShip(q)), p, v.kind, r.node ? r.node.role : ''); }
+function outlineS(p, v) { if ((p.curve || p.fillet > 0) && p.kind !== 'point') { const m = shapedM(p, v); if (m) return m.map((a) => m2s(v.kind, a)); } return p.pts.map((q) => i2sV(v, q)); }
 function paintParts(g, kind) {
   const linked = new Set(st.sel && st.geom && st.geom.links && st.geom.links[st.sel] ? st.geom.links[st.sel] : []);
   for (const v of viewsOf(kind)) for (const p of st.model.parts) {
-    if (p.view !== v.id || !p.pts.length) continue; const col = colOf(p), sel = p.id === st.sel, lk = !sel && linked.has(p.id), P = p.pts.map((q) => i2sV(v, q));
-    if (p.kind === 'point') { g.fillStyle = col; g.strokeStyle = sel ? '#00E5FF' : '#0b1116'; g.lineWidth = sel ? 3 : 1.5; g.beginPath(); g.arc(P[0][0], P[0][1], sel ? 7 : 5.5, 0, 7); g.fill(); g.stroke(); continue; }
+    if (p.view !== v.id || !p.pts.length) continue; const col = colOf(p), sel = p.id === st.sel, lk = !sel && linked.has(p.id), V = p.pts.map((q) => i2sV(v, q));
+    if (p.kind === 'point') { g.fillStyle = col; g.strokeStyle = sel ? '#00E5FF' : '#0b1116'; g.lineWidth = sel ? 3 : 1.5; g.beginPath(); g.arc(V[0][0], V[0][1], sel ? 7 : 5.5, 0, 7); g.fill(); g.stroke(); continue; }
+    const P = outlineS(p, v), smooth = P !== V && P.length !== V.length;
     g.beginPath(); P.forEach((q, i) => (i ? g.lineTo(q[0], q[1]) : g.moveTo(q[0], q[1]))); if (p.kind !== 'line') { g.closePath(); g.fillStyle = col + (sel ? '44' : lk ? '38' : '26'); g.fill(); }
     g.strokeStyle = sel || lk ? '#00E5FF' : col; g.lineWidth = sel ? 2.5 : lk ? 2 : 1.8; g.setLineDash(lk ? [7, 4] : resolve(p.type).leaf ? [] : [6, 4]); g.stroke(); g.setLineDash([]);
-    if (sel) for (const q of P) { g.fillStyle = '#00E5FF'; g.fillRect(q[0] - 4, q[1] - 4, 8, 8); g.strokeStyle = '#0b1116'; g.lineWidth = 1; g.strokeRect(q[0] - 4, q[1] - 4, 8, 8); }
+    if (sel && smooth) { g.beginPath(); V.forEach((q, i) => (i ? g.lineTo(q[0], q[1]) : g.moveTo(q[0], q[1]))); if (p.kind !== 'line') g.closePath(); g.strokeStyle = 'rgba(0,229,255,.35)'; g.lineWidth = 1; g.setLineDash([3, 3]); g.stroke(); g.setLineDash([]); }
+    if (sel) { const sh = new Set(p.sharp || []); V.forEach((q, k) => { const on = st.h3sel && st.h3sel.pid === p.id && st.h3sel.k === k, r = on ? 5.5 : 4; const soft = (p.curve || p.fillet > 0) && !sh.has(k); g.fillStyle = on ? '#FFFFFF' : soft ? '#00E5FF' : '#FFD54F'; if (soft) { g.beginPath(); g.arc(q[0], q[1], r, 0, 7); g.fill(); g.strokeStyle = '#0b1116'; g.lineWidth = 1; g.stroke(); } else { g.fillRect(q[0] - r, q[1] - r, 2 * r, 2 * r); g.strokeStyle = '#0b1116'; g.lineWidth = 1; g.strokeRect(q[0] - r, q[1] - r, 2 * r, 2 * r); } }); }
   }
+}
+// các khối của nhóm đang chọn
+const selIds = () => (st.sel && st.geom && st.geom.links && st.geom.links[st.sel]) || (st.sel ? [st.sel] : []);
+// hình chiếu tự sinh trong ô kind: nhìn từ mũi / lái (fb), mặt boong (top), hình mạn (side)
+function autosIn(kind) { const A0 = (st.geom && st.geom.auto) || []; return A0.filter((a) => (a.view === 'fb' && ((kind === 'front' && a.need.front) || (kind === 'back' && a.need.back))) || a.view === kind); }
+const autoSel = (a) => !!st.sel && (a.gid === st.sel || a.ids.includes(st.sel));
+function paintAuto(g, kind) {
+  if (st.mode !== 'board') return;
+  for (const a of autosIn(kind)) {
+    const P = a.poly.map((q) => m2s(kind, q)), sel = autoSel(a), col = CAT[a.type[0]] || '#81C784';
+    g.beginPath(); P.forEach((q, i) => (i ? g.lineTo(q[0], q[1]) : g.moveTo(q[0], q[1]))); g.closePath(); g.fillStyle = col + (sel ? '30' : '14'); g.fill();
+    g.strokeStyle = sel ? '#00E5FF' : col; g.globalAlpha = sel ? 1 : 0.75; g.lineWidth = sel ? 1.8 : 1.3; g.setLineDash([5, 4]); g.stroke(); g.setLineDash([]); g.globalAlpha = 1;
+    if (sel) { for (const q of P) { g.strokeStyle = '#00E5FF'; g.lineWidth = 1.5; g.strokeRect(q[0] - 4, q[1] - 4, 8, 8); } let x0 = Infinity, y0 = Infinity; for (const q of P) { x0 = Math.min(x0, q[0]); y0 = Math.min(y0, q[1]); } g.font = '10px Segoe UI'; g.fillStyle = 'rgba(0,120,150,.9)'; g.fillText('tự sinh — kéo điểm để sửa', x0, y0 - 4); }
+  }
+}
+// bóng mờ cả tàu nhìn từ mũi / lái: các khoảng bề rộng theo từng lớp chiều cao (tính một lần cho mỗi lần dựng)
+function ghostRows(geom) {
+  if (geom._ghost) return geom._ghost; let z0 = Infinity, z1 = -Infinity;
+  for (const it of geom.items) for (let i = 2; i < it.pos.length; i += 3) { z0 = Math.min(z0, it.pos[i]); z1 = Math.max(z1, it.pos[i]); }
+  if (!(z1 > z0)) return (geom._ghost = { rows: [] });
+  const dz = Math.max(0.05, (z1 - z0) / 260), n = Math.ceil((z1 - z0) / dz) + 1, rows = Array.from({ length: n }, () => []);
+  for (const it of geom.items) { const p = it.pos, I = it.idx; for (let t = 0; t < I.length; t += 3) {
+    const a = I[t] * 3, b = I[t + 1] * 3, c = I[t + 2] * 3, Y = [p[a + 1], p[b + 1], p[c + 1]], Z = [p[a + 2], p[b + 2], p[c + 2]], lo = Math.min(Z[0], Z[1], Z[2]), hi = Math.max(Z[0], Z[1], Z[2]);
+    for (let r = Math.max(0, Math.floor((lo - z0) / dz)); r < n && z0 + (r + 0.5) * dz <= hi; r++) { const zc = z0 + (r + 0.5) * dz; if (zc < lo) continue; let ya = Infinity, yb = -Infinity; for (let k = 0; k < 3; k++) { const za = Z[k], zb = Z[(k + 1) % 3]; if ((za - zc) * (zb - zc) <= 0 && za !== zb) { const y = Y[k] + (Y[(k + 1) % 3] - Y[k]) * (zc - za) / (zb - za); ya = Math.min(ya, y); yb = Math.max(yb, y); } } if (ya <= yb) rows[r].push([ya, yb]); }
+  } }
+  const mg = (iv) => { iv.sort((x, y) => x[0] - y[0]); const o = []; for (const q of iv) { const l = o[o.length - 1]; if (l && q[0] <= l[1] + 0.03) l[1] = Math.max(l[1], q[1]); else o.push(q.slice()); } return o; };
+  return (geom._ghost = { z0, dz, rows: rows.map(mg) });
+}
+function paintGhost(g, kind) {
+  if (st.mode !== 'board' || !st.geom) return; const G = ghostRows(st.geom); g.fillStyle = 'rgba(55,75,95,.13)';
+  G.rows.forEach((iv, r) => { const za = G.z0 + r * G.dz, zb = za + G.dz; for (const [ya, yb] of iv) { const A = m2s(kind, [ya, za]), B = m2s(kind, [yb, zb]); g.fillRect(Math.min(A[0], B[0]), Math.min(A[1], B[1]), Math.abs(B[0] - A[0]) + 0.6, Math.abs(B[1] - A[1]) + 0.6); } });
+}
+// chi tiết thư viện: khung bao chiếu lên từng ô
+function fitRect(kind, bb) { const [x0, y0, z0, x1, y1, z1] = bb, a = kind === 'side' ? [[x0, z0], [x1, z1]] : kind === 'top' ? [[x0, y0], [x1, y1]] : [[y0, z0], [y1, z1]]; const A = m2s(kind, a[0]), B = m2s(kind, a[1]); return [Math.min(A[0], B[0]), Math.min(A[1], B[1]), Math.abs(B[0] - A[0]), Math.abs(B[1] - A[1])]; }
+function paintFits(g, kind) {
+  if (st.mode !== 'board' || !st.geom || !st.geom.fitBB) return; g.font = '10px Segoe UI';
+  for (const f of st.model.fits || []) { const bb = st.geom.fitBB[f.id]; if (!bb || !isFinite(bb[0])) continue; const [x, y, w, h] = fitRect(kind, bb), sel = f.id === st.sel; g.fillStyle = sel ? 'rgba(0,229,255,.18)' : 'rgba(96,125,139,.12)'; g.fillRect(x, y, w, h); g.strokeStyle = sel ? '#00E5FF' : '#607D8B'; g.lineWidth = sel ? 2 : 1; g.setLineDash(sel ? [] : [3, 2]); g.strokeRect(x, y, w, h); g.setLineDash([]); if (sel) { g.fillStyle = '#006978'; g.fillText((FIT_KINDS[f.kind] || {}).name || '', x, y - 3); } }
 }
 // vạch gióng theo chuột qua các ô, và khoảng của chi tiết đang chọn chiếu sang các ô khác
 function paintCross(g) {
@@ -472,10 +583,20 @@ function paintSingle(g) {
 const near = (a, b, r = 9) => Math.hypot(a[0] - b[0], a[1] - b[1]) <= r;
 function hitPart(kind, p) {
   const ps = []; for (const v of viewsOf(kind)) for (const o of st.model.parts) if (o.view === v.id && o.pts.length) ps.push([o, v]);
-  for (let i = ps.length - 1; i >= 0; i--) { const [o, v] = ps[i], P = o.pts.map((q) => i2sV(v, q)); if (o.kind === 'point') { if (near(P[0], p, 10)) return o; continue; } for (let k = 0; k + 1 < P.length + (o.kind === 'line' ? 0 : 1); k++) { const a = P[k], b = P[(k + 1) % P.length], dx = b[0] - a[0], dy = b[1] - a[1], t = Math.max(0, Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / (dx * dx + dy * dy || 1))); if (Math.hypot(a[0] + dx * t - p[0], a[1] + dy * t - p[1]) < 7) return o; } }
+  for (let i = ps.length - 1; i >= 0; i--) { const [o, v] = ps[i], P = outlineS(o, v); if (o.kind === 'point') { if (near(P[0], p, 10)) return o; continue; } for (let k = 0; k + 1 < P.length + (o.kind === 'line' ? 0 : 1); k++) { const a = P[k], b = P[(k + 1) % P.length], dx = b[0] - a[0], dy = b[1] - a[1], t = Math.max(0, Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / (dx * dx + dy * dy || 1))); if (Math.hypot(a[0] + dx * t - p[0], a[1] + dy * t - p[1]) < 7) return o; } }
   // bên trong đa giác: chọn chi tiết nhỏ nhất chứa điểm
-  let best = null, ba = Infinity; for (const [o, v] of ps) { if (o.kind !== 'poly' || o.pts.length < 3) continue; const P = o.pts.map((q) => i2sV(v, q)); let ins = false; for (let i = 0, j = P.length - 1; i < P.length; j = i++) { const a = P[i], b = P[j]; if ((a[1] > p[1]) !== (b[1] > p[1]) && p[0] < (b[0] - a[0]) * (p[1] - a[1]) / (b[1] - a[1]) + a[0]) ins = !ins; } if (ins) { let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity; for (const z of P) { x0 = Math.min(x0, z[0]); y0 = Math.min(y0, z[1]); x1 = Math.max(x1, z[0]); y1 = Math.max(y1, z[1]); } const ar = (x1 - x0) * (y1 - y0); if (ar < ba) { ba = ar; best = o; } } }
+  let best = null, ba = Infinity; for (const [o, v] of ps) { if (o.kind !== 'poly' || o.pts.length < 3) continue; const P = outlineS(o, v); let ins = false; for (let i = 0, j = P.length - 1; i < P.length; j = i++) { const a = P[i], b = P[j]; if ((a[1] > p[1]) !== (b[1] > p[1]) && p[0] < (b[0] - a[0]) * (p[1] - a[1]) / (b[1] - a[1]) + a[0]) ins = !ins; } if (ins) { let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity; for (const z of P) { x0 = Math.min(x0, z[0]); y0 = Math.min(y0, z[1]); x1 = Math.max(x1, z[0]); y1 = Math.max(y1, z[1]); } const ar = (x1 - x0) * (y1 - y0); if (ar < ba) { ba = ar; best = o; } } }
   return best;
+}
+const inScr = (P, p) => { let ins = false; for (let i = 0, j = P.length - 1; i < P.length; j = i++) { const a = P[i], b = P[j]; if ((a[1] > p[1]) !== (b[1] > p[1]) && p[0] < (b[0] - a[0]) * (p[1] - a[1]) / (b[1] - a[1]) + a[0]) ins = !ins; } return ins; };
+function hitFit(kind, p) { if (st.mode !== 'board' || !st.geom || !st.geom.fitBB) return null; let best = null, ba = Infinity; for (const f of st.model.fits || []) { const bb = st.geom.fitBB[f.id]; if (!bb || !isFinite(bb[0])) continue; const [x, y, w, h] = fitRect(kind, bb), m = 4; if (p[0] >= x - m && p[0] <= x + w + m && p[1] >= y - m && p[1] <= y + h + m && w * h < ba) { ba = w * h; best = f; } } return best; }
+function hitAuto(kind, p) { if (st.mode !== 'board') return null; let best = null, ba = Infinity; for (const a of autosIn(kind)) { const P = a.poly.map((q) => m2s(kind, q)); if (!inScr(P, p)) continue; let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity; for (const q of P) { x0 = Math.min(x0, q[0]); y0 = Math.min(y0, q[1]); x1 = Math.max(x1, q[0]); y1 = Math.max(y1, q[1]); } const ar = (x1 - x0) * (y1 - y0); if (ar < ba) { ba = ar; best = a; } } return best; }
+function autoVertexAt(kind, p) { if (st.mode !== 'board') return null; for (const a of autosIn(kind)) { if (!autoSel(a)) continue; const k = a.poly.findIndex((q) => near(m2s(kind, q), p)); if (k >= 0) return { a, k }; } return null; }
+// biến hình tự sinh thành nét thật ở hình loại vk (gắn với khối qua `grp`)
+function autoToPart(a, vk) {
+  const v = targetView(vk), c = C(v);
+  const p = { id: uid('p'), view: v.id, type: a.type.slice(), pts: a.poly.map((q) => c.toPx(q)), kind: 'poly', note: '', num: {}, grp: a.gid };
+  st.model.parts.push(p); if (st.model.template) delete st.model.template; return p;
 }
 function newPart(kind, v, pts) {
   const p = { id: uid('p'), view: v.id, type: kind === 'point' && st.lastPoint ? st.lastPoint.slice() : [], pts, kind, note: '', num: {} };
@@ -517,8 +638,12 @@ function down(e, p) {
   if (t === 'box') { st.drag = { box: p, kind }; return; }
   if (t === 'edit') {
     const sp = st.model.parts.find((o) => o.id === st.sel), sv = sp && viewById(sp.view);
-    if (sp && sv && (st.mode === 'single' ? sv.id === st.cur : sv.kind === kind)) { const k = sp.pts.findIndex((z) => near(i2sV(sv, z), p)); if (k >= 0) { st.drag = { vtx: sp, v: sv, k }; return; } }
-    const h = hitPart(kind, p); if (h) { st.sel = h.id; drawSel(); drawParts(); paint(); st.drag = { move: h, v: viewById(h.view), last: p, moved: false }; return; }
+    if (sp && sv && (st.mode === 'single' ? sv.id === st.cur : sv.kind === kind)) { const k = sp.pts.findIndex((z) => near(i2sV(sv, z), p)); if (k >= 0) { st.h3sel = { pid: sp.id, k }; drawSel(); paint(); st.drag = { vtx: sp, v: sv, k }; return; } }
+    // điểm của hình tự sinh (khối đang chọn): kéo là thành nét thật
+    const av = autoVertexAt(kind, p); if (av) { const np = autoToPart(av.a, av.a.view === 'fb' ? kind : av.a.view), nv = viewById(np.view); st.sel = np.id; st.h3sel = { pid: np.id, k: av.k }; drawSel(); drawParts(); st.drag = { vtx: np, v: nv, k: av.k }; return; }
+    const fh = hitFit(kind, p); if (fh) { st.sel = fh.id; st.h3sel = null; drawSel(); drawParts(); paint(); st.drag = { fit: fh, kind, last: s2m(kind, p), moved: false }; return; }
+    const h = hitPart(kind, p); if (h) { if (h.id !== st.sel) st.h3sel = null; st.sel = h.id; drawSel(); drawParts(); paint(); st.drag = { move: h, v: viewById(h.view), last: p, moved: false }; return; }
+    const ah = hitAuto(kind, p); if (ah) { st.sel = ah.gid; st.h3sel = null; drawSel(); drawParts(); paint(); st.drag = { pan: p }; return; }
     st.drag = { pan: p, clear: true };
   }
 }
@@ -538,6 +663,7 @@ function move(e, p) {
   } else st.hover = null;
   if (d && d.pan) { if (st.mode === 'single') { st.v.cx -= (p[0] - d.pan[0]) / st.v.sc; st.v.cy -= (p[1] - d.pan[1]) / st.v.sc; } else { st.b.cx -= (p[0] - d.pan[0]) / st.b.sc; st.b.cy -= (p[1] - d.pan[1]) / st.b.sc; } d.pan = p; d.clear = false; paint(); return; }
   if (d && d.vtx) { const r = snapPx(d.v, p, e.shiftKey, d.vtx); if (r.q) d.vtx.pts[d.k] = r.q; paint(); return; }
+  if (d && d.fit) { const m = s2m(d.kind, p); if (!m) return; let dh = m[0] - d.last[0], dv = m[1] - d.last[1]; if (!d.moved && Math.hypot(dh, dv) * pxPerM() < 4) return; d.moved = true; const gs = st.snap.grid ? st.grid / 2 : 0.01; dh = Math.round(dh / gs) * gs; dv = Math.round(dv / gs) * gs; if (!dh && !dv) return; const f = d.fit; if (d.kind === 'side') { f.x = r2(f.x + dh); f.z = r2(f.z + dv); } else if (d.kind === 'top') { f.x = r2(f.x + dh); f.y = r2(f.y + dv); } else { f.y = r2(f.y + dh); f.z = r2(f.z + dv); } d.last = [d.last[0] + dh, d.last[1] + dv]; st.edited = true; if (!st.tq) st.tq = setTimeout(() => { st.tq = null; liveRebuild(); }, 70); return; }
   if (d && d.move) { const a = s2iV(d.v, d.last), b = s2iV(d.v, p), dx = b[0] - a[0], dy = b[1] - a[1]; if (!d.moved && Math.hypot(p[0] - d.last[0], p[1] - d.last[1]) < 4) return; d.moved = true; d.move.pts = d.move.pts.map(([x, y]) => [x + dx, y + dy]); d.last = p; paint(); return; }
   paint();
 }
@@ -545,6 +671,7 @@ function up(e, p) {
   const d = st.drag; st.drag = null; if (!d) return;
   if (d.box) { const [v] = st.mode === 'single' ? [view()] : imgViewAt(d.kind, d.box), img = v && imgData(v); if (!img) { $('#sdHint').textContent = 'Dò trong khung cần ảnh sơ đồ (đã đặt mốc).'; paint(); return; } const a = s2iV(v, d.box), b = s2iV(v, p); const r = traceBox(img.data, img.width, img.height, [a[0], a[1], b[0], b[1]]); if (r.pts.length >= 3) newPart('poly', v, r.pts); else { $('#sdHint').textContent = 'Không thấy nét vẽ nào đủ lớn trong khung.'; paint(); } return; }
   if (d.vtx || (d.move && d.moved)) changed(false);
+  if (d.fit && d.moved) { clearTimeout(st.tq); st.tq = null; changed(false); drawSel(); }
   if (d.pan && d.clear && st.sel) { st.sel = null; drawSel(); drawParts(); paint(); }
 }
 function dbl(p) {
@@ -566,10 +693,13 @@ const fromW = (v) => [-v.z, v.x, v.y + ship().T];
 function drawBar3() { const el = $('#sd3dBar'); if (el) el.innerHTML = [['orbit', 'Xoay'], ['top', 'Trên'], ['side', 'Mạn'], ['front', 'Mũi']].map(([k, n]) => `<button data-c="${k}" class="${st.cam3 === k ? 'on' : ''}" style="padding:2px 8px">${n}</button>`).join(''); }
 function initPreview() {
   const c = $('#sd3d'); if (!c) return; let r; try { r = new THREE.WebGLRenderer({ canvas: c, antialias: true }); } catch (e) { $('#sd3dInfo').textContent = 'Máy không mở thêm được khung 3D.'; return; }
-  const scene = new THREE.Scene(); scene.background = new THREE.Color(0x0b1116); scene.add(new THREE.HemisphereLight(0xffffff, 0x334455, 1.4)); const sun = new THREE.DirectionalLight(0xffffff, 1.3); sun.position.set(-60, 90, 40); scene.add(sun);
+  r.shadowMap.enabled = true; r.shadowMap.type = THREE.PCFSoftShadowMap;
+  const scene = new THREE.Scene(); scene.background = new THREE.Color(0x0b1116); scene.environment = skyEnv(THREE, r); scene.environmentIntensity = 0.45;
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x334455, 0.75)); const sun = new THREE.DirectionalLight(0xffffff, 1.9); sun.position.set(-60, 90, 40); sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048); sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.03; scene.add(sun); scene.add(sun.target);
   const water = new THREE.Mesh(new THREE.CircleGeometry(400, 48), new THREE.MeshBasicMaterial({ color: 0x1d4a63, transparent: true, opacity: 0.55, depthWrite: false })); water.rotation.x = -Math.PI / 2; scene.add(water);
-  st.p3 = { r, scene, water, cam: new THREE.PerspectiveCamera(32, 1, 0.5, 6000), ocam: new THREE.OrthographicCamera(-1, 1, 1, -1, -5000, 5000), yaw: -2.25, pitch: 0.32, dist: 1, oz: 1, ox: 0, oy: 0, grp: null, hl: null, hd: null, L: 60, ray: new THREE.Raycaster() };
-  c.onpointerdown = (e) => down3(e); c.onpointermove = (e) => move3(e); c.onpointerup = (e) => up3(e);
+  const shw = new THREE.Mesh(new THREE.CircleGeometry(400, 48), new THREE.ShadowMaterial({ opacity: 0.28 })); shw.rotation.x = -Math.PI / 2; shw.position.y = 0.01; shw.receiveShadow = true; scene.add(shw);
+  st.p3 = { r, scene, water, shw, sun, cam: new THREE.PerspectiveCamera(32, 1, 0.5, 6000), ocam: new THREE.OrthographicCamera(-1, 1, 1, -1, -5000, 5000), yaw: -2.25, pitch: 0.32, dist: 1, oz: 1, ox: 0, oy: 0, grp: null, hl: null, hd: null, L: 60, ray: new THREE.Raycaster() };
+  c.onpointerdown = (e) => down3(e); c.onpointermove = (e) => move3(e); c.onpointerup = (e) => up3(e); c.ondblclick = (e) => dbl3(e);
   c.onwheel = (e) => { e.preventDefault(); if (!st.p3) return; const f = e.deltaY > 0 ? 1.12 : 0.89; if (st.cam3 === 'orbit') st.p3.dist = Math.max(0.08, Math.min(3, st.p3.dist * f)); else st.p3.oz = Math.max(0.3, Math.min(60, st.p3.oz / f)); render3d(); };
   rebuild3d();
 }
@@ -578,8 +708,8 @@ function rebuild3d() {
   try { geom = buildModel(st.model, s); } catch (e) { $('#sd3dInfo').textContent = 'Lỗi dựng mô hình: ' + e.message; console.error(e); return; }
   st.geom = geom; drawSel(); paint();
   const P = st.p3; if (!P) return;
-  if (P.grp) { P.scene.remove(P.grp); P.grp.traverse((o) => { if (o.geometry) o.geometry.dispose(); if (o.material) o.material.dispose(); }); }
-  P.grp = modelGroup(THREE, geom); P.scene.add(P.grp); P.L = geom.dims.L;
+  setGroup(geom); P.L = geom.dims.L;
+  { const R = Math.max(15, P.L * 0.65), sc = P.sun.shadow.camera; P.sun.position.set(-0.45, 0.68, 0.3).normalize().multiplyScalar(P.L * 2.5); sc.left = -R; sc.right = R; sc.top = R; sc.bottom = -R; sc.near = 1; sc.far = P.L * 6; sc.updateProjectionMatrix(); }
   const a = geom.areas; $('#sd3dInfo').innerHTML = `Dài ${fmt(geom.dims.L)} m · rộng ${fmt(geom.dims.B)} m · tĩnh không ${fmt(a.air)} m<br>Hứng gió: mạn ${Math.round(a.AL)} m² · trước ${Math.round(a.AF)} m² · tâm ${fmt(a.xc)} m${geom.warn.length ? '<br><span style="color:#FFB547">' + geom.warn.map(esc).join('<br>') + '</span>' : ''}`;
   build3dExtras(); render3d();
 }
@@ -610,23 +740,46 @@ function build3dExtras() {
   for (const id of ids) for (const r of g.ranges[id] || []) { const key = r.it + ':' + r.t0; if (seen.has(key)) continue; seen.add(key); const it = g.items[r.it]; for (let t = r.t0; t < r.t1; t++) for (let k = 0; k < 3; k++) { const v = it.idx[t * 3 + k], x = it.pos[v * 3], y = it.pos[v * 3 + 1], z = it.pos[v * 3 + 2]; const w = toW(x, y, z); pos.push(w.x, w.y, w.z); bb[0] = Math.min(bb[0], x); bb[1] = Math.min(bb[1], y); bb[2] = Math.min(bb[2], z); bb[3] = Math.max(bb[3], x); bb[4] = Math.max(bb[4], y); bb[5] = Math.max(bb[5], z); } }
   if (pos.length) { const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); const grp = new THREE.Group(); grp.add(new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: 0x00e5ff, transparent: true, opacity: 0.32, depthWrite: false, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2 }))); grp.add(new THREE.Mesh(geo.clone(), new THREE.MeshBasicMaterial({ color: 0x00e5ff, wireframe: true, transparent: true, opacity: 0.35, depthWrite: false }))); grp.renderOrder = 5; P.hl = grp; P.scene.add(grp); }
   st.bb3 = pos.length ? bb : null;
-  if (st.mode === 'big3d') { P.hd = new THREE.Group(); P.hd.renderOrder = 10; P.scene.add(P.hd); st.h3 = handles(ids); const rr = Math.max(0.12, Math.min(0.5, P.L / 160)); for (const h of st.h3) { const sel = st.h3sel && st.h3sel.pid === h.p.id && st.h3sel.k === h.k; const m = new THREE.Mesh(new THREE.SphereGeometry(rr * (sel ? 1.5 : 1), 12, 8), new THREE.MeshBasicMaterial({ color: sel ? 0xffffff : h.col, depthTest: false, transparent: true, opacity: 0.95 })); m.position.copy(h.w); m.renderOrder = 11; m.userData.h = h; P.hd.add(m); } }
+  if (st.mode === 'big3d') { P.hd = new THREE.Group(); P.hd.renderOrder = 10; P.scene.add(P.hd); st.h3 = handles(ids); const rr = Math.max(0.12, Math.min(0.5, P.L / 160)); for (const h of st.h3) { const sel = st.h3sel && h.p && st.h3sel.pid === h.p.id && st.h3sel.k === h.k; const m = new THREE.Mesh(new THREE.SphereGeometry(rr * (sel ? 1.5 : 1), 12, 8), new THREE.MeshBasicMaterial({ color: sel ? 0xffffff : h.col, depthTest: false, transparent: true, opacity: 0.95 })); m.position.copy(h.w); m.renderOrder = 11; m.userData.h = h; P.hd.add(m); } }
   render3d();
 }
-// điểm nắm: đỉnh nét vẽ của từng hình chiếu, đặt trên mặt khối nhìn về phía hình chiếu đó
+// điểm nắm: đỉnh nét vẽ của từng hình chiếu, hiện ở CẢ HAI ĐẦU khối, nằm đúng trên mặt khối:
+// đỉnh hình mạn ở mạn phải + mạn trái, đỉnh mặt boong ở mép trên + mép dưới, đỉnh hình mũi / lái ở mặt trước + mặt sau
+const KC = { side: 0xFF9100, top: 0x2979FF, front: 0x00C853, back: 0x00C853 };
+function solidFor(ids) { return ((st.geom && st.geom.solids) || []).find((s) => ids.some((id) => s.ids.includes(id))) || null; }
+const nearSlice = (s, x) => s.slices.reduce((m, q) => (Math.abs(q.x - x) < Math.abs(m.x - x) ? q : m));
+const rng2 = (r, i) => { let a = Infinity, b = -Infinity; for (const p of r) { a = Math.min(a, p[i]); b = Math.max(b, p[i]); } return [a, b]; };
+// bề rộng (y) của khối tại (x, z); chiều cao (z) tại (x, y); đoạn dọc (x) mà điểm (y, z) còn nằm trong khối
+function extY(s, x, z) { const sl = nearSlice(s, x); let a = Infinity, b = -Infinity; for (const r of sl.rings) { const [z0, z1] = rng2(r, 1), q = atV(r, Math.max(z0 + 1e-3, Math.min(z1 - 1e-3, z))); if (q) { a = Math.min(a, q[0]); b = Math.max(b, q[1]); } } return a < b ? [a, b] : null; }
+function extZ(s, x, y) { const sl = nearSlice(s, x); let a = Infinity, b = -Infinity; for (const r of sl.rings) { const [y0, y1] = rng2(r, 0), q = atH(r, Math.max(y0 + 1e-3, Math.min(y1 - 1e-3, y))); if (q) { a = Math.min(a, q[0]); b = Math.max(b, q[1]); } } return a < b ? [a, b] : null; }
+function nearRing(r, y, z, tol) { let ins = false; for (let i = 0, j = r.length - 1; i < r.length; j = i++) { const A = r[i], B = r[j]; if ((A[1] > z) !== (B[1] > z) && y < (B[0] - A[0]) * (z - A[1]) / (B[1] - A[1]) + A[0]) ins = !ins; const dx = B[0] - A[0], dz = B[1] - A[1], t = Math.max(0, Math.min(1, ((y - A[0]) * dx + (z - A[1]) * dz) / (dx * dx + dz * dz || 1))); if (Math.hypot(A[0] + dx * t - y, A[1] + dz * t - z) <= tol) return true; } return ins; }
+function extX(s, y, z) { let a = Infinity, b = -Infinity; for (const sl of s.slices) for (const r of sl.rings) if (nearRing(r, y, z, 0.05)) { a = Math.min(a, sl.x); b = Math.max(b, sl.x); } return a <= b ? [a, b] : [s.x0, s.x1]; }
 function handles(ids) {
-  const out = [], bb = st.bb3, KC = { side: 0xFF9100, top: 0x2979FF, front: 0x00C853, back: 0x00C853 };
+  const out = [], bb = st.bb3, f = fitOf(ids[0]); if (f) return fitHandles(f);
+  const sol = solidFor(ids), real = {};
+  for (const id of ids) { const p = partOf(id), v = p && viewById(p.view); if (v) real[v.kind] = p; }
   for (const id of ids) {
-    const p = st.model.parts.find((q) => q.id === id), v = p && viewById(p.view); if (!v) continue; const c = C(v); if (!c.ok) continue;
+    const p = partOf(id), v = p && viewById(p.view); if (!v) continue; const c = C(v); if (!c.ok) continue;
     p.pts.forEach((q, k) => {
-      const a = c.toShip(q); let x, y, z;
-      if (v.kind === 'side') { x = a[0]; z = a[1]; y = bb ? bb[4] + 0.05 : 0; }
-      else if (v.kind === 'top') { x = a[0]; y = a[1]; z = bb ? bb[5] + 0.05 : ship().D + 1; }
-      else { y = a[0]; z = a[1]; x = bb ? (v.kind === 'front' ? bb[3] + 0.05 : bb[0] - 0.05) : 0; }
-      out.push({ p, v, k, kind: v.kind, col: KC[v.kind], w: toW(x, y, z), plane: v.kind === 'side' ? ['y', y] : v.kind === 'top' ? ['z', z] : ['x', x] });
+      const a = c.toShip(q), H0 = { p, v, k, kind: v.kind, col: KC[v.kind] };
+      if (v.kind === 'side') { const e = sol && extY(sol, a[0], a[1]), ys = e ? [e[1] + 0.05, e[0] - 0.05] : bb ? [bb[4] + 0.05, bb[1] - 0.05] : [0]; for (const y of ys) out.push({ ...H0, w: toW(a[0], y, a[1]), plane: ['y', y] }); }
+      else if (v.kind === 'top') { const e = sol && extZ(sol, a[0], a[1]), zs = e ? [e[1] + 0.05, e[0] - 0.05] : bb ? [bb[5] + 0.05, bb[2] - 0.05] : [ship().D + 1]; for (const z of zs) out.push({ ...H0, w: toW(a[0], a[1], z), plane: ['z', z] }); }
+      else { const e = sol ? extX(sol, a[0], a[1]) : bb ? [bb[0], bb[3]] : [0, 0]; let xs = [e[1] + 0.05, e[0] - 0.05]; if (v.kind === 'front' && real.back) xs = [e[1] + 0.05]; if (v.kind === 'back' && real.front) xs = [e[0] - 0.05]; for (const x of xs) out.push({ ...H0, w: toW(x, a[0], a[1]), plane: ['x', x] }); }
     });
   }
+  // hình tự sinh của khối (chưa vẽ ở hình đó): điểm nắm nhạt màu, kéo là thành nét thật
+  if (sol) for (const a of (st.geom.auto || []).filter((q) => q.gid === sol.gid)) {
+    if (a.view === 'fb') { if (real.front || real.back) continue; a.poly.forEach((q, k) => { const e = extX(sol, q[0], q[1]); for (const x of [e[1] + 0.05, e[0] - 0.05]) out.push({ auto: a, vk: 'front', k, kind: 'front', col: 0x69F0AE, w: toW(x, q[0], q[1]), plane: ['x', x] }); }); }
+    else if (a.view === 'top') a.poly.forEach((q, k) => { const e = extZ(sol, q[0], q[1]) || [sol.z0, sol.z1]; for (const z of [e[1] + 0.05, e[0] - 0.05]) out.push({ auto: a, vk: 'top', k, kind: 'top', col: 0x82B1FF, w: toW(q[0], q[1], z), plane: ['z', z] }); });
+    else if (a.view === 'side') a.poly.forEach((q, k) => { const e = extY(sol, q[0], q[1]) || [-1, 1]; for (const y of [e[1] + 0.05, e[0] - 0.05]) out.push({ auto: a, vk: 'side', k, kind: 'side', col: 0xFFB74D, w: toW(q[0], y, q[1]), plane: ['y', y] }); });
+  }
   return out;
+}
+// chi tiết thư viện: điểm vàng (đổi cỡ, ở đỉnh) và điểm tím (xoay, phía trước chi tiết)
+function fitHandles(f) {
+  const bb = st.geom && st.geom.fitBB[f.id]; if (!bb || !isFinite(bb[0])) return [];
+  const r = (f.rot || 0) * Math.PI / 180, R = Math.max(f.l, f.w) / 2 + Math.max(0.4, st.p3.L / 90), z = f.kind === 'anchor' ? bb[2] : f.z;
+  return [{ fit: f, op: 'scale', col: 0xFFD600, w: toW((bb[0] + bb[3]) / 2, (bb[1] + bb[4]) / 2, bb[5] + 0.2) }, { fit: f, op: 'rot', col: 0xD500F9, w: toW(f.x + Math.cos(r) * R, f.y + Math.sin(r) * R, z + 0.1), plane: ['z', z + 0.1] }];
 }
 function ray3(e) { const P = st.p3, c = $('#sd3d'), r = c.getBoundingClientRect(); P.ray.setFromCamera(new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1), cam3()); return P.ray; }
 // giao tia chuột với mặt phẳng (theo trục tàu x / y / z = hằng số) → tọa độ tàu
@@ -637,13 +790,40 @@ function partAt3(e) {
   for (const [id, rs] of Object.entries(st.geom.ranges)) for (const r of rs) if (r.it === it && t >= r.t0 && t < r.t1) { const p = st.model.parts.find((q) => q.id === id); const v = p && viewById(p.view); const pr = v ? { side: 0, top: 1, front: 2, back: 2 }[v.kind] : 3; if (!best || pr < best.pr || (r.t1 - r.t0) < best.n) best = { id, pr, n: r.t1 - r.t0 }; }
   return best ? { id: best.id, point: fromW(hit.point) } : null;
 }
+// mặt phẳng đứng qua (x, y), quay về phía camera → tọa độ tàu (để kéo điểm đổi cỡ)
+function hitVert(e, x, y) { const d = new THREE.Vector3(); cam3().getWorldDirection(d); d.y = 0; if (d.lengthSq() < 1e-6) d.set(0, 0, 1); d.normalize(); const pl = new THREE.Plane().setFromNormalAndCoplanarPoint(d, toW(x, y, 0)), out = new THREE.Vector3(); return ray3(e).ray.intersectPlane(pl, out) ? fromW(out) : null; }
+// cao độ mặt tàu (boong / nóc) ngay dưới (x, y), bỏ qua chính chi tiết `skip`
+function surfaceZ(x, y, skip) { const P = st.p3; if (!P || !P.grp) return null; const ray = new THREE.Raycaster(toW(x, y, 300), new THREE.Vector3(0, -1, 0)); for (const h of ray.intersectObjects(P.grp.children, false)) { if (h.object.userData.decal) continue; const it = P.grp.children.indexOf(h.object); if (skip && (st.geom.ranges[skip] || []).some((r) => r.it === it && h.faceIndex >= r.t0 && h.faceIndex < r.t1)) continue; return fromW(h.point)[2]; } return null; }
+const clampV = (v, a, b) => Math.max(a, Math.min(b, v));
+// đặt chi tiết thư viện tại chỗ bấm trên 3D
+function placeAt(e) {
+  const P = st.p3, kind = st.place, K = FIT_KINDS[kind]; if (!K || !P.grp || !st.geom) return; const H = st.geom.hull;
+  const hit = ray3(e).intersectObjects(P.grp.children, false).find((h) => !h.object.userData.decal);
+  let pt = hit ? fromW(hit.point) : null;
+  if (!pt) { const a = hitPlane(e, 'z', H.zTop(0)); if (!a) return; pt = [a[0], a[1], H.zTop(clampV(a[0], H.xa, H.xf))]; }
+  const f = Object.assign(fitDefaults(kind, P.L), { id: uid('f'), x: r2(pt[0]), y: r2(pt[1]), z: r2(pt[2]) });
+  if (K.side) { const s = pt[1] >= 0 ? 1 : -1; f.rot = s > 0 ? 0 : 180; f.y = r2(s * H.yAt(clampV(pt[0], H.xa, H.xf), pt[2], s)); }
+  else {
+    // bấm trúng vách đứng (mạn, vách thượng tầng): đặt lên boong / nóc ngay phía trong vách đó
+    if (hit && hit.face && Math.abs(hit.face.normal.y) < 0.5) { const n = hit.face.normal, nx = -n.z, ny = n.x, nl = Math.hypot(nx, ny) || 1, x = pt[0] - nx / nl * 0.35, y = pt[1] - ny / nl * 0.35, z = surfaceZ(x, y, null); if (z !== null) { f.x = r2(x); f.y = r2(y); f.z = r2(z); } }
+    if (Math.abs(f.y) < 0.15) f.y = 0;
+  }
+  st.model.fits.push(f); st.sel = f.id; st.h3sel = null; if (st.model.template) delete st.model.template;
+  if (!e.shiftKey) startPlace(null); changed(); drawSel(); drawParts();
+}
 function down3(e) {
   const P = st.p3, c = $('#sd3d'); c.setPointerCapture(e.pointerId); c.focus({ preventScroll: true }); st.d3 = { x: e.clientX, y: e.clientY, moved: false };
-  if (st.mode === 'big3d' && P.hd) { const h = ray3(e).intersectObjects(P.hd.children, false)[0]; if (h) { const hd = h.object.userData.h; st.h3sel = { pid: hd.p.id, k: hd.k }; st.d3.handle = hd; st.d3.start = fromW(hd.w); drawSel(); return; } }
+  if (st.place && e.button === 0) { placeAt(e); st.d3 = null; return; }
+  if (st.mode === 'big3d' && P.hd) { const h = ray3(e).intersectObjects(P.hd.children, false)[0]; if (h) { const hd = h.object.userData.h;
+    if (hd.fit) { const bb = st.geom.fitBB[hd.fit.id]; st.d3.fitop = { f: hd.fit, op: hd.op, top0: bb[5] - hd.fit.z, o: { l: hd.fit.l, w: hd.fit.w, h: hd.fit.h, bl: hd.fit.bl } }; return; }
+    if (hd.auto) { const np = autoToPart(hd.auto, hd.vk); hd.p = np; hd.v = viewById(np.view); delete hd.auto; st.sel = np.id; }
+    st.h3sel = { pid: hd.p.id, k: hd.k }; st.d3.handle = hd; st.d3.start = fromW(hd.w); drawSel(); return; } }
   const pa = partAt3(e);
+  if (st.mode === 'big3d' && pa && fitOf(pa.id)) { const f = fitOf(pa.id); if (st.sel !== f.id) { st.sel = f.id; st.h3sel = null; drawSel(); drawParts(); } st.d3.fitmove = { f, start: pa.point, o: { x: f.x, y: f.y, z: f.z } }; return; }
   if (st.mode === 'big3d' && e.shiftKey && pa && st.sel && (st.geom.links[st.sel] || [st.sel]).includes(pa.id)) { const ax = st.cam3 === 'side' ? 'y' : st.cam3 === 'front' ? 'x' : 'z', val = ax === 'y' ? pa.point[1] : ax === 'x' ? pa.point[0] : pa.point[2]; st.d3.group = { ax, val, start: pa.point, ids: st.geom.links[st.sel] || [st.sel], orig: new Map((st.geom.links[st.sel] || [st.sel]).map((id) => { const p = st.model.parts.find((q) => q.id === id); return [id, p.pts.map((q) => q.slice())]; })) }; return; }
   st.d3.pick = pa;
 }
+const liveSoon = () => { st.edited = true; if (!st.tq) st.tq = setTimeout(() => { st.tq = null; liveRebuild(); }, 70); };
 function move3(e) {
   const P = st.p3, d = st.d3; if (!d) return; const dx = e.clientX - d.x, dy = e.clientY - d.y; if (Math.hypot(dx, dy) > 3) d.moved = true;
   if (d.handle) {
@@ -652,15 +832,28 @@ function move3(e) {
     const s0 = h.kind === 'side' ? [d.start[0], d.start[2]] : h.kind === 'top' ? [d.start[0], d.start[1]] : [d.start[1], d.start[2]];
     if (e.shiftKey) { if (Math.abs(m[0] - s0[0]) > Math.abs(m[1] - s0[1])) m[1] = s0[1]; else m[0] = s0[0]; }
     else m = snapM(h.kind, m, null, false, h.p, Math.max(0.05, st.grid * 0.6)).a;
-    h.p.pts[h.k] = c.toPx(m); st.edited = true; st.ver++; paint();
-    if (!st.tq) st.tq = setTimeout(() => { st.tq = null; liveRebuild(); }, 70);
+    h.p.pts[h.k] = c.toPx(m); st.ver++; liveSoon();
     return;
+  }
+  if (d.fitop) {
+    const f = d.fitop.f;
+    if (d.fitop.op === 'rot') { const a = hitPlane(e, 'z', d.fitop.f.z + 0.1); if (!a) return; let ang = Math.atan2(a[1] - f.y, a[0] - f.x) * 180 / Math.PI; if (!e.shiftKey) ang = Math.round(ang / 5) * 5; f.rot = r2(ang); }
+    else { const a = hitVert(e, f.x, f.y); if (!a) return; const k = clampV((a[2] - f.z) / Math.max(0.05, d.fitop.top0), 0.15, 10), o = d.fitop.o; f.l = r2(o.l * k); f.w = r2(o.w * k); f.h = r2(o.h * k); if (o.bl) f.bl = r2(o.bl * k); }
+    liveSoon(); return;
+  }
+  if (d.fitmove) {
+    if (!d.moved) return; const f = d.fitmove.f, K = FIT_KINDS[f.kind] || {}, H = st.geom.hull, o = d.fitmove;
+    if (K.side) { const a = hitPlane(e, 'y', f.y); if (!a) return; const s = f.y >= 0 ? 1 : -1; f.x = r2(o.o.x + a[0] - o.start[0]); f.z = r2(o.o.z + a[2] - o.start[2]); f.y = r2(s * H.yAt(clampV(f.x, H.xa, H.xf), f.z, s)); }
+    else if (st.cam3 === 'side') { const a = hitPlane(e, 'y', o.start[1]); if (!a) return; f.x = r2(o.o.x + a[0] - o.start[0]); f.z = r2(o.o.z + a[2] - o.start[2]); }
+    else if (st.cam3 === 'front') { const a = hitPlane(e, 'x', o.start[0]); if (!a) return; f.y = r2(o.o.y + a[1] - o.start[1]); f.z = r2(o.o.z + a[2] - o.start[2]); }
+    else { const a = hitPlane(e, 'z', o.start[2]); if (!a) return; f.x = r2(o.o.x + a[0] - o.start[0]); f.y = r2(o.o.y + a[1] - o.start[1]); if (Math.abs(f.y) < 0.12) f.y = 0; const z = surfaceZ(f.x, f.y, f.id); if (z !== null) f.z = r2(z); }
+    liveSoon(); return;
   }
   if (d.group) {
     const g = d.group, a = hitPlane(e, g.ax, g.val); if (!a) return; const gs = st.grid; let D = [a[0] - g.start[0], a[1] - g.start[1], a[2] - g.start[2]].map((v) => Math.round(v / gs) * gs);
     if (g.ax === 'y') D[1] = 0; else if (g.ax === 'x') D[0] = 0; else D[2] = 0;
     for (const id of g.ids) { const p = st.model.parts.find((q) => q.id === id), v = p && viewById(p.view); if (!v) continue; const c = C(v), o = g.orig.get(id), dv = v.kind === 'side' ? [D[0], D[2]] : v.kind === 'top' ? [D[0], D[1]] : [D[1], D[2]]; p.pts = o.map((q) => { const s = c.toShip(q); return c.toPx([s[0] + dv[0], s[1] + dv[1]]); }); }
-    st.edited = true; st.ver++; paint(); if (!st.tq) st.tq = setTimeout(() => { st.tq = null; liveRebuild(); }, 70);
+    st.ver++; liveSoon();
     return;
   }
   if (!d.moved) return;
@@ -670,11 +863,30 @@ function move3(e) {
 }
 function up3(e) {
   const d = st.d3; st.d3 = null; if (!d) return;
-  if (d.handle || d.group) { clearTimeout(st.tq); st.tq = null; changed(); return; }
+  if (d.handle || d.group || d.fitop || (d.fitmove && d.moved)) { clearTimeout(st.tq); st.tq = null; changed(); if (d.fitop || d.fitmove) drawSel(); return; }
+  if (d.fitmove) return;
   if (!d.moved) { const pa = d.pick; st.sel = pa ? pa.id : null; st.h3sel = null; drawSel(); drawParts(); paint(); }
 }
+// bấm đúp lên cạnh khối đang chọn: thêm một điểm vào nét gần nhất (ưu tiên hình chiếu đang xem thẳng)
+function dbl3(e) {
+  if (st.mode !== 'big3d' || !st.sel || !st.geom || st.place) return; const ids = st.geom.links[st.sel] || [st.sel], pa = partAt3(e); if (!pa || !ids.includes(pa.id)) return;
+  // nét nhận điểm: xem thẳng → nét của hình đang xem; xem xoay → theo mặt được bấm (vách mạn → hình mạn, nóc → mặt boong, vách trước / sau → hình mũi / lái)
+  const pt = pa.point, hit = ray3(e).intersectObjects(st.p3.grp.children, false)[0], nn = hit && hit.face ? hit.face.normal : null;
+  const prefer = st.cam3 !== 'orbit' ? st.cam3 : nn ? (Math.abs(nn.y) > 0.7 ? 'top' : Math.abs(nn.x) >= Math.abs(nn.z) ? 'side' : 'front') : null;
+  const kindOk = (k) => !prefer || k === prefer || (prefer === 'front' && k === 'back');
+  const only = ids.some((id) => { const p = partOf(id), v = p && viewById(p.view); return v && p.kind !== 'point' && kindOk(v.kind); });
+  let best = null;
+  for (const id of ids) {
+    const p = partOf(id), v = p && viewById(p.view); if (!p || p.kind === 'point' || !v || (only && !kindOk(v.kind))) continue; const c = C(v); if (!c.ok) continue;
+    const q = v.kind === 'side' ? [pt[0], pt[2]] : v.kind === 'top' ? [pt[0], pt[1]] : [pt[1], pt[2]], M = p.pts.map((z) => c.toShip(z)), n = M.length, w = 1;
+    for (let k = 0; k + 1 < n + (p.kind === 'line' ? 0 : 1); k++) { const A = M[k], B = M[(k + 1) % n], dx = B[0] - A[0], dy = B[1] - A[1], t = Math.max(0, Math.min(1, ((q[0] - A[0]) * dx + (q[1] - A[1]) * dy) / (dx * dx + dy * dy || 1))), P = [A[0] + dx * t, A[1] + dy * t], dd = Math.hypot(P[0] - q[0], P[1] - q[1]) * w; if (t > 0.02 && t < 0.98 && (!best || dd < best.d)) best = { d: dd, p, c, k, P }; }
+  }
+  if (best && best.d < Math.max(0.6, st.p3.L / 60)) { best.p.pts.splice(best.k + 1, 0, best.c.toPx(best.P)); st.sel = best.p.id; st.h3sel = { pid: best.p.id, k: best.k + 1 }; if (best.p.sharp) best.p.sharp = best.p.sharp.map((i) => (i > best.k ? i + 1 : i)); changed(); drawSel(); }
+}
+// thay nhóm 3D của tàu trong khung xem
+function setGroup(geom) { const P = st.p3; if (!P) return; if (P.grp) { P.scene.remove(P.grp); P.grp.traverse((o) => { if (o.geometry) o.geometry.dispose(); if (o.material) { if (o.material.map) o.material.map.dispose(); o.material.dispose(); } }); } P.grp = modelGroup(THREE, geom, { shadows: true }); P.scene.add(P.grp); }
 // dựng lại nhanh khi đang kéo (không ghi lịch sử)
-function liveRebuild() { let geom; try { geom = buildModel(st.model, ship()); } catch (e) { return; } st.geom = geom; const P = st.p3; if (P.grp) { P.scene.remove(P.grp); P.grp.traverse((o) => { if (o.geometry) o.geometry.dispose(); if (o.material) o.material.dispose(); }); } P.grp = modelGroup(THREE, geom); P.scene.add(P.grp); build3dExtras(); }
+function liveRebuild() { let geom; try { geom = buildModel(st.model, ship()); } catch (e) { return; } st.geom = geom; if (st.p3) { setGroup(geom); build3dExtras(); } paint(); }
 
 // ---------- dùng cho tàu, xuất / nhập ----------
 function apply() {
@@ -705,4 +917,4 @@ async function importFile(f) {
 // cho kiểm thử tự động
 export const shipDrawTest = { st: () => st, rebuild: () => { refreshAll(); rebuild3d(); }, atH, layout: () => st && st.lay, S2s: (P) => S2s(P), m2s: (k, a) => m2s(k, a), mode: (m) => setMode(m), undo: (d) => undo(d),
   // vị trí màn hình (so với khung 3D) của một điểm tàu
-  w2s: (x, y, z) => { const v = toW(x, y, z).project(cam3()), c = $('#sd3d'); return [(v.x + 1) / 2 * c.clientWidth, (1 - v.y) / 2 * c.clientHeight]; }, handles: () => (st.h3 || []).map((h) => ({ pid: h.p.id, k: h.k, kind: h.kind, w: fromW(h.w) })) };
+  w2s: (x, y, z) => { const v = toW(x, y, z).project(cam3()), c = $('#sd3d'); return [(v.x + 1) / 2 * c.clientWidth, (1 - v.y) / 2 * c.clientHeight]; }, handles: () => (st.h3 || []).map((h) => ({ pid: h.p ? h.p.id : null, auto: !!h.auto, fit: h.fit ? h.op : null, k: h.k, kind: h.kind, w: fromW(h.w) })), place: (k) => startPlace(k), pick3: (cx, cy) => { const r = partAt3({ clientX: cx, clientY: cy }); return r ? { id: r.id, point: r.point } : null; } };
