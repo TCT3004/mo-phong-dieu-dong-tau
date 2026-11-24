@@ -37,5 +37,6 @@ export function ensureAround(x, y, half) {
 }
 catalog.on((ev) => {
   if (ev.type === 'removed') { CS.provider.forget(ev.id); if (CS.gl) CS.gl.dropChart(ev.id); }
+  if (ev.type === 'dmodel') { CS.provider.forget(ev.id); for (const v of CS.views) v.dirty = true; }
   if (ev.type === 'removed' || ev.type === 'ready' || ev.type === 'georef') for (const v of CS.views) v.dirty = true;
 });

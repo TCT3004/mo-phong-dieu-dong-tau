@@ -11,19 +11,21 @@
 | `bsb.js` | `parseBsb` (header đầy đủ: REF, PLY, DTM, GD, PR, bảng màu DAY/DSK/NGT), `decodeBsb`, `classLut` (bảng màu BSB), `classOfRgb` (màu thật, cho PDF), `cellClass`, `fillUnknown`, `buildGrid` |
 | `georef.js` | `fitGeoref` (đa thức pixel ↔ Mercator WGS-84, bậc 1 hoặc 2, sai số m), `makeXf` |
 | `record.js` | `georefRecord`: phần georef của bản ghi tờ (datum → WGS-84 theo thứ tự datum người dùng chọn > GD > DTM, khớp đa thức, dời tay theo m, đa giác phủ từ PLY lat/lon hoặc khung pixel `plyPx`, hộp bao, tâm, `ver`) |
-| `catalog.js` | kho `catalog` (IndexedDB `mp_charts`: `meta` bản ghi tờ, `tiles` ô ảnh, `grids` lưới lớp độ sâu), nạp KAP, `putTiles`, `putGrid`, `getTile`, `setClassDepth`, `update`, `remove`, `usage` |
+| `catalog.js` | kho `catalog` (IndexedDB `mp_charts` phiên bản 2: `meta` bản ghi tờ, `tiles` ô ảnh, `grids` lưới lớp độ sâu, `dmodel` mô hình độ sâu), nạp KAP (xong thì tự đọc độ sâu), `putTiles`, `putGrid`, `getTile`, `setClassDepth`, `update`, `remove`, `usage`; độ sâu: `readDepth(r, opt)` (hàng đợi một tờ một lúc; gửi ô mức 0 còn nén `level0Tiles` cho worker ghép lại ảnh gốc, m / điểm ảnh `mppOf`; người dùng sửa thêm trong lúc dựng thì giữ bản điểm mới nhất và dựng thêm một lượt; `opt.snd` / `opt.hts` có sẵn thì không đọc lại số; `opt.water` chỉ dựng lại mặt nước), `getDLite` / `putDLite` (phần nhẹ: thông số + điểm), `getDGrid` (phần nặng: lưới z, lớp ô, điểm mép), `getDModel`, `putDModel` |
 | `pdfchart.js` | `importPdfChart`: render trang PDF bằng pdf.js theo từng mức (khối 4096²) → ô 256² WebP + lưới lớp độ sâu theo `classOfRgb` |
 | `tiler.worker.js` | worker: giải mã KAP → lưới lớp độ sâu + kim tự tháp ô 256×256 chỉ số màu (nén deflate-raw) |
+| `reader.worker.js` | worker: ghép ảnh chỉ số màu từ ô mức 0 (giải nén `fflate`), `buildDepthModel` / `rebuildWater` của `chartread/` (tiến độ `progress`, nhật ký `log`, kết quả chuyển giao bộ đệm) |
 
 ## Local Contracts
 
-- `bsb.js`, `georef.js`, `record.js`, `tiler.worker.js` thuần (không DOM): chạy được trong worker và trong Node; `catalog.js`, `pdfchart.js` cần trình duyệt
+- `bsb.js` (`parseBsb` đọc cả `DU` dpi), `georef.js`, `record.js`, `tiler.worker.js`, `reader.worker.js` thuần (không DOM): chạy được trong worker và trong Node; `catalog.js`, `pdfchart.js` cần trình duyệt
 - Georef luôn khớp trên điểm REF đã quy về WGS-84; bậc 2 chỉ chọn khi bậc 1 sai > 0,5 pixel, bậc 2 tốt hơn ≥ 30% và đi-về ổn định trên lưới 7×7
 - Hệ số georef là dữ liệu thuần, không lưu: tính lại từ REF khi mở kho (`georefRecord`), hàm chuyển đổi dựng bằng `makeXf`
 - Ô ảnh và lưới theo pixel của tờ, không phụ thuộc georef → đổi datum / dời tay chỉ tính lại hệ số (`ver` tăng), không chia ô lại
 - Ô lưu `{ z, d }`: z = 0 chỉ số màu thô, 1 chỉ số màu nén deflate-raw (KAP, `fmt: 'idx'`), 2 Blob WebP RGBA (PDF, `fmt: 'rgba'`)
 - Khóa ô: `<id>/<mức>/<tx>/<ty>`; mức 0 là ảnh gốc, mỗi mức thu nhỏ ½ (mức 1 giữ mọi nét tối, các mức sau chỉ giữ nét tối chiếm ≥ 2 rồi ≥ 3 trong 4 điểm)
 - `id` tờ = `tên|R×C|cỡ file` (PDF: `tên|R×C|pdf<cỡ file>`); nạp lại đúng file KAP đã có thì bỏ qua
+- Bản ghi tờ có `dm` (trạng thái đọc độ sâu): `{ st: 'run' | 'ok' | 'err', f, s (bước đang làm), n, sus, nh, interval, hc, alg, made, err }`; khóa `dmodel`: `<id>` phần nhẹ, `<id>|g` phần nặng; chỉ đọc tờ KAP
 - Hải đồ PDF: điểm REF là pixel ảnh mức 0 (= điểm trang × dpi/72) kèm lat/lon theo datum in trên tờ; không lưu file PDF gốc
 
 ## Work Guidance

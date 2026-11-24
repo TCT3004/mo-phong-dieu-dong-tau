@@ -3,11 +3,13 @@
 import { parseBsb } from './bsb.js';
 import { georefRecord } from './record.js';
 import WORKER_SRC from '../_tilerworker.js';
+import READER_SRC from '../_readerworker.js';
+import { mercScale } from '../geo/proj.js';
 
 const DBN = 'mp_charts', TS = 256;
 let dbp = null;
 function db() {
-  if (!dbp) dbp = new Promise((res, rej) => { const r = indexedDB.open(DBN, 1); r.onupgradeneeded = () => { const d = r.result; for (const s of ['meta', 'tiles', 'grids']) if (!d.objectStoreNames.contains(s)) d.createObjectStore(s); }; r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
+  if (!dbp) dbp = new Promise((res, rej) => { const r = indexedDB.open(DBN, 2); r.onupgradeneeded = () => { const d = r.result; for (const s of ['meta', 'tiles', 'grids', 'dmodel']) if (!d.objectStoreNames.contains(s)) d.createObjectStore(s); }; r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
   return dbp;
 }
 const tx = async (store, mode, fn) => { const d = await db(); return new Promise((res, rej) => { const t = d.transaction(store, mode), s = t.objectStore(store); let out; const r = fn(s); if (r) r.onsuccess = () => { out = r.result; }; t.oncomplete = () => res(out); t.onerror = () => rej(t.error); t.onabort = () => rej(t.error); }); };
@@ -18,7 +20,7 @@ async function unpack(z, d) {
   return new Uint8Array(await new Response(s).arrayBuffer());
 }
 // khóa được lưu của bản ghi tờ (phần georef tính lại khi mở)
-const STORE_KEYS = ['id', 'kind', 'fmt', 'name', 'nu', 'file', 'size', 'scale', 'W', 'H', 'datumSrc', 'datumUser', 'dtm', 'proj', 'sd', 'ed', 'refs', 'plyRaw', 'palettes', 'classDepth', 'offsetM', 'levels', 'ready', 'error', 'added', 'plyPx', 'dpi', 'page'];
+const STORE_KEYS = ['id', 'kind', 'fmt', 'name', 'nu', 'file', 'size', 'scale', 'du', 'W', 'H', 'datumSrc', 'datumUser', 'dtm', 'proj', 'sd', 'ed', 'refs', 'plyRaw', 'palettes', 'classDepth', 'offsetM', 'levels', 'ready', 'error', 'added', 'plyPx', 'dpi', 'page', 'dm'];
 
 export { georefRecord };
 const plain = (r) => { const o = {}; for (const k of STORE_KEYS) if (r[k] !== undefined) o[k] = r[k]; return o; };
@@ -43,12 +45,13 @@ class Catalog {
     const bytes = new Uint8Array(await file.arrayBuffer()), H = parseBsb(bytes);
     const id = (H.name || file.name) + '|' + H.W + 'x' + H.H + '|' + bytes.length;
     if (this.byId.has(id) && this.byId.get(id).ready) return false;
-    const r = georefRecord({ id, kind: 'kap', fmt: 'idx', name: H.name || file.name.replace(/\.kap$/i, ''), nu: H.nu, file: file.webkitRelativePath || file.name, size: bytes.length, scale: H.scale, W: H.W, H: H.H,
+    const r = georefRecord({ id, kind: 'kap', fmt: 'idx', name: H.name || file.name.replace(/\.kap$/i, ''), nu: H.nu, file: file.webkitRelativePath || file.name, size: bytes.length, scale: H.scale, du: H.du, W: H.W, H: H.H,
       datumSrc: H.datumSrc, dtm: H.dtm, proj: H.proj, sd: H.sd, ed: H.ed, refs: H.refs, plyRaw: H.ply, palettes: { day: Array.from(H.pal.day), dusk: Array.from(H.pal.dusk), night: Array.from(H.pal.night) },
       classDepth: [-3, -1, 1.5, 3.5, 10], offsetM: [0, 0], levels: 0, ready: false, added: Date.now() });
     if (r.proj && !/MERCATOR/.test(r.proj)) r.warn = 'Phép chiếu ' + r.proj + ' — georef khớp gần đúng bằng đa thức';
     this.add(r); this.emit({ type: 'list' }); await this.save(r);
     await this.tile(r, bytes, onProgress);
+    this.readDepth(r).catch((e) => console.warn('đọc độ sâu', e));
     return true;
   }
   tile(r, bytes, onProgress) {
@@ -79,13 +82,67 @@ class Catalog {
   async getGrid(id) { return tx('grids', 'readonly', (s) => s.get(id)); }
   async remove(id) {
     const r = this.byId.get(id); if (!r) return; this.byId.delete(id); this.records.splice(this.records.indexOf(r), 1);
-    await tx('meta', 'readwrite', (s) => s.delete(id)); await tx('grids', 'readwrite', (s) => s.delete(id)); await tx('tiles', 'readwrite', (s) => s.delete(range(id)));
+    await tx('meta', 'readwrite', (s) => s.delete(id)); await tx('grids', 'readwrite', (s) => s.delete(id)); await tx('dmodel', 'readwrite', (s) => { s.delete(id); s.delete(id + '|g'); }); await tx('tiles', 'readwrite', (s) => s.delete(range(id)));
     for (const k of [...this.cache.keys()]) if (k.startsWith(id + '/')) this.cache.delete(k);
     this.emit({ type: 'removed', id }); this.emit({ type: 'list' });
   }
   // độ sâu đại diện cho từng lớp màu của tờ (không đổi georef, không phải vẽ lại)
   async setClassDepth(r, cd) { r.classDepth = cd.slice(0, 5).map(Number); await this.save(r); this.emit({ type: 'depth', id: r.id }); }
   async update(r, ch) { Object.assign(r, ch); georefRecord(r); await this.save(r); this.emit({ type: 'georef', id: r.id }); this.emit({ type: 'list' }); }
+  // ---------- mô hình độ sâu (chartread/): số đo sâu, độ cao, lưới z ----------
+  // lưu 2 bản ghi: «<id>» phần nhẹ (thông số, số đo sâu, độ cao — cho giao diện) và «<id>|g» phần nặng (lưới z, lớp ô, điểm mép)
+  async getDLite(id) { return tx('dmodel', 'readonly', (s) => s.get(id)); }
+  async getDGrid(id) { return tx('dmodel', 'readonly', (s) => s.get(id + '|g')); }
+  async getDModel(id) { const [a, b] = await Promise.all([this.getDLite(id), this.getDGrid(id)]); return a && b ? Object.assign({}, a, b) : null; }
+  async putDLite(id, m) { const { z, cl, edges, ...lite } = m; await tx('dmodel', 'readwrite', (s) => s.put(lite, id)); }
+  async putDModel(id, m) { const { z, cl, edges, ...lite } = m; await tx('dmodel', 'readwrite', (s) => { s.put(lite, id); s.put({ z, cl, edges, gw: m.gw, gh: m.gh, cell: m.cell, hc: m.hc }, id + '|g'); }); }
+  // ô mức 0 của tờ (còn nén) để worker ghép lại ảnh chỉ số màu gốc: [{ x, y, z, d }]
+  async level0Tiles(r) {
+    const d0 = await db(), rg = IDBKeyRange.bound(r.id + '/0/', r.id + '/0/\uffff');
+    const [keys, vals] = await new Promise((res, rej) => { const t2 = d0.transaction('tiles', 'readonly'), s = t2.objectStore('tiles'); let k, v;
+      s.getAllKeys(rg).onsuccess = (e) => { k = e.target.result; }; s.getAll(rg).onsuccess = (e) => { v = e.target.result; };
+      t2.oncomplete = () => res([k, v]); t2.onerror = () => rej(t2.error); });
+    return keys.map((k, i) => { const a = String(k).split('/'); return { x: +a[a.length - 2], y: +a[a.length - 1], z: vals[i].z, d: vals[i].d }; });
+  }
+  // m thật / điểm ảnh tờ (ở tâm tờ)
+  mppOf(r) { const ll = r.xf.pxToLL(r.W / 2, r.H / 2); return r.mppMerc / mercScale(ll[0]); }
+  // đọc độ sâu cả tờ (chạy nền, mỗi lúc một tờ). opt: { snd, hts } có sẵn thì chỉ dựng lại; { water: true } chỉ dựng lại mặt nước sau khi sửa số
+  readDepth(r, opt = {}) {
+    if (!r || r.kind !== 'kap' || !r.ready) return Promise.resolve(null);
+    const job = (this.rq || Promise.resolve()).then(() => this._readDepth(r, opt));
+    this.rq = job.catch(() => null); return job;
+  }
+  async _readDepth(r, opt) {
+    if (!this.byId.has(r.id)) return null;
+    let msg;
+    if (opt.water) { const g = await this.getDGrid(r.id), l = opt.model || await this.getDLite(r.id); if (!g || !l) return null; msg = { mode: 'water', model: Object.assign({}, l, g) }; }
+    else {
+      r.dm = Object.assign({}, r.dm, { st: 'run', f: 0, s: 'Ghép ảnh hải đồ' }); this.emit({ type: 'dm', id: r.id });
+      const tiles = await this.level0Tiles(r);
+      msg = { mode: 'full', tiles, TS, W: r.W, H: r.H, pal: Uint8Array.from(r.palettes.day).buffer, du: r.du || 250, mpp: this.mppOf(r), snd: opt.snd, hts: opt.hts };
+    }
+    const m = await new Promise((res, rej) => {
+      const url = URL.createObjectURL(new Blob([READER_SRC], { type: 'text/javascript' })), w = new Worker(url);
+      const end = () => { w.terminate(); URL.revokeObjectURL(url); };
+      w.onmessage = (e) => { const q = e.data;
+        if (q.type === 'progress') { r.dm = Object.assign({}, r.dm, { st: 'run', f: q.f, s: q.s }); this.emit({ type: 'dm', id: r.id }); }
+        else if (q.type === 'log') console.log('[đọc độ sâu ' + r.name + ']', q.s);
+        else if (q.type === 'done') { end(); res(q.model); }
+        else if (q.type === 'error') { end(); rej(new Error(q.msg)); } };
+      w.onerror = (e) => { end(); rej(new Error(e.message || 'Lỗi worker đọc độ sâu')); };
+      w.postMessage(msg, msg.tiles ? [msg.pal, ...msg.tiles.map((q) => q.d.buffer)] : []);
+    }).catch(async (e) => { r.dm = Object.assign({}, r.dm, { st: 'err', err: e.message }); await this.save(r); this.emit({ type: 'dm', id: r.id }); throw e; });
+    if (!this.byId.has(r.id)) return null;
+    // người dùng sửa thêm trong lúc đang dựng: giữ bản điểm mới nhất, dựng thêm một lượt mặt nước
+    let again = false;
+    if (msg.mode === 'water' || opt.snd) { const cur = await this.getDLite(r.id); if (cur && cur.snd) { const used = JSON.stringify(msg.model ? msg.model.snd : opt.snd);
+      if (JSON.stringify(cur.snd) !== used) again = true; m.snd = cur.snd; if (msg.mode === 'water' || JSON.stringify(cur.hts) === JSON.stringify(opt.hts)) m.hts = cur.hts; } }
+    await this.putDModel(r.id, m);
+    if (again) setTimeout(() => this.readDepth(r, { water: true }).catch(() => {}), 0);
+    r.dm = { st: 'ok', alg: m.alg, made: m.made, n: m.snd.filter((s) => !s.del).length, sus: m.snd.filter((s) => s.sus && !s.del).length, nh: m.hts.length, interval: m.interval, hc: m.hc };
+    await this.save(r); this.emit({ type: 'dm', id: r.id }); this.emit({ type: 'dmodel', id: r.id });
+    return m;
+  }
   // dung lượng đã dùng (ước tính)
   async usage() { try { const e = await navigator.storage.estimate(); return e.usage || 0; } catch (e) { return 0; } }
 }

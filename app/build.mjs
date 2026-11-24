@@ -5,6 +5,9 @@ fs.writeFileSync('src/_pdfworker.js', 'export default ' + JSON.stringify(wk.outp
 // worker chia ô ảnh hải đồ: bundle IIFE thành chuỗi, chạy bằng Worker classic từ Blob (được dưới file://)
 const tw = await build({ entryPoints: ['src/charts/tiler.worker.js'], bundle: true, format: 'iife', minify: true, write: false, target: 'es2022', legalComments: 'none' });
 fs.writeFileSync('src/_tilerworker.js', 'export default ' + JSON.stringify(tw.outputFiles[0].text) + ';\n');
+// worker đọc độ sâu / độ cao / đường bình độ (chartread/) — cũng chạy bằng Worker classic từ Blob
+const rw = await build({ entryPoints: ['src/charts/reader.worker.js'], bundle: true, format: 'iife', minify: true, write: false, target: 'es2022', legalComments: 'none' });
+fs.writeFileSync('src/_readerworker.js', 'export default ' + JSON.stringify(rw.outputFiles[0].text) + ';\n');
 const r = await build({ entryPoints: ['src/main.js'], bundle: true, format: 'iife', minify: true, write: false, target: 'es2022', legalComments: 'none' });
 const js = r.outputFiles[0].text.replace(/<\/script/gi, '<\\/script');
 const html = fs.readFileSync('src/template.html', 'utf8').replace('/*BUNDLE*/', () => js);

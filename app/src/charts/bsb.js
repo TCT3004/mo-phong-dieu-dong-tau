@@ -12,7 +12,7 @@ export function parseBsb(bytes) {
   for (const raw of txt.replace(/\r/g, '').split('\n')) {
     if (/^\s{2,}/.test(raw) && lines.length) lines[lines.length - 1] += ',' + raw.trim(); else lines.push(raw.trim());
   }
-  const H = { name: '', nu: '', scale: 0, W: 0, H: 0, datumSrc: '', proj: 'MERCATOR', pp: null, sd: '', ed: '', refs: [], ply: [], dtm: null, end,
+  const H = { name: '', nu: '', scale: 0, W: 0, H: 0, du: 0, datumSrc: '', proj: 'MERCATOR', pp: null, sd: '', ed: '', refs: [], ply: [], dtm: null, end,
     pal: { day: null, dusk: null, night: null, rgb: null } };
   const pal = (k) => H.pal[k] || (H.pal[k] = new Uint8Array(256 * 3));
   const kv = (ln, k) => { const m = new RegExp('(?:^|[/,])' + k + '=([^,]*)').exec(ln); return m ? m[1].trim() : null; };
@@ -22,6 +22,7 @@ export function parseBsb(bytes) {
       const m = /RA=(\d+),(\d+)/.exec(ln); if (m) { H.W = +m[1]; H.H = +m[2]; }
       const n = kv(ln, 'NA'); if (n !== null) H.name = n;
       const u = kv(ln, 'NU'); if (u !== null) H.nu = u;
+      const du = kv(ln, 'DU'); if (du && isFinite(+du)) H.du = +du;
     } else if (tag === 'KNP/') {
       const s = kv(ln, 'SC'); if (s) H.scale = +s;
       const g = kv(ln, 'GD'); if (g) H.datumSrc = g;

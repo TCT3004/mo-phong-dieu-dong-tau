@@ -12,11 +12,11 @@ import { buildScenery } from './scenery.js';
 import { MooredView } from './moored3d.js';
 
 export const QUALITY = {
-  // ter: [nửa vùng mịn (m), bước lưới vùng mịn (m), bước lưới xa nhất (m)]
-  low: { ter: [3000, 50, 700], water: 0, pr: 0.75, far: 12000, label: 'Thấp' },
-  mid: { ter: [4000, 38, 600], water: 1, pr: 1, far: 20000, label: 'Trung bình' },
-  high: { ter: [4500, 30, 500], water: 2, pr: 1, far: 30000, label: 'Cao' },
-  max: { ter: [6000, 22, 400], water: 2, pr: Math.min(2, (typeof devicePixelRatio !== 'undefined' ? devicePixelRatio : 1) * 1.25), far: 40000, label: 'Tối đa' }
+  // ter: [nửa vùng mịn (m), bước lưới vùng mịn (m), bước lưới xa nhất (m), bước lưới vùng rất mịn quanh tàu (m), nửa vùng rất mịn (m)]
+  low: { ter: [3000, 50, 700, 0, 0], water: 0, pr: 0.75, far: 12000, label: 'Thấp' },
+  mid: { ter: [4000, 38, 600, 16, 1200], water: 1, pr: 1, far: 20000, label: 'Trung bình' },
+  high: { ter: [4500, 30, 500, 12, 1500], water: 2, pr: 1, far: 30000, label: 'Cao' },
+  max: { ter: [6000, 22, 400, 8, 2000], water: 2, pr: Math.min(2, (typeof devicePixelRatio !== 'undefined' ? devicePixelRatio : 1) * 1.25), far: 40000, label: 'Tối đa' }
 };
 const COL = { W: 0xffffff, R: 0xff3b30, G: 0x30e070, Y: 0xffd60a };
 
@@ -185,16 +185,20 @@ export class View3D {
   // địa hình dựng quanh (cx, cy) từ các tờ hải đồ đang có: lưới mịn gần tàu, thưa dần ra xa (tới tầm nhìn xa của mức chất lượng)
   buildTerrain(W, cx = 0, cy = 0) {
     if (this.terrain) { this.scene.remove(this.terrain); this.terrain.traverse((o) => { if (o.geometry) o.geometry.dispose(); if (o.material) o.material.dispose(); }); this.terrain = null; this.scen = null; }
-    const [D, d0, dMax] = this.q.ter, F = Math.min(this.q.far, 26000);
-    this.terrC = [cx, cy]; this.terrD = D;
+    const [D, d0, dMax, f1, F1] = this.q.ter, F = Math.min(this.q.far, 26000);
+    // vùng rất mịn quanh tàu (viền đảo / mép luồng sát hải đồ), ra ngoài bước lưới tăng dần tới d0 rồi tới dMax
+    this.terrC = [cx, cy]; this.terrD = f1 ? Math.min(D, F1 * 1.3) : D;
     if (!W.hasCharts()) return;
-    const axis = [0]; for (let x = d0; x <= D; x += d0) axis.push(x);
+    const axis = [0];
+    if (f1) { for (let x = f1; x <= F1; x += f1) axis.push(x); for (let st = f1, x = axis[axis.length - 1]; st < d0;) { st = Math.min(d0, st * 1.06); x += st; axis.push(x); } }
+    for (let x = axis[axis.length - 1] + d0; x <= D; x += d0) axis.push(x);
     for (let st = d0, x = axis[axis.length - 1]; x < F;) { st = Math.min(dMax, st * 1.12); x += st; axis.push(x); }
     const ax = [...axis.slice(1).reverse().map((v) => -v), ...axis], n = ax.length, xs = ax.map((v) => cx + v), ys = ax.map((v) => cy + v);
-    const cls = new Uint8Array(n * n), dep = new Float32Array(n * n), dist = new Float32Array(n * n); let any = false;
+    const cls = new Uint8Array(n * n), dep = new Float32Array(n * n), dist = new Float32Array(n * n), zz = new Float32Array(n * n).fill(NaN); let any = false;
     for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
-      const o = j * n + i, q = sampleWorld(xs[i], ys[j]), c = q.rec ? q.cls : 4;
-      cls[o] = c; dep[o] = q.rec ? (q.rec.classDepth || DEF_CLASS_DEPTH)[c] : W.noChartDepth; dist[o] = c === 0 ? 1e9 : 0; if (c < 2) any = true;
+      const o = j * n + i, q = sampleWorld(xs[i], ys[j]); let c = q.rec ? q.cls : 4;
+      if (q.rec && q.z !== null) { zz[o] = q.z; const hc = q.rec.dm && q.rec.dm.hc ? q.rec.dm.hc : 3; c = q.z > hc - 0.05 ? 0 : q.z >= 0 ? 1 : c < 2 ? 2 : c; } // tờ đã đọc số: lớp theo độ cao thật
+      cls[o] = c; dep[o] = q.rec ? (q.z !== null ? -q.z : (q.rec.classDepth || DEF_CLASS_DEPTH)[c]) : W.noChartDepth; dist[o] = c === 0 ? 1e9 : 0; if (c < 2) any = true;
     }
     if (!any) return;
     // trước mép cầu bến là nước sâu theo «Độ sâu trước bến» (như world.depthAt); dưới tàu đậu cũng là nước — không để bãi cạn / đất hải đồ nổi lên dưới tàu
@@ -212,7 +216,8 @@ export class View3D {
     const pos = new Float32Array(n * n * 3), col = new Float32Array(n * n * 3);
     for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
       const o = j * n + i, x = xs[i], y = ys[j], cl = cls[o]; let h, r, g, b;
-      if (cl === 0) { const dm = Math.min(dist[o], 1e5); h = 2.5 + Math.min(320, dm * 0.2) * (0.8 + 0.3 * Math.sin(x * 0.004) * Math.cos(y * 0.005)); const t = Math.min(1, h / 200); r = 0.30 + 0.16 * t; g = 0.42 - 0.04 * t; b = 0.24 + 0.04 * t; }
+      if (cl === 0 && !isNaN(zz[o])) { h = zz[o]; const t = Math.min(1, h / 350); r = 0.27 + 0.30 * t * t + 0.06 * t; g = 0.40 - 0.02 * t + 0.25 * t * t; b = 0.22 + 0.08 * t + 0.28 * t * t; } // núi theo độ cao đọc từ hải đồ, đỉnh cao nhạt dần
+      else if (cl === 0) { const dm = Math.min(dist[o], 1e5); h = 2.5 + Math.min(320, dm * 0.2) * (0.8 + 0.3 * Math.sin(x * 0.004) * Math.cos(y * 0.005)); const t = Math.min(1, h / 200); r = 0.30 + 0.16 * t; g = 0.42 - 0.04 * t; b = 0.24 + 0.04 * t; }
       else if (cl === 1) { h = -dep[o]; r = 0.56; g = 0.54; b = 0.42; }
       else { h = -dep[o]; r = 0.2; g = 0.33; b = 0.34; }
       pos[o * 3] = x; pos[o * 3 + 1] = h; pos[o * 3 + 2] = -y; col[o * 3] = r; col[o * 3 + 1] = g; col[o * 3 + 2] = b;

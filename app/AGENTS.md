@@ -6,14 +6,14 @@
 
 ## Ownership
 
-- `build.mjs`: bundle esbuild (IIFE, target es2022) vào `src/template.html` tại chỗ `/*BUNDLE*/`; tạo `src/_pdfworker.js` (pdf.js worker) và `src/_tilerworker.js` (worker chia ô ảnh hải đồ) dạng chuỗi IIFE để chạy bằng Worker classic dưới `file://`
-- `package.json`, `package-lock.json`: phụ thuộc `three`, `pdfjs-dist`, `esbuild`, `earcut`, `polygon-clipping`
+- `build.mjs`: bundle esbuild (IIFE, target es2022) vào `src/template.html` tại chỗ `/*BUNDLE*/`; tạo `src/_pdfworker.js` (pdf.js worker), `src/_tilerworker.js` (worker chia ô ảnh hải đồ) và `src/_readerworker.js` (worker đọc độ sâu) dạng chuỗi IIFE để chạy bằng Worker classic dưới `file://`
+- `package.json`, `package-lock.json`: phụ thuộc `three`, `pdfjs-dist`, `esbuild`, `earcut`, `polygon-clipping`, `delaunator` (tam giác Delaunay cho mặt đáy), `fflate` (giải nén ô ảnh trong worker đọc độ sâu)
 - `src/`: mã nguồn (xem `src/AGENTS.md`)
 - `tests/`: unit test Node (xem `tests/AGENTS.md`)
 
 ## Local Contracts
 
-- `src/_pdfworker.js`, `src/_tilerworker.js` và `dist/` là sản phẩm build, không sửa tay, không commit
+- `src/_pdfworker.js`, `src/_tilerworker.js`, `src/_readerworker.js` và `dist/` là sản phẩm build, không sửa tay, không commit
 - Mọi tài nguyên (shader, worker, font chữ số) phải nằm trong bundle; không tải gì từ mạng lúc chạy
 
 ## Work Guidance

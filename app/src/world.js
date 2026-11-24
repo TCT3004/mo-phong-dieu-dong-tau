@@ -39,6 +39,7 @@ export class World {
       if (t > -15 && t < s.len + 15 && sd > -6 && sd < 60) return s.depth;
     }
     const q = sampleWorld(x, y); if (!q.rec) return this.noChartDepth;
+    if (q.z !== null) return -q.z; // tờ đã đọc số độ sâu / độ cao: lưới z
     return (q.rec.classDepth || DEF_CLASS_DEPTH)[q.cls];
   }
   // đổi mọi tọa độ trong bộ nhớ khi gốc tọa độ dời (gốc trôi)

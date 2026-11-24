@@ -2,6 +2,7 @@ node_modules
 app/dist/
 app/src/_pdfworker.js
 app/src/_tilerworker.js
+app/src/_readerworker.js
 electron/dist/
 electron/index.html
 *.exe

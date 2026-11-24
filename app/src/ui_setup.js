@@ -18,6 +18,7 @@ import { QUALITY } from './view3d.js';
 import { openWindage } from './windage.js';
 import { openShipDraw } from './ui_shipdraw.js';
 import { fleetCard, initFleetCard } from './ui_fleet.js';
+import { initDepthUI, depthCard, initDepthCard, pointCard, initPointCard, drawDepthPts, depthClick, depthRightClick, dmState, clearSel } from './ui_depth.js';
 import { MOOR_HINT, shipAt, anchorAtPt, dragAnchor, deleteAnchor, placeNew, dragShip, dropShip, deleteShip, mooredCard, initMooredCard, mooredEdit, drawMoored, fleetForFile, fleetFromFile } from './ui_moored.js';
 
 const fld = (k, label, unit, val, attr) => `<div class="fld"><label for="f_${k}">${label}</label><div class="in"><input id="f_${k}" data-k="${k}" value="${esc(val)}" ${attr || ''}>${unit ? `<span class="u">${unit}</span>` : ''}</div></div>`;
@@ -134,7 +135,7 @@ const norm = (t) => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').rep
 const normA = (t) => norm(t).replace(/[^a-z0-9]/g, '');
 let libQ = '', libLL = null, libT = 0;
 function recState(r) {
-  if (r.ready) return (r.datumKnown ? r.datumName + (r.datum !== 'WGS84' ? ' → WGS-84' : '') : '⚠ datum ' + r.datumName) + ' · georef bậc ' + r.coef.order + ', sai số ' + fmtM(r.rmsM) + ' m';
+  if (r.ready) { const d = dmState(r); return (r.datumKnown ? r.datumName + (r.datum !== 'WGS84' ? ' → WGS-84' : '') : '⚠ datum ' + r.datumName) + ' · georef bậc ' + r.coef.order + ', sai số ' + fmtM(r.rmsM) + ' m' + (d ? ' · ' + d : ''); }
   if (r.error) return 'Lỗi: ' + r.error;
   if (r.progress !== undefined) return 'Đang chia ô ảnh… ' + Math.round(r.progress * 100) + '%';
   return CS.catalog.busy ? 'Đang chờ nạp…' : 'Nạp dở dang — thêm lại file này';
@@ -148,6 +149,7 @@ function drawLib() {
   el.innerHTML = list.length ? list.map((c) => `<div style="display:flex;gap:4px;align-items:stretch"><button data-id="${esc(c.id)}" class="${c.id === cur ? 'on' : ''}" ${c.ready ? '' : 'disabled'} style="flex:1;min-width:0"><b>${esc(c.name)}</b>${c.scale ? ' · ' + fmtSc(c.scale) : ''}${c.nu && c.nu !== c.name ? ' · số ' + esc(c.nu) : ''}<br><span class="muted">${esc(recState(c))}</span></button><button data-del="${esc(c.id)}" aria-label="Xóa tờ ${esc(c.name)} khỏi kho" title="Xóa khỏi kho" style="width:30px;flex:0 0 30px;text-align:center;padding:0">✕</button></div>`).join('')
     : `<div class="muted">${all.length ? 'Không có tờ nào khớp.' : 'Kho trống. Thêm thư mục hoặc file .kap.'}</div>`;
 }
+let sideT = 0; const sideSoon = () => { if (sideT) return; sideT = setTimeout(() => { sideT = 0; const a = document.activeElement; if (a && a.closest && a.closest('#chartSide') && a.tagName === 'INPUT') return; drawSide(); }, 300); };
 const libSoon = () => { if (libT) return; libT = setTimeout(() => { libT = 0; drawLib(); }, 250); };
 function drawStatus() {
   const st = $('#chartStatus'); if (!st) return; let cls = 'note', t;
@@ -172,14 +174,16 @@ function drawSide() {
   } else if (selObj && selObj.t === 'sound') {
     h += `<section class="card"><h2>Đang chọn: điểm độ sâu</h2>${fld('o_d', 'Độ sâu', 'm', selObj.o.d)}<button class="btn warn sm" id="oDel" style="margin-top:8px">Xóa</button></section>`;
   }
+  if (tool === 'depth') h += pointCard();
   if (tool === 'ship' || (selObj && selObj.t === 'ship')) h += mooredCard(selObj && selObj.t === 'ship' ? selObj.o : null);
   if (A.sim && A.sim.t >= 2) { const S = A.sim.S, st0 = startPos(), dd = Math.hypot(S.x - st0.x, S.y - st0.y); if (dd > 20) h += `<section class="card"><h2>Vị trí tàu</h2><div class="muted">Bài tập đang dở: tàu đang cách vị trí xuất phát ${fmtDist(dd)} (hình tàu màu xanh lục trên hải đồ). Hải đồ tab 3 hiện vị trí tàu lúc này.</div><button class="btn sm" id="toStart" style="margin-top:8px;width:100%">Đưa tàu về vị trí xuất phát (bắt đầu lại)</button></section>`; }
   if (tool === 'route') h += routeCard();
   const sp = startPos(), r = cv && cv.ref;
   if (r) {
-    const cd = r.classDepth || DEF_CLASS_DEPTH, off = r.offsetM || [0, 0], ds = r.datumUser || '';
-    h += `<section class="card"><h2>Độ sâu theo màu · ${esc(r.name)}</h2><div class="muted" style="margin-bottom:6px">App đọc màu hải đồ để chia vùng. Nhập độ sâu đại diện cho từng vùng của tờ này; trước cầu bến dùng «Độ sâu trước bến».</div><div class="grid g3">${fld('cd4', 'Vùng trắng (sâu)', 'm', cd[4])}${fld('cd3', 'Xanh nhạt', 'm', cd[3])}${fld('cd2', 'Xanh đậm', 'm', cd[2])}</div><div class="muted" style="margin-top:6px">Bãi cạn (xanh lá) hở ${-cd[1]} m trên số 0 hải đồ; đất liền luôn là bờ.</div></section>
-    <section class="card"><h2>Tọa độ tờ ${esc(r.name)}</h2>
+    const cd = r.classDepth || DEF_CLASS_DEPTH, off = r.offsetM || [0, 0], ds = r.datumUser || '', dmOk = r.dm && r.dm.st === 'ok';
+    h += depthCard(r, tool);
+    if (!dmOk) h += `<section class="card"><h2>Độ sâu theo màu · ${esc(r.name)}</h2><div class="muted" style="margin-bottom:6px">App đọc màu hải đồ để chia vùng. Nhập độ sâu đại diện cho từng vùng của tờ này; trước cầu bến dùng «Độ sâu trước bến».</div><div class="grid g3">${fld('cd4', 'Vùng trắng (sâu)', 'm', cd[4])}${fld('cd3', 'Xanh nhạt', 'm', cd[3])}${fld('cd2', 'Xanh đậm', 'm', cd[2])}</div><div class="muted" style="margin-top:6px">Bãi cạn (xanh lá) hở ${-cd[1]} m trên số 0 hải đồ; đất liền luôn là bờ.</div></section>`;
+    h += `<section class="card"><h2>Tọa độ tờ ${esc(r.name)}</h2>
     <div class="kv"><span>Tỷ lệ · cỡ ảnh</span><b>${fmtSc(r.scale)} · ${r.W} × ${r.H}</b></div>
     <div class="kv"><span>Datum ghi trong file</span><b>${esc(r.datumSrc || 'không ghi')}</b></div>
     <div class="kv"><span>Georef (${r.coef.n} điểm REF)</span><b>bậc ${r.coef.order} · TB ${fmtM(r.rmsM)} m · max ${fmtM(r.maxM)} m</b></div>
@@ -189,10 +193,10 @@ function drawSide() {
   }
   h += `<section class="card"><h2>Đối tượng đã đặt</h2><div class="muted" style="margin-bottom:4px">Lưu theo tọa độ WGS-84, dùng chung cho mọi tờ hải đồ.</div><div class="kv"><span>Đèn / phao</span><b>${W.objs.lights.length}</b></div><div class="kv"><span>Cầu bến · bích</span><b>${W.objs.berths.length} · ${W.bollards.filter((b) => b.bi >= 0).length}</b></div><div class="kv"><span>Tuyến đi</span><b>${(W.objs.routes || []).length}</b></div><div class="kv"><span>Vị trí xuất phát</span><b>${W.start ? fmtLL(...toLL(sp.x, sp.y)) : 'chưa chọn'}</b></div><div class="kv"><span>Vị trí xuất phát có sẵn</span><b>${(W.objs.starts || []).length}</b></div><div class="kv"><span>Tàu đậu</span><b>${(W.objs.ships || []).length}</b></div>
   <div class="flex" style="gap:6px;margin-top:8px"><button class="btn sm" id="objExp">Lưu ra file…</button><label class="btn sm" style="display:inline-flex;align-items:center">Mở từ file…<input type="file" id="objImp" accept=".json" hidden></label></div><div class="muted" style="margin-top:4px">File gồm đèn, phao, tiêu, cầu bến, cọc bích, tuyến đi, vị trí xuất phát, tàu đậu (kèm mô hình tàu, không kèm ảnh sơ đồ) — chép sang máy khác rồi mở ở đây. Mở file sẽ gộp vào đối tượng đang có (trùng tên thì thay).</div></section>`;
-  el.innerHTML = h; initMooredCard();
+  el.innerHTML = h; initMooredCard(); if (r) initDepthCard(r); if (tool === 'depth') initPointCard();
 }
-const TOOLS = [['pan', 'Chọn / kéo'], ['light', 'Đèn / phao'], ['berth', 'Cầu bến'], ['bollard', 'Cọc bích'], ['ship', 'Tàu đậu'], ['route', 'Tuyến đi'], ['start', 'Vị trí xuất phát'], ['measure', 'Đo']];
-const HINT = { ship: MOOR_HINT, pan: 'Kéo để di chuyển, lăn chuột để phóng to. Bấm vào đèn, cầu bến hoặc tàu đậu để sửa (kéo tàu đậu để dời). Bấm chuột phải vào đèn / cầu bến / tàu đậu để xóa.', light: 'Bấm lên vị trí đèn hoặc phao trên hải đồ, rồi sửa thông tin ở khung bên phải.', berth: 'Bấm lần lượt dọc mép cầu (phía nước). Bấm đúp để kết thúc. Bấm chuột phải để bỏ điểm vừa đặt. Bích buộc dây tự đặt đều theo khoảng cách bạn nhập.', sound: 'Bấm lên con số độ sâu trên hải đồ rồi gõ giá trị.', start: 'Bấm lên chỗ tàu xuất phát. Hướng ban đầu nhập ở tab 4.', bollard: 'Kéo cọc bích dọc mép cầu để dời. Bấm lên mép cầu để thêm cọc. Chuột phải vào cọc để xóa. Số khoảng cách từ đầu bến hiện ở khung bên phải (bấm vào cầu bến bằng «Chọn / kéo» để xem).', measure: 'Bấm hai điểm để đo khoảng cách (hải lý, gần thì mét) và phương vị. Chuột phải để bỏ.', route: 'Bấm lên hải đồ để thêm điểm vào cuối tuyến đang chọn. Kéo một điểm để dời. Chuột phải vào điểm để xóa. Nhập tọa độ ở khung bên phải cũng được. Tuyến đang chọn hiện ở tab 3.' };
+const TOOLS = [['pan', 'Chọn / kéo'], ['light', 'Đèn / phao'], ['berth', 'Cầu bến'], ['bollard', 'Cọc bích'], ['ship', 'Tàu đậu'], ['route', 'Tuyến đi'], ['start', 'Vị trí xuất phát'], ['depth', 'Độ sâu đọc được'], ['measure', 'Đo']];
+const HINT = { depth: 'Các số app đọc từ hải đồ: đỏ = số đo sâu, cam = nghi đọc sai (chưa dùng), xanh dương = số bạn sửa / thêm, xanh lá = độ cao. Bấm vào điểm để sửa, bấm chỗ trống để thêm số đo sâu, Shift + bấm để thêm độ cao, chuột phải vào điểm để xóa. Sửa xong app tự dựng lại mặt đáy.', ship: MOOR_HINT, pan: 'Kéo để di chuyển, lăn chuột để phóng to. Bấm vào đèn, cầu bến hoặc tàu đậu để sửa (kéo tàu đậu để dời). Bấm chuột phải vào đèn / cầu bến / tàu đậu để xóa.', light: 'Bấm lên vị trí đèn hoặc phao trên hải đồ, rồi sửa thông tin ở khung bên phải.', berth: 'Bấm lần lượt dọc mép cầu (phía nước). Bấm đúp để kết thúc. Bấm chuột phải để bỏ điểm vừa đặt. Bích buộc dây tự đặt đều theo khoảng cách bạn nhập.', sound: 'Bấm lên con số độ sâu trên hải đồ rồi gõ giá trị.', start: 'Bấm lên chỗ tàu xuất phát. Hướng ban đầu nhập ở tab 4.', bollard: 'Kéo cọc bích dọc mép cầu để dời. Bấm lên mép cầu để thêm cọc. Chuột phải vào cọc để xóa. Số khoảng cách từ đầu bến hiện ở khung bên phải (bấm vào cầu bến bằng «Chọn / kéo» để xem).', measure: 'Bấm hai điểm để đo khoảng cách (hải lý, gần thì mét) và phương vị. Chuột phải để bỏ.', route: 'Bấm lên hải đồ để thêm điểm vào cuối tuyến đang chọn. Kéo một điểm để dời. Chuột phải vào điểm để xóa. Nhập tọa độ ở khung bên phải cũng được. Tuyến đang chọn hiện ở tab 3.' };
 export function initChart() {
   $('#p-chart').innerHTML = `<div class="flex" style="align-items:flex-start">
   <div class="col" style="flex:1 1 260px;max-width:320px"><section class="card"><h2>Kho hải đồ (.kap)</h2><div class="muted" style="margin-bottom:8px">Nạp một lần, app lưu trên máy. Các tờ tự ghép liền nhau theo tọa độ, tờ tỷ lệ lớn nằm trên — kéo, phóng to thu nhỏ thoải mái như OpenCPN. Thêm thư mục: app quét cả thư mục con, lấy file .kap. Hải đồ PDF cần bấm vài điểm tọa độ khi nạp. File .rar / .zip cần giải nén trước.</div>
@@ -209,7 +213,7 @@ export function initChart() {
   cv.redraw = () => { if (!cv.inited) { if (!cv.size()[0]) return; initialView(); cv.inited = true; } const old = cv.ref; cv.draw(); drawOverlay(cv); drawStatus(); homeBtn(); if (old !== cv.ref) { drawSide(); drawLib(); } viewDepth(); };
   const tb = () => { $('#toolBtns').innerHTML = TOOLS.map((t) => `<button class="btn sm ${tool === t[0] ? 'pri' : ''}" data-tool="${t[0]}">${t[1]}</button>`).join(''); $('#chartHint').textContent = HINT[tool]; $('#gratBtn').classList.toggle('on', cv.opt.graticule); $('#outBtn').classList.toggle('on', cv.opt.outlines); };
   tb();
-  $('#toolBtns').onclick = (e) => { const t = e.target.dataset.tool; if (t) { tool = t; draft = null; meas = null; tb(); drawChart(); drawSide(); } };
+  $('#toolBtns').onclick = (e) => { const t = e.target.dataset.tool; if (t) { tool = t; draft = null; meas = null; clearSel(); tb(); drawChart(); drawSide(); } };
   $('#gratBtn').onclick = () => { cv.opt.graticule = !cv.opt.graticule; tb(); drawChart(); };
   $('#outBtn').onclick = () => { cv.opt.outlines = !cv.opt.outlines; tb(); drawChart(); };
   $('#chartHome').onclick = () => { const q = shipHere(); cv.centerM(q.x, q.y); if (cv.mPerPx() > 12) cv.setMpp(6); drawChart(); };
@@ -227,7 +231,13 @@ export function initChart() {
   $('#libLL').oninput = (e) => { const v = parseLatLon(e.target.value); libLL = isFinite(v[0]) && isFinite(v[1]) ? v : null; drawLib(); };
   $('#libLL').onkeydown = (e) => { if (e.key === 'Enter' && libLL) { const [x, y] = toWorld(libLL[0], libLL[1]); cv.centerM(x, y); meas = [[x, y]]; drawChart(); } };
   $('#libLLx').onclick = () => { libLL = null; $('#libLL').value = ''; drawLib(); };
-  CS.catalog.on((ev) => { if (ev.type === 'progress') libSoon(); else { drawLib(); drawStatus(); } });
+  CS.catalog.on((ev) => {
+    if (ev.type === 'progress') libSoon();
+    else if (ev.type === 'dm') { libSoon(); if (cv && cv.ref && cv.ref.id === ev.id) sideSoon(); }
+    else { drawLib(); drawStatus(); }
+    if (ev.type === 'dmodel' && A.hooks.chartsChanged) A.hooks.chartsChanged();
+  });
+  initDepthUI(() => { drawChart(); sideSoon(); });
   const c = $('#chartCv'); let drag = null, moved = false, dragShipO = null, dragAnch = null;
   const pos = (e) => { const r = c.getBoundingClientRect(); return [(e.clientX - r.left) * c.width / r.width, (e.clientY - r.top) * c.height / r.height]; };
   c.onpointerdown = (e) => { if (e.button === 2) return; drag = pos(e); moved = false; c.setPointerCapture(e.pointerId); dragAnch = tool === 'pan' || tool === 'ship' ? anchorAtPt(cv, drag) : null; dragShipO = !dragAnch && tool === 'pan' ? shipAt(cv, drag) : null; if (dragShipO) selObj = { t: 'ship', o: dragShipO }; if (dragAnch && !(selObj && selObj.o === dragAnch.sh)) { selObj = { t: 'ship', o: dragAnch.sh }; drawSide(); } dragWP = tool === 'route' ? nearWP(drag) : -1; dragBol = null; if (tool === 'bollard') { const q = nearBollard(drag); if (q) { const b = A.W.objs.berths[q.bi], arr = ensureBols(b, q.bi); let k = 0; arr.forEach((v, i) => { if (Math.abs(v - q.s) < Math.abs(arr[k] - q.s)) k = i; }); dragBol = { bi: q.bi, k }; selObj = { t: 'berth', o: b }; } } };
@@ -241,12 +251,13 @@ export function initChart() {
     else if (drag && Math.hypot(p[0] - drag[0], p[1] - drag[1]) > 6) { moved = true; }
   };
   c.onpointerup = (e) => { const p = pos(e); if (dragAnch) { const was = moved; dragAnch = null; drag = null; if (was) objsChanged(); else { drawChart(); drawSide(); } return; } if (dragShipO) { const o = dragShipO, was = moved; dragShipO = null; drag = null; if (was) dropShip(o); objsChanged(); return; } if (dragBol) { const was = moved, b = A.W.objs.berths[dragBol.bi]; dragBol = null; drag = null; if (was) { if (Array.isArray(b.bols)) b.bols.sort((p, q) => p - q); objsChanged(); return; } }
-    if (dragWP >= 0 && moved) { dragWP = -1; drag = null; objsChanged(); return; } dragWP = -1; if (drag && !moved) clickChart(p, e.detail >= 2); drag = null; };
+    if (dragWP >= 0 && moved) { dragWP = -1; drag = null; objsChanged(); return; } dragWP = -1; if (drag && !moved) clickChart(p, e.detail >= 2, e.shiftKey); drag = null; };
   c.ondblclick = () => { if (tool === 'berth' && draft && draft.length >= 2) { A.W.objs.berths.push({ name: 'Bến ' + (A.W.objs.berths.length + 1), pts: draft, depth: 8, top: 4.5, spacing: 25 }); selObj = { t: 'berth', o: A.W.objs.berths[A.W.objs.berths.length - 1] }; draft = null; objsChanged(); } };
   c.oncontextmenu = (e) => {
     e.preventDefault(); const p = pos(e), W = A.W, near = (ox, oy) => { const q = cv.m2s(ox, oy); return Math.hypot(q[0] - p[0], q[1] - p[1]); };
     if (draft && draft.length) { draft.pop(); if (!draft.length) draft = null; drawChart(); return; }
     if (meas) { meas = null; drawChart(); return; }
+    if (tool === 'depth') { if (depthRightClick(cv, p)) { drawChart(); drawSide(); } return; }
     const wi = nearWP(p); if (wi >= 0) { selRoute().pts.splice(wi, 1); objsChanged(); return; }
     if (tool === 'bollard') { const q = nearBollard(p); if (q) { const b = W.objs.berths[q.bi], arr = ensureBols(b, q.bi); let k = 0; arr.forEach((v, i) => { if (Math.abs(v - q.s) < Math.abs(arr[k] - q.s)) k = i; }); arr.splice(k, 1); selObj = { t: 'berth', o: b }; objsChanged(); } return; }
     { const ah = anchorAtPt(cv, p); if (ah) { deleteAnchor(ah); selObj = { t: 'ship', o: ah.sh }; objsChanged(); return; } }
@@ -338,8 +349,9 @@ function routeCard() {
     <div class="muted" id="rtErr" style="margin-top:4px">Gõ được: 21°05,123'N · 21 05.123 N · 21.0852</div></section>`;
 }
 function objsChanged() { A.W.rebuild(); saveObjs(); drawChart(); drawSide(); if (A.hooks.objsChanged) A.hooks.objsChanged(); }
-function clickChart(p, dbl) {
+function clickChart(p, dbl, shift) {
   const W = A.W, [x, y] = cv.s2m(p[0], p[1]), near = (ox, oy) => { const s = cv.m2s(ox, oy); return Math.hypot(s[0] - p[0], s[1] - p[1]); };
+  if (tool === 'depth') { depthClick(cv, p, x, y, shift).then(() => { drawChart(); drawSide(); }); return; }
   if (tool === 'light') { const o = { x, y, kind: 'light', name: 'Đèn ' + (W.objs.lights.length + 1), color: 'W', period: 3, flash: 0.5, height: 9 }; W.objs.lights.push(o); selObj = { t: 'light', o }; objsChanged(); }
   else if (tool === 'berth') { if (dbl) return; (draft = draft || []).push([x, y]); drawChart(); }
   else if (tool === 'sound') { uiPrompt('Độ sâu tại điểm này (m, so với số 0 hải đồ):', '8').then((v) => { if (v !== null && isFinite(num(v, NaN))) { const o = { x, y, d: num(v, 0) }; W.objs.sounds.push(o); selObj = { t: 'sound', o }; objsChanged(); } }); }
@@ -359,6 +371,7 @@ function clickChart(p, dbl) {
 // vẽ các đối tượng lên một ChartView bất kỳ
 export function drawOverlay(v, opt) {
   const g = v.ctx, W = A.W; g.save(); g.lineJoin = 'round';
+  if (!opt && tool === 'depth') drawDepthPts(v, g);
   for (const b of W.objs.berths) { g.strokeStyle = '#FFB300'; g.lineWidth = selObj && selObj.o === b && !opt ? 6 : 4; g.beginPath(); b.pts.forEach((q, i) => { const s = v.m2s(q[0], q[1]); if (i) g.lineTo(s[0], s[1]); else g.moveTo(s[0], s[1]); }); g.stroke(); }
   drawMoored(v, g, !opt && selObj && selObj.t === 'ship' ? selObj.o : null);
   const bt = !opt && tool === 'bollard';
@@ -479,6 +492,8 @@ export function initSet() {
 // mở kho hải đồ; lần đầu sau khi nâng cấp: chuyển file hải đồ và đối tượng của bản v0.1 sang kho mới
 export async function initCharts() {
   await CS.catalog.init(); drawLib(); drawStatus();
+  // tờ KAP nạp từ bản trước chưa đọc độ sâu: đọc nền lần lượt (mỗi tờ một lần; tờ đang dở lúc tắt app thì đọc lại)
+  setTimeout(() => { for (const r of CS.catalog.records) if (r.kind === 'kap' && r.ready && (!r.dm || r.dm.st === 'run')) CS.catalog.readDepth(r).catch(() => {}); }, 4000);
   const keys = await DB.keys('charts');
   if (keys && keys.length) {
     const files = []; for (const k of keys) { const f = await DB.get('charts', k); if (f) files.push(f instanceof File ? f : new File([f], String(k))); }
