@@ -7,6 +7,8 @@ import { modelGroup, skyEnv, accMesh } from './shipdraw/mesh3.js';
 import { buildFit } from './shipdraw/fittings.js';
 import { Acc } from './shipdraw/prims.js';
 import { makeFlags } from './flags.js';
+import { Wake } from './wake.js';
+import { buildScenery } from './scenery.js';
 
 export const QUALITY = {
   // ter: [nửa vùng mịn (m), bước lưới vùng mịn (m), bước lưới xa nhất (m)]
@@ -38,7 +40,7 @@ export class View3D {
     this.scene.add(this.sun.target);
     this.glow = glowTex(); this.time = 0;
     this.look = { yaw: 0, pitch: 0, fov: 55, dist: 1 };
-    this.mkWater(); this.mkRain(); this.mkBolt();
+    this.mkWater(); this.mkRain(); this.mkBolt(); this.wake = new Wake(THREE, this.scene);
     this.shipG = new THREE.Group(); this.scene.add(this.shipG);
     this.terrain = null; this.objG = new THREE.Group(); this.scene.add(this.objG);
     this.lineG = new THREE.Group(); this.scene.add(this.lineG); this.linePool = [];
@@ -148,6 +150,7 @@ export class View3D {
     const C = { sideP: COL.R, sideS: COL.G, nuc: COL.R, deck: 0xffe08a }, Z = { sideP: 4, sideS: 4, stern: 4, nuc: 4, deck: 9 };
     this.navL = {}; for (const l of geom.lights) (this.navL[l.key] || (this.navL[l.key] = [])).push(lp(C[l.key] || COL.W, l, Z[l.key] || 5));
     const f = geom.flag; this.flags = makeFlags(g, M.p.flags || 'hq', geom.dims.L, f.x, f.z - T, f.span);
+    this.wake.setShip(g, { L: geom.dims.L, B: geom.dims.B, xa: H.xa, xf: H.xf }, (x) => H.yAt(Math.max(H.xa, Math.min(H.xf, x)), T, 1));
   }
   buildShip(M, anchors) {
     const g = this.shipG; this.dropAnchors(false); g.clear(); this.shipGeom = null; this.flags = null; this.spin = []; this.modelAnch = []; this.anchMap = null;
@@ -170,6 +173,7 @@ export class View3D {
     const mast2 = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.3, 7, 6), new THREE.MeshLambertMaterial({ color: 0xc9d2d8 })); mast2.position.set(0, fb + shh + 3.5, -(sx + sl * 0.1)); g.add(mast2);
     this.dim = { L, B, fb, shh, bridgeX: sx + sl / 2 + 0.6, eye: fb + shh - 1.6 };
     this.flags = makeFlags(g, M.p.flags || 'hq', L, sx + sl * 0.1, fb + shh + 6.4, 0.5);
+    this.wake.setShip(g, { L, B, xa: -L / 2, xf: L / 2 }, (x) => { const u = (x - L * 0.3) / (L * 0.2); return u > 0 ? hb * Math.max(0, 1 - u * u) : hb; });
     const lp = (c, x, y, z, s) => { const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.glow, color: c, blending: THREE.AdditiveBlending, depthWrite: false, fog: false })); sp.position.set(x, y, z); sp.scale.setScalar(s || 5); sp.visible = false; g.add(sp); return sp; };
     const bz = -(sx + sl * 0.3);
     this.navL = { mast1: [lp(COL.W, 0, fb + fmh + 0.3, -fmx)], mast2: [lp(COL.W, 0, fb + shh + 7, -(sx + sl * 0.1))], sideP: [lp(COL.R, -B * 0.52, fb + shh - 2, bz, 4)], sideS: [lp(COL.G, B * 0.52, fb + shh - 2, bz, 4)],
@@ -178,7 +182,7 @@ export class View3D {
   }
   // địa hình dựng quanh (cx, cy) từ các tờ hải đồ đang có: lưới mịn gần tàu, thưa dần ra xa (tới tầm nhìn xa của mức chất lượng)
   buildTerrain(W, cx = 0, cy = 0) {
-    if (this.terrain) { this.scene.remove(this.terrain); this.terrain.geometry.dispose(); this.terrain = null; }
+    if (this.terrain) { this.scene.remove(this.terrain); this.terrain.traverse((o) => { if (o.geometry) o.geometry.dispose(); if (o.material) o.material.dispose(); }); this.terrain = null; this.scen = null; }
     const [D, d0, dMax] = this.q.ter, F = Math.min(this.q.far, 26000);
     this.terrC = [cx, cy]; this.terrD = D;
     if (!W.hasCharts()) return;
@@ -212,6 +216,9 @@ export class View3D {
     if (!ind.length) return;
     const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.BufferAttribute(pos, 3)); geo.setAttribute('color', new THREE.BufferAttribute(col, 3)); geo.setIndex(new THREE.BufferAttribute(new Uint32Array(ind), 1)); geo.computeVertexNormals();
     this.terrain = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ vertexColors: true })); this.terrain.frustumCulled = false; this.scene.add(this.terrain);
+    // cây, nhà, kho trên bờ (vùng lưới mịn), gắn vào địa hình để lên xuống theo triều
+    const Df = axis[Math.floor(D / d0)] || D;
+    try { this.scen = buildScenery(THREE, { xs, ys, n, cls, dist, pos, cx, cy, D: Df, segs: W.segs || [], glow: this.glow }, this.qn); if (this.scen) this.terrain.add(this.scen); } catch (err) { console.warn('cảnh trên bờ', err); this.scen = null; }
   }
   buildObjects(W) {
     const g = this.objG; g.clear(); this.marks = [];
@@ -234,7 +241,13 @@ export class View3D {
       } else if (o.kind === 'light') { base = Math.max(0, -W.depthAt(o.x, o.y)) + 1; const t = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.9, hgt, 8), new THREE.MeshLambertMaterial({ color: 0xf0f0f0 })); t.position.set(o.x, base + hgt / 2, -o.y); t.userData.fix = base + hgt / 2; g.add(t); }
       else { const bc = o.kind === 'buoyR' ? 0xd9362e : o.kind === 'buoyG' ? 0x2f9e55 : 0xe6c000; const t = new THREE.Mesh(o.kind === 'buoyG' ? new THREE.ConeGeometry(1.3, hgt, 10) : new THREE.CylinderGeometry(1.1, 1.3, hgt, 10), new THREE.MeshLambertMaterial({ color: bc })); t.position.set(o.x, hgt / 2 - 0.6, -o.y); t.userData.float = hgt / 2 - 0.6; g.add(t); }
       const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.glow, color: c, blending: THREE.AdditiveBlending, depthWrite: false, fog: false, sizeAttenuation: false }));
-      sp.position.set(o.x, base + hgt + 0.5, -o.y); sp.scale.setScalar(0.035); sp.userData = o.kind === 'light' || /^beacon/.test(o.kind) ? { fix: base + hgt + 0.5 } : { float: hgt + 0.2 }; g.add(sp); this.marks.push({ sp, o });
+      sp.position.set(o.x, base + hgt + 0.5, -o.y); sp.scale.setScalar(0.035); sp.userData = o.kind === 'light' || /^beacon/.test(o.kind) ? { fix: base + hgt + 0.5 } : { float: hgt + 0.2 }; g.add(sp);
+      // quầng sáng quanh đèn (to theo mét, sương mù / mưa thì loe rộng) + vệt phản chiếu nằm trên mặt nước, kéo dài về phía người nhìn
+      const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.glow, color: c, blending: THREE.AdditiveBlending, depthWrite: false, fog: false, transparent: true, opacity: 0.32 }));
+      halo.visible = false; g.add(halo);
+      const refl = new THREE.Mesh(this.reflGeo || (this.reflGeo = new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2)), new THREE.MeshBasicMaterial({ map: this.glow, color: c, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, opacity: 0.5, fog: true }));
+      refl.visible = false; refl.renderOrder = 3; g.add(refl);
+      this.marks.push({ sp, o, halo, refl, hgt: base + hgt + 0.5 });
     }
   }
   // ---------- quả neo + xích ----------
@@ -322,14 +335,25 @@ export class View3D {
     const sdist = Math.max(150, (this.dim ? this.dim.L : 100) * 3);
     this.sun.position.copy(sd.clone().multiplyScalar(sdist).add(this.shipG.position)); this.sun.target.position.copy(this.shipG.position); this.sun.target.updateMatrixWorld();
     this.scene.environmentIntensity = 0.05 + 0.4 * day; if (this.shadows) this.r.shadowMap.needsUpdate = true;
+    this.wake.update(this.shipG, st, e, day, (x, z, t) => this.waveH(x, z, t), this.wU.uHs.value);
     for (const m of this.spin) m.rotation.y = -(e.t || 0) * m.userData.spin * Math.PI / 30;
     const dark = day0 < 0.55; // đèn theo độ cao mặt trời, không theo mây
+    if (this.scen && this.scen.userData.night) this.scen.userData.night.visible = dark;
     for (const k in this.navL) for (const sp of this.navL[k]) sp.visible = !!(e.lights && e.lights[k]) && dark;
+    const haloK = 1 + 2.2 * (1 - Math.min(1, e.vis / 3000)) + 0.8 * (e.rain || 0);
     for (const m of this.marks) {
       const o = m.o, per = Math.max(0.5, +o.period || 3), on = Math.max(0.2, +o.flash || 0.5), grp = Math.max(1, Math.round(+o.grp || 1)), gap = Math.max(on + 0.5, 1.5);
       if (m.sp.userData.fix !== undefined) m.sp.position.y = m.sp.userData.fix - e.tide;
       const ph = (e.daySec + (o.x * 0.01)) % per; // chớp nhóm: grp chớp cách nhau gap giây rồi tối tới hết chu kỳ
       m.sp.visible = dark && ph < (grp - 1) * gap + on && (ph % gap) < on;
+      // quầng + phản chiếu: chỉ đèn trong vòng 4 km
+      const dxc = o.x - this.cam.position.x, dzc = -o.y - this.cam.position.z, dc = Math.hypot(dxc, dzc), show = m.sp.visible && dc < 4000;
+      m.halo.visible = m.refl.visible = show;
+      if (show) {
+        m.halo.position.copy(m.sp.position); m.halo.scale.setScalar((2.2 + 0.25 * m.hgt) * haloK);
+        const yw = this.waveH(o.x, -o.y, e.t) + 0.12, len = Math.min(60, 6 + dc * 0.05) * (1 + 0.6 * Math.min(2, this.wU.uHs.value)), ang = Math.atan2(-dxc, -dzc);
+        m.refl.position.set(o.x - dxc / dc * len * 0.5, yw, -o.y - dzc / dc * len * 0.5); m.refl.rotation.set(0, ang, 0); m.refl.scale.set(Math.max(1.2, m.hgt * 0.22), 1, len);
+      }
     }
     // camera
     const c = this.cam, sn = Math.sin(st.psi), cs = Math.cos(st.psi), lk = this.look;

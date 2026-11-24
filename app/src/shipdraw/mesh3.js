@@ -64,7 +64,7 @@ function decalTex(THREE, d, dark) {
 export function accMesh(THREE, acc, pivot, T) {
   const piv = [pivot[1], pivot[2] - T, -pivot[0]], r = creased(acc, T, 34, null, piv), geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.BufferAttribute(r.pos, 3)); geo.setAttribute('normal', new THREE.BufferAttribute(r.nor, 3));
-  const m = new THREE.Mesh(geo, shipMat(THREE, { color: acc.col, side: THREE.DoubleSide, rough: 0.45, metal: 0.5 })); m.position.set(piv[0], piv[1], piv[2]); return m;
+  const m = new THREE.Mesh(geo, shipMat(THREE, { color: acc.col, vc: false, side: THREE.DoubleSide, rough: 0.45, metal: 0.5 })); m.position.set(piv[0], piv[1], piv[2]); return m;
 }
 // opt.inside: cảnh chính — khối (thượng tầng, buồng lái…) chỉ vẽ mặt ngoài để camera đứng trong buồng lái nhìn xuyên ra như qua kính
 // opt.shadows: đổ bóng và nhận bóng

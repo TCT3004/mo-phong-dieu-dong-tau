@@ -1,7 +1,7 @@
 # Mô phỏng điều động tàu 3D
 
 Phần mềm mô phỏng 3D dành cho **người điều động tàu** (không phải người lái), chạy offline trên Windows.
-Bản thử nghiệm v0.3.7 — giai đoạn 3: vẽ mô hình tàu từ sơ đồ (mặt mượt, màu thật, thư viện chi tiết), cờ trên tàu, dữ liệu cảng nạp từ file.
+Bản thử nghiệm v0.3.8 — giai đoạn 3: vẽ mô hình tàu từ sơ đồ (mặt mượt, màu thật, thư viện chi tiết), cờ trên tàu, dữ liệu cảng nạp từ file, vệt nước sau tàu, cây / nhà trên bờ.
 
 ## Các phần chính
 
@@ -9,7 +9,7 @@ Bản thử nghiệm v0.3.7 — giai đoạn 3: vẽ mô hình tàu từ sơ đ�
 |---|---|
 | 1 · Thông số tàu | Kích thước, mớn nước, máy (1–4 máy, chân vịt FPP/CPP, chiều quay từng chân vịt, tỷ số hộp số), bảng nấc máy (app tự hiệu chỉnh cho khớp tốc độ từng nấc và đường kính quay trở, nhắc khi số liệu bất thường), bánh lái, neo, dây buộc, diện tích hứng gió; **vẽ tàu từ sơ đồ** trên bàn vẽ 3 hình chiếu (mạn · mặt boong · nhìn từ mũi / lái cùng tỷ lệ, vạch gióng, thước kiểu CAD: bắt dính, vẽ thẳng, gõ số; ảnh / PDF sơ đồ làm nền, dò viền tự động): app giao 3 hình chiếu thành mô hình 3D, sửa được ngay trên 3D (kéo điểm nắm, dời khối, xem thẳng từ trên / mạn / mũi), có hoàn tác / làm lại; nét thẳng hoặc cong mềm, bo góc theo bán kính; hình nhìn từ mũi / lái (và hình chiếu còn thiếu) tự sinh, kéo điểm là thành nét thật; điểm nắm ở cả hai đầu khối, bấm đúp lên cạnh để thêm điểm; thư viện chi tiết đặt trên 3D (cột dàn lưới, radar quay, vòm radar, ăng-ten, bè, neo, tời, cột bích, đèn pha, còi, cầu thang, ống khói, tháp pháo, giá phóng, xuồng); màu vỏ / thượng tầng / boong / dải đường nước, nóc tầng màu boong, số hiệu mạn, cửa kính, lan can nóc tầng, ánh sáng phản chiếu bầu trời và bóng đổ — buồng lái, đèn, hứng gió theo mô hình; cờ trên cột cao nhất (cờ Tổ quốc + cờ Hải quân, chỉ cờ Tổ quốc, hoặc không treo) |
 | 2 · Cảng & luồng | Kho hải đồ `.kap` và PDF: các tờ ghép liền mạch theo tọa độ như OpenCPN (tờ tỷ lệ lớn nằm trên, kéo / phóng to thu nhỏ mượt), tìm tờ theo tên / tọa độ, lưới kinh vĩ để kiểm tra, chọn datum và dời tay cho từng tờ; cầu bến, cọc bích, đèn / phao / tiêu (chớp nhóm), tuyến đi, vị trí xuất phát (lưu theo tọa độ WGS-84); lưu ra / mở từ file đối tượng để chép sang máy khác; nút «Về tàu» |
-| 3 · Điều động | Buồng lái 3 cửa sổ gắn trên tàu (kéo chuột để quay đầu nhìn sang), radar (tới 24 Hl, EBL/VRM), hải đồ nhỏ, khẩu lệnh lái tiếng Việt, tay chuông máy, vô lăng, neo (mỗi neo chọn tốc độ tời cấp 1 / cấp 2 cho thả và kéo, thả tự do; quả neo 3D rơi theo xích, nằm đáy, kéo lên về đúng chỗ cũ), dây, đèn hành trình, còi theo COLREG, chuông, báo động |
+| 3 · Điều động | Buồng lái 3 cửa sổ gắn trên tàu (kéo chuột để quay đầu nhìn sang); cảnh 3D có vệt nước sau lái, sóng mũi, nước sủi khi lùi, cây / nhà / kho trên bờ (đèn nhà ban đêm), quầng sáng và vệt phản chiếu của đèn phao; radar (tới 24 Hl, EBL/VRM), hải đồ nhỏ, khẩu lệnh lái tiếng Việt, tay chuông máy, vô lăng, neo (mỗi neo chọn tốc độ tời cấp 1 / cấp 2 cho thả và kéo, thả tự do; quả neo 3D rơi theo xích, nằm đáy, kéo lên về đúng chỗ cũ), dây, đèn hành trình, còi theo COLREG, chuông, báo động |
 | 4 · Môi trường & kịch bản | Gió, dòng chảy, sóng (độ cao, hướng, bước sóng), thủy triều, tầm nhìn, giờ trong ngày; hoặc thời tiết «Ngẫu nhiên»: app tự đổi nắng, mây, mưa, giông (có sấm sét), sương mù theo thời gian chạy bài; ánh sáng xem thử (theo giờ / ngày / hoàng hôn / đêm), sương mù dày; vị trí xuất phát có sẵn |
 | 5 · Xem lại | Phát lại bài tập 2D / 3D, đồ thị, xuất video |
 
@@ -28,7 +28,8 @@ app/        mã nguồn chính (JavaScript, three.js, pdf.js) → đóng thành 
   src/      physics.js (mô hình tàu), world.js (môi trường, neo, dây), view3d.js (3D), radar.js,
             geo/ (phép chiếu, datum, tọa độ), charts/ (đọc KAP / PDF, georef, kho hải đồ),
             render/ (vẽ hải đồ WebGL2), depth/ (độ sâu nhiều tờ), shipdraw/ (vẽ tàu từ sơ đồ),
-            weather.js (thời tiết ngẫu nhiên), windage.js, ui_*.js (giao diện)
+            weather.js (thời tiết ngẫu nhiên), wake.js (vệt nước), scenery.js (cây / nhà trên bờ),
+            windage.js, ui_*.js (giao diện)
 electron/   vỏ Electron để đóng gói thành file .exe chạy luôn (portable)
 ```
 
@@ -46,7 +47,7 @@ npm test               # chạy unit test
 cp dist/MoPhongDieuDongTau.html ../electron/index.html
 cd ../electron
 npm install
-npx electron-builder --win portable --x64   # tạo electron/dist/MoPhongDieuDongTau-0.3.7.exe
+npx electron-builder --win portable --x64   # tạo electron/dist/MoPhongDieuDongTau-0.3.8.exe
 ```
 
 File `.exe` chưa có chữ ký số: lần đầu mở, nếu Windows chặn thì bấm **More info → Run anyway**.

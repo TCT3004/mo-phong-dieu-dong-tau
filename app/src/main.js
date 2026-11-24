@@ -102,7 +102,7 @@ function frame(ts) {
       const ds = s.day0 + s.t, e = s.e;
       A.view.setSegs(lineSegs3D());
       const aw = appWind(e, s.S);
-      A.view.update({ x: s.S.x, y: s.S.y, psi: s.S.psi }, runState.view, { awTo: aw.to, awKn: aw.kn, sunEl: sunEl(ds, A.env.light), sunAz: 2 * Math.PI * (ds / 86400), vis: e.vis, tide: e.tide, waveH: e.waveH, waveD: e.waveD, waveT: e.waveT, rain: e.rain, cloud: e.cloud, flash: e.flash, bolt: e.wx ? e.wx.bolt : null, wDir: e.wDir, wKn: e.wKn, rollK: A.set.rollSpeed, t: s.t, lights: s.lights, daySec: ds });
+      A.view.update({ x: s.S.x, y: s.S.y, psi: s.S.psi }, runState.view, { awTo: aw.to, awKn: aw.kn, sunEl: sunEl(ds, A.env.light), sunAz: 2 * Math.PI * (ds / 86400), vis: e.vis, tide: e.tide, waveH: e.waveH, waveD: e.waveD, waveT: e.waveT, rain: e.rain, cloud: e.cloud, flash: e.flash, bolt: e.wx ? e.wx.bolt : null, wDir: e.wDir, wKn: e.wKn, rollK: A.set.rollSpeed, t: s.t, lights: s.lights, daySec: ds, spd: s.S.u, prop: s.S.n.reduce((a, b) => a + b, 0) / s.S.n.length / (A.M.nMax || 1) });
       A.view.anchors3D(s.anchors, s.h);
       A.view.render(runState.view === 'bridge' ? paneCvs() : null);
     }
