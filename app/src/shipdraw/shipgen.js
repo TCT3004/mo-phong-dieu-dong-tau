@@ -8,7 +8,7 @@
 //   bulwark: [x0, x1, h] (mạn chắn sóng mũi) hoặc bulwarks: [[x0, x1, h], …],
 //   blocks: [{ k: 't1'..'t4' | 'bridge' | 'funnel' | 'funnelT' | 'funnelP' | 'box', x0, x1, z0?, h, w, sl (vát trước), sa (vát sau), fw (bề rộng trước / w), win,
 //     tw (bề rộng nóc / chân: vách nghiêng, thêm hình nhìn từ mũi), lip: { s, f, a, t } (sàn đi lại nhô ra quanh nóc: hai bên, trước, sau, dày),
-//     visor (m: mái che nắng nhô trước nóc buồng lái) }],
+//     visor (m: mái che nắng nhô trước nóc buồng lái); tầng 2–4 / buồng lái không ghi z0 thì tự chồng lên khối bên dưới }],
 //   wings: { x0, x1, z, span }, masts: [{ id: 'truoc' | 'chinh' | 'sau', x, z0, h, yard (độ cao xà tính từ chân), radar }],
 //   anchors: [x, z], winch: [x0, x1],
 //   lights: { mast1: [x, z], mast2, side: [x, z], stern, anchF, anchA, nuc }, eye: [x, z],
@@ -87,8 +87,13 @@ export function genModel(spec) {
     if (o.tw && !yc) { const wt = w * Math.min(fw, 1); add(front, type, [[-wt / 2, z0], [wt / 2, z0], [wt * o.tw / 2, z1], [-wt * o.tw / 2, z1]], { grp: sid }); }
     return sid;
   };
+  // tầng 2–4 và buồng lái không ghi chân thì tự chồng lên khối đã dựng bên dưới (chồng theo chiều dài ≥ 30%)
+  const placed = [];
+  const stackZ = (b) => { let z = -Infinity; for (const q of placed) { const ov = Math.min(q.x1, b.x1) - Math.max(q.x0, b.x0); if (ov > 0.3 * Math.min(b.x1 - b.x0, q.x1 - q.x0)) z = Math.max(z, q.z1); } return isFinite(z) ? z : minDeck(b.x0, b.x1); };
   for (const b of sp.blocks || []) {
-    const z0 = b.z0 === undefined ? minDeck(b.x0, b.x1) : b.z0, z1 = z0 + b.h, sl = b.sl || 0, yc = b.k === 'funnelT' ? -(b.y || B * 0.2) : b.k === 'funnelP' ? (b.y || B * 0.2) : 0;
+    const z0 = b.z0 !== undefined ? b.z0 : /^(t[2-4]|bridge)$/.test(b.k) ? stackZ(b) : minDeck(b.x0, b.x1), z1 = z0 + b.h;
+    if (/^(t[1-4]|bridge|box)$/.test(b.k)) placed.push({ x0: b.x0, x1: b.x1, z1 });
+    const sl = b.sl || 0, yc = b.k === 'funnelT' ? -(b.y || B * 0.2) : b.k === 'funnelP' ? (b.y || B * 0.2) : 0;
     const lip = b.lip, lt = lip ? lip.t || 0.18 : 0;
     block(TYPE[b.k], b.x0, b.x1, z0, z1 - lt, b.w, { sl: sl * (1 - lt / b.h), sa: (b.sa || 0) * (1 - lt / b.h), fw: b.fw, win: b.win, fillet: b.fillet, yc, tw: b.tw });
     if (lip) { const xf = b.x1 - sl + (lip.f || 0), xa = b.x0 + (b.sa || 0) - (lip.a || 0), ww = b.w * (b.tw || 1) + 2 * (lip.s || 0); block(TYPE[b.k], xa, xf, z1 - lt, z1, ww, { fw: b.fw ? (b.w * b.fw * (b.tw || 1) + 2 * (lip.s || 0)) / ww : 1, win: false }); }

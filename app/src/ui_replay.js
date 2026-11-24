@@ -1,4 +1,5 @@
 // Tab 5: xem lại & xuất video.
+import { uiAlert } from './dialog.js';
 import { A, $, $$, num, esc, pad3, clock, DB, sunEl, appWind } from './app.js';
 import { envWaveL } from './world.js';
 import { D2R } from './physics.js';
@@ -50,7 +51,7 @@ export function initReplay() {
   <div class="col" style="flex:1 1 260px;max-width:320px"><section class="card"><h2 id="repAt">Tại thời điểm</h2><div class="grid g2" id="repVals"></div></section><section class="card"><h2>Khẩu lệnh — bấm để nhảy tới</h2><div id="repOrd" style="max-height:380px;overflow:auto"></div></section></div></div>`;
   cv = new ChartCanvas($('#repCv'));
   $('#sesList').onclick = (e) => { const b = e.target.closest('button'); if (!b) return; R.ses = A.sessions.find((s) => s.id === b.dataset.id); R.t = 0; R.playing = false; initReplay(); };
-  $('#repSaveNow').onclick = () => { const s = saveSession(); if (s) { R.ses = s; R.t = 0; initReplay(); } else alert('Bài đang chạy còn quá ngắn (dưới 20 giây).'); };
+  $('#repSaveNow').onclick = () => { const s = saveSession(); if (s) { R.ses = s; R.t = 0; initReplay(); } else uiAlert('Bài đang chạy còn quá ngắn (dưới 20 giây).'); };
   $('#repPlay').onclick = () => { if (!R.ses) return; if (R.t >= dur()) R.t = 0; R.playing = !R.playing; };
   $('#repStart').onclick = () => { R.t = 0; R.playing = false; };
   $('#repSl').oninput = (e) => { R.t = +e.target.value; R.playing = false; };
@@ -122,7 +123,7 @@ function drawEx() {
   $('#exGo').onclick = () => (R.rec ? stopExport() : startExport());
 }
 function startExport() {
-  if (!R.ses) return alert('Chưa chọn bài để xuất.'); if (typeof MediaRecorder === 'undefined') return alert('Trình duyệt này không hỗ trợ ghi video. Dùng Edge hoặc Chrome.');
+  if (!R.ses) return uiAlert('Chưa chọn bài để xuất.'); if (typeof MediaRecorder === 'undefined') return uiAlert('Trình duyệt này không hỗ trợ ghi video. Dùng Edge hoặc Chrome.');
   const x = R.ex; comp = document.createElement('canvas'); comp.height = x.res; comp.width = Math.round(x.res * 16 / 9);
   pip = pip || new ChartCanvas(Object.assign(document.createElement('canvas'), { width: 420, height: 280 }));
   const stream = comp.captureStream(30);

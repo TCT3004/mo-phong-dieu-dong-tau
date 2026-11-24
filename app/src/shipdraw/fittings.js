@@ -28,7 +28,7 @@ export const FIT_KINDS = {
   hatch: { name: 'Nắp hầm hàng', l: 12, w: 8, h: 1.4, scale: true, tip: 'Thành miệng hầm + các tấm nắp' },
   containers: { name: 'Container xếp chồng', l: 12.2, w: 9.8, h: 5.2, tip: 'Tự chia container 20 ft (6,1 × 2,44 × 2,6 m) theo kích thước khối, màu ngẫu nhiên' },
   torpedo: { name: 'Ống phóng lôi', l: 7, w: 1.4, h: 1.3, scale: true, n: 2, tip: 'n ống đặt cạnh nhau, miệng ống hướng theo chiều xoay' },
-  ramp: { name: 'Cửa mũi / cầu dẫn', l: 0.45, w: 5, h: 6, scale: true, el: 12, tip: 'Tấm cầu dẫn dựng ở mũi, bản lề ở điểm đặt: h = chiều dài tấm, w = rộng, l = dày; el = góc ngả về phía mũi so với phương đứng' },
+  ramp: { name: 'Cửa mũi / cầu dẫn', l: 0.45, w: 5, h: 6, scale: true, el: 12, tip: 'Tấm cầu dẫn dựng ở mũi, bản lề ở điểm đặt: h = chiều dài tấm, w = rộng, l = dày; el = góc ngả về phía mũi so với phương đứng; n = 1: có cáp nâng + tời' },
   pipes: { name: 'Đường ống boong', l: 30, w: 2.4, h: 1.6, tip: 'Bó ống chạy dọc boong + lối đi trên cao (tàu dầu)' },
   fender: { name: 'Đệm va', l: 6, w: 0.7, h: 0.7, tip: 'Ống cao su đen nằm ngang (tàu lai: đặt quanh mũi / lái)' },
   mast: { name: 'Cột đơn (có sàn, xà)', l: 3, w: 0.4, h: 7, scale: true, tip: 'Cột thép tròn thon dần, sàn radar ở 70% chiều cao, xà treo cờ; l = độ vươn của xà, w = đường kính chân cột' },
@@ -182,7 +182,12 @@ const B = {
     const l = f.h, w = f.w, h = Math.min(f.l, f.h * 0.3), el = f.el === undefined ? 12 : clamp(+f.el, -30, 80), loc = { el: 90 - el };
     box(K('hull', loc), l / 2, 0, h / 2, l, w, h);
     const R = K('dark', loc); for (let i = 1; i < 5; i++) box(R, l * i / 5, 0, -0.04, 0.14, w * 0.96, 0.1);
+    for (const s of [-1, 1]) box(R, l / 2, s * (w / 2 - 0.06), -0.06, l, 0.12, 0.14); // gờ hai mép
     cyl(K('dark'), [0, -w / 2, 0.1], [0, w / 2, 0.1], 0.18, 0.18, 10);
+    if (f.n) { // cáp nâng cầu dẫn: từ hai góc trên của tấm về tời nhỏ phía sau trên boong
+      const e = el * Math.PI / 180, top = [l * Math.sin(e), l * Math.cos(e)], D = K('dark'), back = -Math.max(3, l * 1.2);
+      for (const s of [-1, 1]) { const v = s * (w / 2 - 0.25); cyl(D, [top[0], v, top[1]], [back, v * 1.05, 1.1], 0.03, 0.03, 4); box(D, back - 0.3, v * 1.05, 0.45, 1.0, 0.8, 0.9); cyl(K('metal'), [back - 0.3, v * 1.05 - 0.45, 0.6], [back - 0.3, v * 1.05 + 0.45, 0.6], 0.3, 0.3, 10); }
+    }
   },
   // đường ống boong (tàu dầu): 3 ống dọc + lối đi trên cao có trụ đỡ
   pipes(K, f) {

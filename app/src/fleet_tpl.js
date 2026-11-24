@@ -44,7 +44,7 @@ export const TPL = [
     L: 50, B: 9.2, D: 4.2, T: 3.3, H: 17, bow: 'raked', rake: 3, stern: 'cruiser', shA: 0.3, shF: 0.8, fc: { x0: 19, h: 1.8 }, poop: { x1: -12, h: 1.2 }, par: [-12, 10], ts: 0.62, bp: 1.8, sec: 'box', br: 0.9,
     bulwarks: [[19, 24.6, 1.0], [-24.7, -12.4, 0.9]], opts: { colors: C('#2b4a6b', '#eeeeea', '#8a3d2f', '#8b2a22') },
     build: ({ deck: d, hb }) => { const z1 = d(-20), t1 = z1 + 2.6, t2 = t1 + 2.5, br = t2 + 2.5; return {
-      blocks: [{ k: 't1', x0: -24, x1: -12.6, h: 2.6, w: 7.2, fw: 1.2, win: true }, { k: 't2', x0: -22.5, x1: -14.2, h: 2.5, w: 6.4, win: true, lip: { s: 0.25, f: 0.5, a: 0.3 } },
+      blocks: [{ k: 't1', z0: z1, x0: -24, x1: -12.6, h: 2.6, w: 7.2, fw: 1.2, win: true }, { k: 't2', x0: -22.5, x1: -14.2, h: 2.5, w: 6.4, win: true, lip: { s: 0.25, f: 0.5, a: 0.3 } },
         { k: 'bridge', x0: -21, x1: -14.8, h: 2.5, w: 8.6, sl: -0.35, visor: 0.7 }],
       wings: { x0: -16.6, x1: -15, z: t2, span: 4.7, w: 4.3 }, anchors: [22.6, d(22.6) - 1.6],
       lights: { mast1: [21.5, d(21.5) + 6.7], mast2: [-18.5, br + 5.4], side: [-15.2, t2 + 1], stern: [-24.7, d(-24.7) + 1.2], anchF: [23.6, d(23.6) + 3.4], anchA: [-24, t1 + 1.4], nuc: [-18.5, br + 2.6] }, eye: [-16, t2 + 1.7],
@@ -58,7 +58,7 @@ export const TPL = [
     L: 90, B: 15.2, D: 7.6, T: 6.0, H: 30, bow: 'bulb', rake: 4.5, stern: 'cruiser', shA: 0.5, shF: 1.4, fc: { x0: 34, h: 2.4 }, par: [-22, 18], ts: 0.58, bp: 1.9, sec: 'box', br: 1.2,
     bulwarks: [[34, 44.6, 1.2], [-44.7, -40.5, 1.0]], opts: { colors: C('#1f2a33', '#f2f2ef', '#7d3b2c', '#8b2a22') },
     build: ({ deck: d, hb }) => { const z1 = d(-34), t1 = z1 + 2.8, t2 = t1 + 2.7, t3 = t2 + 2.7, br = t3 + 2.7; return {
-      blocks: [{ k: 't1', x0: -42, x1: -26, h: 2.8, w: 11, fw: 1.3, win: true }, { k: 't2', x0: -38.5, x1: -27, h: 2.7, w: 10.4, win: true },
+      blocks: [{ k: 't1', z0: z1, x0: -42, x1: -26, h: 2.8, w: 11, fw: 1.3, win: true }, { k: 't2', x0: -38.5, x1: -27, h: 2.7, w: 10.4, win: true },
         { k: 't3', x0: -37.5, x1: -28, h: 2.7, w: 10.8, win: true, lip: { s: 0.3, f: 0.7, a: 0.4 } }, { k: 'bridge', x0: -36.5, x1: -28.6, h: 2.7, w: 14, sl: -0.4, visor: 0.9 }],
       wings: { x0: -31.5, x1: -28.8, z: t3, span: 7.6, w: 7 }, anchors: [41, d(41) - 2.6],
       lights: { mast1: [38.6, d(38.6) + 11.8], mast2: [-33, br + 7.2], side: [-28.9, t3 + 1], stern: [-44.6, d(-44.6) + 1.5], anchF: [43.4, d(43.4) + 4], anchA: [-44, d(-44) + 4], nuc: [-33, br + 3.4] }, eye: [-29.8, t3 + 1.7],
@@ -74,7 +74,7 @@ export const TPL = [
     L: 100, B: 17.2, D: 8.6, T: 6.4, H: 36, bow: 'bulb', rake: 5, stern: 'cruiser', shA: 0.3, shF: 1.3, fc: { x0: 40, h: 2.6 }, par: [-20, 15], ts: 0.68, bp: 1.9, sec: 'box', br: 1.4,
     bulwarks: [[40, 49.6, 1.2]], opts: { colors: C('#2f4f7a', '#f4f4f2', '#6b3a2f', '#8b2a22') },
     build: ({ deck: d, hb }) => { const z1 = d(-32), t1 = z1 + 2.8, t2 = t1 + 2.8, t3 = t2 + 2.8, t4 = t3 + 2.8, br = t4 + 2.8, groups = [[-14.4, 2, 3], [-1.2, 2, 3], [12, 2, 3], [25.2, 2, 3], [34.8, 1, 2]]; return {
-      blocks: [{ k: 't1', x0: -38, x1: -26, h: 2.8, w: 15.2, win: true }, { k: 't2', x0: -36.8, x1: -26.5, h: 2.8, w: 12.8, win: true }, { k: 't3', x0: -36.2, x1: -27, h: 2.8, w: 13, win: true, lip: { s: 0.4, f: 0.6, a: 0.3 } },
+      blocks: [{ k: 't1', z0: z1, x0: -38, x1: -26, h: 2.8, w: 15.2, win: true }, { k: 't2', x0: -36.8, x1: -26.5, h: 2.8, w: 12.8, win: true }, { k: 't3', x0: -36.2, x1: -27, h: 2.8, w: 13, win: true, lip: { s: 0.4, f: 0.6, a: 0.3 } },
         { k: 't4', x0: -35.6, x1: -27.4, h: 2.8, w: 13, win: true, lip: { s: 0.4, f: 0.6, a: 0.3 } }, { k: 'bridge', x0: -35, x1: -27.6, h: 2.8, w: 16.8, sl: -0.4, visor: 1.0 }],
       anchors: [46, d(46) - 3],
       lights: { mast1: [44.2, d(44.2) + 12.8], mast2: [-31, br + 6.1], side: [-28, t4 + 1], stern: [-49.6, d(-49.6) + 1.5], anchF: [48.2, d(48.2) + 4], anchA: [-49, d(-49) + 4], nuc: [-31, br + 3] }, eye: [-28.8, t4 + 1.7],
@@ -90,7 +90,7 @@ export const TPL = [
     L: 70, B: 12.6, D: 5.8, T: 4.7, H: 22, bow: 'bulb', rake: 3.5, stern: 'cruiser', shA: 0.3, shF: 1.0, fc: { x0: 27, h: 2.0 }, poop: { x1: -21, h: 1.6 }, par: [-18, 14], ts: 0.62, bp: 1.9, sec: 'box', br: 1.0,
     bulwarks: [[27, 34.6, 1.1], [-34.7, -21.4, 1.0]], opts: { colors: C('#22282d', '#f1f0ec', '#3f6a4c', '#8b2a22') },
     build: ({ deck: d, hb }) => { const z1 = d(-28), t1 = z1 + 2.6, t2 = t1 + 2.6, br = t2 + 2.6; return {
-      blocks: [{ k: 't1', x0: -33, x1: -21.5, h: 2.6, w: 9.2, fw: 1.3, win: true }, { k: 't2', x0: -31, x1: -23, h: 2.6, w: 8.6, fw: 1.12, win: true, lip: { s: 0.2, f: 0.5, a: 0 } },
+      blocks: [{ k: 't1', z0: z1, x0: -33, x1: -21.5, h: 2.6, w: 9.2, fw: 1.3, win: true }, { k: 't2', x0: -31, x1: -23, h: 2.6, w: 8.6, fw: 1.12, win: true, lip: { s: 0.2, f: 0.5, a: 0 } },
         { k: 'bridge', x0: -28.6, x1: -23.4, h: 2.6, w: 12.2, sl: -0.35, visor: 0.7 }],
       wings: { x0: -25.4, x1: -23.6, z: t2, span: 6.3, w: 6.1 }, anchors: [32, d(32) - 2],
       lights: { mast1: [29.9, d(29.9) + 9], mast2: [-26.6, br + 5.4], side: [-23.8, t2 + 1], stern: [-34.7, d(-34.7) + 1.2], anchF: [33.6, d(33.6) + 3.4], anchA: [-34, t1 + 1], nuc: [-26.6, br + 2.6] }, eye: [-24.6, t2 + 1.7],
@@ -106,20 +106,20 @@ export const TPL = [
     L: 40, B: 8, D: 3.4, T: 1.9, H: 14, bow: 'raked', rake: 2.5, stern: 'transom', tb: 1.1, shA: 0.2, shF: 0.8, par: [-8, 6], ts: 0.82, bp: 1.7, sec: 'round',
     opts: { colors: C('#e4e6e8', '#eceeef', '#6b7378', '#2c5684') },
     build: ({ deck: d, hb }) => { const z1 = d(-4), t1 = z1 + 2.5, t2 = t1 + 2.4, br = t2 + 2.2; return {
-      blocks: [{ k: 't1', x0: -17, x1: 12, h: 2.5, w: 7.2, fw: 0.86, sl: 1.4, win: true }, { k: 't2', x0: -12, x1: 5.5, h: 2.4, w: 6.6, sl: 1.2, win: true, lip: { s: 0.3, f: 0.4, a: 1.2 } },
+      blocks: [{ k: 't1', z0: z1, x0: -17, x1: 12, h: 2.5, w: 7.2, fw: 0.86, sl: 1.4, win: true }, { k: 't2', x0: -12, x1: 5.5, h: 2.4, w: 6.6, sl: 1.2, win: true, lip: { s: 0.3, f: 0.4, a: 1.2 } },
         { k: 'bridge', x0: 1.6, x1: 5.3, z0: t2, h: 2.2, w: 5.6, sl: 0.8, visor: 0.5 }],
       anchors: [16.8, d(16.8) - 1],
-      lights: { mast1: [3, br + 3.6], side: [4.6, t2 + 1], stern: [-19.8, d(-19.8) + 1], anchF: [18, d(18) + 2.5], nuc: [3, br + 1.8] }, eye: [4, t2 + 1.6],
-      fits: [...radarMast(2.6, br, 3, 40), ...common(40, d, hb, [15, 6, -10, -18.5]), F('windlass', 15.6, 0, d(15.6), { l: 1.2, w: 1.4, h: 0.8 }),
+      lights: { mast1: [3.4, br + 3.6], side: [4.6, t2 + 1], stern: [-19.8, d(-19.8) + 1], anchF: [18, d(18) + 2.5], nuc: [3.4, br + 1.8] }, eye: [4, t2 + 1.6],
+      fits: [...radarMast(3.4, br, 3, 40), ...common(40, d, hb, [15, 6, -10, -18.5]), F('windlass', 15.6, 0, d(15.6), { l: 1.2, w: 1.4, h: 0.8 }),
         ...[-9.5, -6.5, -3.5, -0.5].flatMap((x) => both('raft', x, 2.85, t2, {})), ...[-11, -9, -7, -5, -3].flatMap((x) => both('locker', x, 1.3, t2, { l: 1.6, w: 0.5, h: 0.45 })),
-        ...both('funnel', -11.4, 2.4, t2, { l: 1.0, w: 0.7, h: 1.3 }), ...both('searchlight', 4.6, 2.2, br, {}), F('horn', 3.6, 0.6, br, {}), ...both('whip', 1.2, 2, br, { h: 3 })] }; } },
+        ...both('funnel', -11.4, 2.4, t2, { l: 1.0, w: 0.7, h: 1.3 }), ...both('searchlight', 4.6, 2.2, br, {}), F('horn', 3.6, 0.6, br, {}), ...both('whip', 2.0, 2, br, { h: 3 })] }; } },
     ship: { loa: 40, B: 8, D: 3.4, T: 1.9, cb: 0.52, engines: 2, ptype: 'fpp', vmax: 14, rpm: 1800, gear: 3, accTime: 20, propD: 1.1, PD: 0.9, AR: 1.2, hR: 1.0, rudders: 2, rudMax: 35, rudTime: 15, respTime: 4, turnDia: 120, bowAnchors: 1, sternAnchors: 0, chainLen: 110, anchorW: 0.3, chainW: 7, lineR: 10, lineLen: 80, windAL: 215, windAF: 48, windXc: -1, flags: 'vn' } },
 
   { id: 'lai30', type: 'Tàu lai', name: 'Tàu lai 30 m, 2 chân vịt (mẫu)', spec: {
     L: 30, B: 10, D: 4.6, T: 3.6, H: 16, bow: 'tug', rake: 2.2, stern: 'transom', tb: 1.15, shA: 0.15, shF: 1.1, fc: { x0: 1.5, h: 1.0 }, par: [-5, 3], ts: 0.78, bp: 1.5, sec: 'round',
     bulwarks: [[-14.7, 14.4, 0.85]], opts: { colors: C('#26292c', '#f0ebdf', '#6d3a2c', '#9c3428') },
     build: ({ deck: d, hb }) => { const z1 = d(-4), t1 = z1 + 2.5, br = t1 + 2.6; return {
-      blocks: [{ k: 't1', x0: -4.5, x1: 9, h: 2.5, w: 7.4, sl: 0.5, win: true, tw: 0.96, lip: { s: 0.3, f: 0.3, a: 0.4 } }, { k: 'bridge', x0: -0.5, x1: 6.5, z0: t1, h: 2.6, w: 7.6, sl: -0.6, sa: -0.3, win: true, visor: 0.5 }],
+      blocks: [{ k: 't1', z0: z1, x0: -4.5, x1: 9, h: 2.5, w: 7.4, sl: 0.5, win: true, tw: 0.96, lip: { s: 0.3, f: 0.3, a: 0.4 } }, { k: 'bridge', x0: -0.5, x1: 6.5, z0: t1, h: 2.6, w: 7.6, sl: -0.6, sa: -0.3, win: true, visor: 0.5 }],
       anchors: [12.6, d(12.6) - 1.4],
       lights: { mast1: [2.6, br + 4.4], mast2: [2.6, br + 3.2], side: [5.8, t1 + 0.9], stern: [-14.6, d(-14.6) + 1.3], anchF: [13.4, d(13.4) + 2.5], nuc: [2.4, br + 1.8] }, eye: [5, t1 + 1.7],
       fits: [...both('funnel', -3.2, 2.7, t1, { l: 1.5, w: 1.1, h: 3.4 }), ...radarMast(2.4, br, 3.8, 30), ...common(30, d, hb, [11.6, 3, -6, -12]),
@@ -131,7 +131,7 @@ export const TPL = [
 
   { id: 'phao62', type: 'Tàu pháo', name: 'Tàu pháo nhỏ 62 m (mẫu)', model: () => {
       const m = makeTemplate(); let n = 0; const add = (kind, x, y, z, o) => m.fits.push(Object.assign({ id: 'x' + (++n).toString(36) + Math.random().toString(36).slice(2, 5), kind, x, y, z, rot: 0 }, o || {}));
-      for (const s of [-1, 1]) { add('chaff', 6.6, s * 3.0, 7.6, { l: 1.2, w: 1.0, h: 1.0, rows: 2, cols: 3, el: 50, rot: s * 50 }); add('raft', -9.5, s * 3.1, 7.6); add('raft', -11.5, s * 3.1, 7.6); add('locker', -15, s * 3.9, 5.0, { l: 1.3, w: 0.7, h: 0.85 }); add('vent', 16.5, s * 2.4, 5.6, { n: 1, h: 0.9, l: 0.55, w: 0.55 }); add('whip', 4, s * 2.9, 12.4, { h: 4 }); }
+      for (const s of [-1, 1]) { add('chaff', 6.6, s * 3.0, 7.6, { l: 1.2, w: 1.0, h: 1.0, rows: 2, cols: 3, el: 50, rot: s * 50 }); add('raft', -9.5, s * 3.1, 7.6); add('raft', -11.5, s * 3.1, 7.6); add('locker', -15, s * 3.9, 5.0, { l: 1.3, w: 0.7, h: 0.85 }); add('vent', 16.5, s * 2.4, 5.6, { n: 1, h: 0.9, l: 0.55, w: 0.55 }); add('whip', 1.0, s * 2.9, 12.4, { h: 4 }); }
       add('staff', 30.4, 0, 6.85, { h: 2.4 }); add('staff', -30.6, 0, 5.0, { h: 3.2 }); add('dome', 2.6, 0, 12.4, { l: 0.8, w: 0.8, h: 1.2 }); add('dome', -2, 1.6, 10, { l: 0.9, w: 0.9, h: 1.3 }); add('breakwater', 17.6, 0, 5.75, { l: 1.2, w: 6.6, h: 0.9 });
       return m;
     },
@@ -141,10 +141,10 @@ export const TPL = [
     L: 50, B: 8.6, D: 4.4, T: 2.4, H: 18, bow: 'raked', rake: 4, stern: 'transom', tb: 0.85, shA: 0.1, shF: 1.4, par: [-10, 4], ts: 0.86, bp: 1.6, sec: 'v', bulwark: [16, 24.6, 0.9],
     opts: { colors: C('#9aa3a9', '#a9b1b6', '#5f686e', '#1d2124'), hullNo: '201' },
     build: ({ deck: d, hb }) => { const z1 = d(-1), t1 = z1 + 2.4, br = t1 + 2.4; return {
-      blocks: [{ k: 't1', x0: -10, x1: 8.5, h: 2.4, w: 6.6, fw: 0.9, sl: 1, sa: 0.3, tw: 0.86 }, { k: 'bridge', x0: 2.5, x1: 7.6, z0: t1, h: 2.4, w: 6.0, sl: 0.9, sa: 0.3, tw: 0.86, visor: 0.3 }],
+      blocks: [{ k: 't1', z0: z1, x0: -10, x1: 8.5, h: 2.4, w: 6.6, fw: 0.9, sl: 1, sa: 0.3, tw: 0.86 }, { k: 'bridge', x0: 2.5, x1: 7.6, z0: t1, h: 2.4, w: 6.0, sl: 0.9, sa: 0.3, tw: 0.86, visor: 0.3 }],
       wings: { x0: 4.8, x1: 7.2, z: t1, span: 3.9, w: 3.0, t: 0.35 }, anchors: [20.5, d(20.5) - 1.6],
       lights: { mast1: [-0.5, t1 + 8.6], side: [6.8, t1 + 0.9], stern: [-24.7, d(-24.7) + 1], anchF: [23, d(23) + 2.6], anchA: [-24, d(-24) + 2], nuc: [-0.5, t1 + 5.5] }, eye: [5.8, t1 + 1.6],
-      fits: [F('latmast', -0.5, 0, t1, { l: 1.4, w: 1.4, h: 7 }), F('radar', -0.5, 0, t1 + 7.1, { l: 2.6, w: 0.5, h: 1 }), F('dome', 4, 0, br, { l: 1.2, w: 1.2, h: 1.8 }), F('dome', 1.2, 0, br, { l: 0.7, w: 0.7, h: 1.1 }),
+      fits: [F('latmast', -0.5, 0, t1, { l: 1.4, w: 1.4, h: 7 }), F('radar', -0.5, 0, t1 + 7.1, { l: 2.6, w: 0.5, h: 1 }), F('dome', 4, 0, br, { l: 1.2, w: 1.2, h: 1.8 }), F('dome', 3.0, 0, br, { l: 0.7, w: 0.7, h: 1.1 }),
         F('turret', 13.5, 0, d(13.5), { l: 3, w: 2.6, h: 1.7, n: 1, bl: 3.2 }), F('turret', -21.5, 0, d(-21.5), { l: 2, w: 1.8, h: 1.4, n: 1, bl: 1.8, rot: 180 }), F('dome', -18.6, 0, d(-18.6), { l: 1.0, w: 1.0, h: 1.9 }),
         ...both('launcher', -15, 2.3, d(-15), { l: 5.6, w: 1.9, h: 2, rows: 2, cols: 2, el: 10, rot: 6 }), ...both('whip', -3, 2.4, t1, { h: 5 }), ...both('whip', -7, 2.2, t1, { h: 4 }), ...both('raft', -8, 2.6, t1, {}), ...both('raft', -6.2, 2.6, t1, {}),
         ...both('searchlight', 6.2, 3.6, t1 + 0.35, {}), F('horn', 3.2, 0.8, br, {}), F('windlass', 19, 0, d(19), { l: 1.1, w: 1.3, h: 0.7 }),
@@ -155,7 +155,7 @@ export const TPL = [
     L: 35, B: 7.4, D: 3.8, T: 1.9, H: 14, bow: 'raked', rake: 3, stern: 'transom', tb: 0.8, shF: 1.1, par: [-7, 3], ts: 0.86, bp: 1.6, sec: 'v', bulwark: [11, 17.2, 0.8],
     opts: { colors: C('#8d969c', '#9aa3a9', '#5f686e', '#1d2124'), hullNo: '332' },
     build: ({ deck: d, hb }) => { const z1 = d(0), t1 = z1 + 2.2, br = t1 + 2.2; return {
-      blocks: [{ k: 't1', x0: -5.5, x1: 7, h: 2.2, w: 5.6, fw: 0.9, sl: 0.8, sa: 0.25, tw: 0.86 }, { k: 'bridge', x0: 2, x1: 6.2, z0: t1, h: 2.2, w: 5.0, sl: 0.8, sa: 0.25, tw: 0.86, visor: 0.25 }],
+      blocks: [{ k: 't1', z0: z1, x0: -5.5, x1: 7, h: 2.2, w: 5.6, fw: 0.9, sl: 0.8, sa: 0.25, tw: 0.86 }, { k: 'bridge', x0: 2, x1: 6.2, z0: t1, h: 2.2, w: 5.0, sl: 0.8, sa: 0.25, tw: 0.86, visor: 0.25 }],
       wings: { x0: 4.2, x1: 5.9, z: t1, span: 3.2, w: 2.5, t: 0.3 }, anchors: [14.5, d(14.5) - 1.3],
       lights: { mast1: [-1, t1 + 6.1], side: [5.6, t1 + 0.8], stern: [-17.4, d(-17.4) + 0.9], anchF: [16.3, d(16.3) + 2], nuc: [-1, t1 + 4] }, eye: [4.6, t1 + 1.5],
       fits: [F('latmast', -1, 0, t1, { l: 1.1, w: 1.1, h: 5 }), F('radar', -1, 0, t1 + 5.1, { l: 2, w: 0.4, h: 0.9 }), F('dome', 3.6, 0, br, { l: 0.8, w: 0.8, h: 1.3 }),
@@ -168,7 +168,7 @@ export const TPL = [
     L: 45, B: 8.2, D: 4.4, T: 2.4, H: 17, bow: 'raked', rake: 3.6, stern: 'transom', tb: 0.9, shF: 1.4, par: [-9, 4], ts: 0.86, bp: 1.6, sec: 'v', bulwark: [14, 22, 0.9],
     opts: { colors: C('#d3d7da', '#e1e4e6', '#3f7a4c', '#23282b'), hullNo: '4032', hullNoCol: '#1d2a3a' },
     build: ({ deck: d, hb }) => { const z1 = d(-0.5), t1 = z1 + 2.5, br = t1 + 2.4; return {
-      blocks: [{ k: 't1', x0: -9, x1: 8, h: 2.5, w: 6.4, fw: 0.92, sl: 1.1, sa: 0.3, tw: 0.88 }, { k: 'bridge', x0: 2.2, x1: 7.4, z0: t1, h: 2.4, w: 6.0, sl: 1, sa: 0.3, tw: 0.88, visor: 0.3 }],
+      blocks: [{ k: 't1', z0: z1, x0: -9, x1: 8, h: 2.5, w: 6.4, fw: 0.92, sl: 1.1, sa: 0.3, tw: 0.88 }, { k: 'bridge', x0: 2.2, x1: 7.4, z0: t1, h: 2.4, w: 6.0, sl: 1, sa: 0.3, tw: 0.88, visor: 0.3 }],
       wings: { x0: 4.6, x1: 7, z: t1, span: 3.9, w: 3.0, t: 0.35 }, anchors: [18.5, d(18.5) - 1.6],
       lights: { mast1: [-1, t1 + 7.6], side: [6.6, t1 + 0.9], stern: [-22.2, d(-22.2) + 1], anchF: [21, d(21) + 2.6], anchA: [-21.6, d(-21.6) + 2], nuc: [-1, t1 + 5] }, eye: [5.6, t1 + 1.6],
       fits: [F('latmast', -1, 0, t1, { l: 1.4, w: 1.4, h: 6.2 }), F('radar', -1, 0, t1 + 6.3, { l: 2.4, w: 0.5, h: 1 }), F('dome', 4.5, 0, br, { l: 1.1, w: 1.1, h: 1.7 }), F('dome', -5, 1.6, t1, { l: 0.9, w: 0.9, h: 1.3 }), F('dome', -5, -1.6, t1, { l: 0.9, w: 0.9, h: 1.3 }),
@@ -182,30 +182,49 @@ export const TPL = [
     L: 100, B: 13, D: 7.6, T: 3.9, H: 34, bow: 'raked', rake: 7, stern: 'transom', tb: 0.85, shA: 0.2, shF: 2.6, par: [-22, 10], ts: 0.82, bp: 1.65, sec: 'v', bulwark: [36, 49, 1.1],
     opts: { colors: C('#8d969c', '#9aa3a9', '#5f686e', '#1d2124'), hullNo: '015' },
     build: ({ deck: d, hb }) => { const z1 = d(4), t1 = z1 + 2.6, t2 = t1 + 2.6, br = t2 + 2.6, hg = d(-20) + 6.2; return {
-      blocks: [{ k: 'box', x0: -28, x1: -12, h: 6.2, w: 10.4, sl: 0.4, tw: 0.88 }, { k: 't1', x0: -12, x1: 21, h: 2.6, w: 11, fw: 0.9, sl: 1.4, tw: 0.9 }, { k: 't2', x0: -3.5, x1: 15.5, z0: t1, h: 2.6, w: 9.4, sl: 1.2, sa: 0.4, tw: 0.88 },
+      blocks: [{ k: 'box', x0: -28, x1: -12, h: 6.2, w: 10.4, sl: 0.4, tw: 0.88 }, { k: 't1', z0: z1, x0: -12, x1: 21, h: 2.6, w: 11, fw: 0.9, sl: 1.4, tw: 0.9 }, { k: 't2', x0: -3.5, x1: 15.5, z0: t1, h: 2.6, w: 9.4, sl: 1.2, sa: 0.4, tw: 0.88 },
         { k: 'bridge', x0: 9, x1: 15, z0: t2, h: 2.6, w: 8.6, sl: 1, sa: 0.4, tw: 0.88, visor: 0.4 }],
       wings: { x0: 12, x1: 14.6, z: t2, span: 5.8, w: 4.2, t: 0.4 }, anchors: [44, d(44) - 2.4],
       lights: { mast1: [4, t2 + 12.3], mast2: [-20, hg + 6], side: [14.4, t2 + 0.9], stern: [-49.6, d(-49.6) + 1.3], anchF: [47, d(47) + 3], anchA: [-49, d(-49) + 3], nuc: [4, t2 + 7] }, eye: [13.6, t2 + 1.7],
       fits: [F('funnel', -6.6, 0, t1, { l: 4.4, w: 3.2, h: 4, n: 0 }), F('latmast', 4, 0, t2, { l: 2.4, w: 2.4, h: 10 }), F('radar', 4, 0, t2 + 10.1, { l: 4, w: 0.6, h: 1.4 }), F('latmast', -20, 0, hg, { l: 1.6, w: 1.6, h: 5 }), F('radar', -20, 0, hg + 5.1, { l: 2.6, w: 0.5, h: 1 }),
         F('dome', 12, 0, br, { l: 2, w: 2, h: 2.6 }), F('dome', 9.4, 0, br, { l: 1, w: 1, h: 1.5 }), F('turret', 29, 0, d(29), { l: 5, w: 4, h: 2.6, n: 1, bl: 6 }), F('turret', -16, 0, hg, { l: 1.8, w: 1.8, h: 2, n: 1, bl: 1.8, rot: 180 }),
         F('launcher', 18, 0, t1, { l: 2.4, w: 2.6, h: 1.6, rows: 2, cols: 4, el: 0 }), ...both('launcher', 0, 3.2, t2, { l: 5, w: 2, h: 2.2, rows: 2, cols: 2, el: 15, rot: 80 }),
-        ...both('torpedo', -10, 4.4, d(-10), { l: 4, w: 1.8, h: 1.2, n: 3, rot: 70 }), ...both('boat', -12.5, 5.2, t1, { l: 6, w: 2, h: 1.6 }), ...sideO('davit', -12.5, 4.2, t1, { l: 4, w: 1.6, h: 3 }),
+        ...both('torpedo', -10, 4.4, d(-10), { l: 4, w: 1.8, h: 1.2, n: 3, rot: 70 }), ...both('boat', -10, 5.2, t1, { l: 6, w: 2, h: 1.6 }), ...sideO('davit', -10, 4.2, t1, { l: 4, w: 1.6, h: 3 }),
         ...both('whip', -1, 4, t2, { h: 6 }), ...both('whip', -9, 4.4, t1, { h: 5 }), ...both('searchlight', 14, 5.4, t2 + 0.4, {}), ...both('raft', 2, 5.1, t1, {}), ...both('raft', 4, 5.1, t1, {}), ...both('raft', 6, 5.1, t1, {}),
-        ...both('dome', -4, 3.2, t2, { l: 1.2, w: 1.2, h: 1.6 }), F('horn', 11, 1, br, {}), ...both('windlass', 41, 1.6, d(41), { l: 1.6, w: 1.8, h: 1 }), F('breakwater', 34.5, 0, d(34.5), { l: 1.4, w: 8, h: 1.0 }),
+        ...both('dome', -2.6, 3.0, t2, { l: 1.2, w: 1.2, h: 1.6 }), F('horn', 11, 1, br, {}), ...both('windlass', 41, 1.6, d(41), { l: 1.6, w: 1.8, h: 1 }), F('breakwater', 34.5, 0, d(34.5), { l: 1.4, w: 8, h: 1.0 }),
         ...common(100, d, hb, [39, 24, -30, -46]), ...navyKit({ L: 100, d, hb, x0: -12, x1: 21, t1, w: 11 * 0.9 * 0.9 })] }; } },
     ship: { loa: 100, B: 13, D: 7.6, T: 3.9, cb: 0.47, engines: 2, ptype: 'fpp', vmax: 28, rpm: 1000, gear: 4, accTime: 60, propD: 3.0, PD: 1.1, AR: 6, hR: 2.6, rudders: 2, rudMax: 35, rudTime: 15, respTime: 5, turnDia: 420, bowAnchors: 1, sternAnchors: 0, chainLen: 220, anchorW: 2, chainW: 30, lineR: 20, lineLen: 170, windAL: 1050, windAF: 210, windXc: -2, flags: 'hq' } },
 
-  { id: 'dobo80', type: 'Tàu đổ bộ', name: 'Tàu đổ bộ 80 m, cầu dẫn mũi (mẫu)', spec: {
-    L: 80, B: 14.6, D: 6.6, T: 2.9, H: 26, bow: 'flat', bw: 0.55, stern: 'transom', tb: 1.0, shA: 0.2, shF: 1.0, par: [-25, 22], ts: 0.88, bp: 2.2, sec: 'box', br: 0.8, bulwarks: [[26, 39.4, 1.2], [-39.7, -30, 1.0]],
-    opts: { colors: C('#7b8995', '#8a98a3', '#56626c', '#1d2124'), hullNo: '571' },
-    build: ({ deck: d, hb }) => { const z1 = d(-28), t1 = z1 + 2.7, t2 = t1 + 2.7, br = t2 + 2.6; return {
-      blocks: [{ k: 't1', x0: -38, x1: -18, h: 2.7, w: 13, sl: 0.6, tw: 0.92 }, { k: 't2', x0: -36, x1: -22, h: 2.7, w: 11.6, sl: 0.6, tw: 0.92, lip: { s: 0.3, f: 0.4, a: 0.3 } }, { k: 'bridge', x0: -33, x1: -24.5, z0: t2, h: 2.6, w: 12.4, sl: 0.8, tw: 0.92, visor: 0.4 }],
-      wings: { x0: -27, x1: -24.8, z: t2, span: 7.2, w: 6.2 }, anchors: [36.5, d(36.5) - 2.2],
-      lights: { mast1: [-29, br + 7.3], side: [-25, t2 + 1], stern: [-39.6, d(-39.6) + 1.3], anchF: [38, d(38) + 3.5], anchA: [-39, d(-39) + 3], nuc: [-29, br + 4.5] }, eye: [-25.8, t2 + 1.7],
-      fits: [F('funnel', -36.9, 0, t1, { l: 2, w: 2.8, h: 4, n: 0 }), F('latmast', -29, 0, br, { l: 1.8, w: 1.8, h: 6 }), F('radar', -29, 0, br + 6.1, { l: 3, w: 0.5, h: 1.1 }), F('dome', -26, 0, br, { l: 1.4, w: 1.4, h: 2 }), F('dome', -31.6, 1.6, br, { l: 0.9, w: 0.9, h: 1.3 }),
-        F('ramp', 39.2, 0, d(39.2) - 0.2, { l: 0.5, w: 6.5, h: 5.5, el: 8 }), F('hatch', 6, 0, d(6), { l: 16, w: 8, h: 0.9 }), F('hatch', -8, 0, d(-8), { l: 6, w: 5, h: 0.7 }),
-        ...both('crane', -14, 5, d(-14), { l: 12, w: 1.8, h: 4, el: 25, rot: 160 }), ...both('turret', 30, 3.8, d(30), { l: 1.8, w: 1.6, h: 1.4, n: 2, bl: 2 }), ...both('turret', -20, 6, t1, { l: 1.6, w: 1.4, h: 1.3, n: 2, bl: 1.8, rot: 90 }),
-        ...both('raft', -34.8, 5, t2, {}), ...both('raft', -21, 5.6, t1, {}), ...both('searchlight', -25.6, 6.6, t2 + 0.5, {}), ...both('whip', -31, 4, br, { h: 5 }), ...both('windlass', 34.5, 2, d(34.5), { l: 1.6, w: 1.8, h: 1 }),
-        ...both('windlass', -38.6, 3.4, d(-38.6), { l: 1.6, w: 2, h: 1.1, rot: 90 }), ...common(80, d, hb, [24, 10, -16, -36.5]), ...navyKit({ L: 80, d, hb, x0: -38, x1: -18, t1, w: 13 * 0.92 })] }; } },
-    ship: { loa: 80, B: 14.6, D: 6.6, T: 2.9, cb: 0.7, engines: 2, ptype: 'fpp', vmax: 15, rpm: 1000, gear: 4, accTime: 50, propD: 2.2, PD: 0.9, AR: 5, hR: 2.3, rudders: 2, rudMax: 35, rudTime: 15, respTime: 5, turnDia: 330, bowAnchors: 1, sternAnchors: 1, chainLen: 250, anchorW: 2, chainW: 26, lineR: 18, lineLen: 160, windAL: 820, windAF: 235, windXc: -6, flags: 'hq' } }
+  { id: 'dobo80', type: 'Tàu đổ bộ', name: 'Tàu đổ bộ 80 m, mũi bằng cầu dẫn (mẫu)', spec: {
+    L: 80, B: 14.6, D: 6.6, T: 2.9, H: 26, bow: 'flat', bw: 0.86, stern: 'transom', tb: 1.0, shA: 0.2, shF: 0.6, par: [-25, 26], ts: 0.9, bp: 2.6, sec: 'box', br: 0.8,
+    bulwarks: [[-24, 39.6, 1.6], [-39.7, -36.5, 1.0]], opts: { colors: C('#7b8995', '#8a98a3', '#56626c', '#1d2124'), hullNo: '571', bowRail: false },
+    build: ({ deck: d, hb }) => { const z1 = d(-30), t1 = z1 + 2.7, t2 = t1 + 2.7, br = t2 + 2.6, xr = 39.75, wr = 2 * hb(39.4) - 0.7; return {
+      blocks: [{ k: 't1', z0: z1, x0: -38, x1: -24, h: 2.7, w: 13, sl: 0.6, tw: 0.94 }, { k: 't2', x0: -36.5, x1: -26.5, h: 2.7, w: 11.6, sl: 0.6, tw: 0.94, lip: { s: 0.3, f: 0.5, a: 0.3 } },
+        { k: 'bridge', x0: -34.5, x1: -27.5, h: 2.6, w: 12.4, sl: 0.8, tw: 0.94, visor: 0.4 }],
+      wings: { x0: -29.6, x1: -27.6, z: t2, span: 7.2, w: 6.2 }, anchors: [37, d(37) - 2.4],
+      lights: { mast1: [-31, br + 7.3], side: [-27.8, t2 + 1], stern: [-39.6, d(-39.6) + 1.3], anchF: [36, d(36) + 3.5], anchA: [-39, d(-39) + 3], nuc: [-31, br + 4.5] }, eye: [-28.6, t2 + 1.7],
+      fits: [F('ramp', xr, 0, d(xr) - 0.1, { l: 0.45, w: wr, h: 3.0, el: 8, n: 1 }), F('funnel', -36.6, 0, t2, { l: 1.8, w: 2.6, h: 3.6, n: 0 }),
+        F('latmast', -31, 0, br, { l: 1.8, w: 1.8, h: 6 }), F('radar', -31, 0, br + 6.1, { l: 3, w: 0.5, h: 1.1 }), F('dome', -28.6, 0, br, { l: 1.4, w: 1.4, h: 2 }), F('dome', -33.4, 1.6, br, { l: 0.9, w: 0.9, h: 1.3 }),
+        ...both('crane', -18, 5.6, d(-18), { l: 13, w: 1.8, h: 4.2, el: 25, rot: 160 }), ...both('turret', 33, 5.4, d(33), { l: 1.8, w: 1.6, h: 1.4, n: 2, bl: 2 }), ...both('turret', -25.5, 5.4, t1, { l: 1.6, w: 1.4, h: 1.3, n: 2, bl: 1.8, rot: 90 }),
+        ...both('raft', -36, 5.0, t2, {}), ...both('raft', -25, 5.8, t1, {}), ...both('searchlight', -28.2, 6.6, t2 + 0.5, {}), ...both('whip', -33, 4, br, { h: 5 }), ...both('windlass', 36.2, 3.6, d(36.2), { l: 1.6, w: 1.8, h: 1 }),
+        ...both('windlass', -38.6, 3.4, d(-38.6), { l: 1.6, w: 2, h: 1.1, rot: 90 }), ...both('vent', -10, 6, d(-10), { n: 2, rot: 90 }), ...both('vent', 10, 6, d(10), { n: 2, rot: 90 }),
+        ...common(80, d, hb, [28, 6, -16, -37.5]).filter((f) => !(f[0] === 'staff' && f[1] > 0)), ...navyKit({ L: 80, d, hb, x0: -38, x1: -24, t1, w: 13 * 0.94 })] }; } },
+    ship: { loa: 80, B: 14.6, D: 6.6, T: 2.9, cb: 0.74, engines: 2, ptype: 'fpp', vmax: 13, rpm: 1000, gear: 4, accTime: 50, propD: 2.2, PD: 0.9, AR: 5, hR: 2.3, rudders: 2, rudMax: 35, rudTime: 15, respTime: 5, turnDia: 300, bowAnchors: 1, sternAnchors: 1, chainLen: 250, anchorW: 2, chainW: 26, lineR: 18, lineLen: 160, windAL: 820, windAF: 260, windXc: -6, flags: 'hq' } },
+
+  { id: 'dobo100', type: 'Tàu đổ bộ', name: 'Tàu đổ bộ 100 m, cửa mũi hai cánh (mẫu)', spec: {
+    L: 100, B: 15.4, D: 7.4, T: 3.1, H: 32, bow: 'raked', rake: 2.6, stern: 'transom', tb: 1.0, shA: 0.2, shF: 1.6, par: [-30, 18], ts: 0.88, bp: 1.3, sec: 'box', br: 0.9,
+    bulwarks: [[30, 49.4, 1.2]], opts: { colors: C('#8d969c', '#9aa3a9', '#5f686e', '#1d2124'), hullNo: '572', bowDoors: { x0: 40.5, z0: 1.4, z1: 6.6 } },
+    build: ({ deck: d, hb }) => { const z1 = d(-34), t1 = z1 + 2.7, t2 = t1 + 2.7, t3 = t2 + 2.6, br = t3 + 2.6; return {
+      blocks: [{ k: 't1', z0: z1, x0: -46, x1: -22, h: 2.7, w: 14, sl: 0.6, tw: 0.95 }, { k: 't2', x0: -44, x1: -26, h: 2.7, w: 12.4, sl: 0.6, tw: 0.95, lip: { s: 0.3, f: 0.5, a: 0.3 } },
+        { k: 't3', x0: -42, x1: -30, h: 2.6, w: 11.4, sl: 0.6, tw: 0.95, lip: { s: 0.3, f: 0.5, a: 0.3 } }, { k: 'bridge', x0: -39.5, x1: -31.5, h: 2.6, w: 13, sl: 0.8, tw: 0.95, visor: 0.45 }],
+      wings: { x0: -33.6, x1: -31.6, z: t3, span: 7.6, w: 6.5 }, anchors: [38.4, d(38.4) - 2.4],
+      lights: { mast1: [-35.5, br + 9.6], side: [-31.8, t3 + 1], stern: [-49.6, d(-49.6) + 1.3], anchF: [46, d(46) + 3.4], anchA: [-49, d(-49) + 3], nuc: [-35.5, br + 6] }, eye: [-32.6, t3 + 1.7],
+      fits: [...both('funnel', -40.9, 3.4, t3, { l: 1.6, w: 1.4, h: 3.2, n: 0 }), F('latmast', -35.5, 0, br, { l: 2, w: 2, h: 8 }), F('radar', -35.5, 0, br + 8.1, { l: 3.4, w: 0.55, h: 1.2 }), F('radar', -32.4, 0, br, { l: 2.2, w: 0.45, h: 0.8 }),
+        F('dome', -38.6, 1.8, br, { l: 1.2, w: 1.2, h: 1.6 }), F('dome', -38.6, -1.8, br, { l: 1.0, w: 1.0, h: 1.4 }), F('turret', 33, 0, d(33), { l: 3, w: 2.6, h: 1.8, n: 2, bl: 3 }), F('turret', -43, 0, t2, { l: 1.8, w: 1.8, h: 2, n: 1, bl: 1.8, rot: 180 }),
+        F('hatch', 8, 0, d(8), { l: 18, w: 8, h: 0.9 }), F('hatch', -12, 0, d(-12), { l: 8, w: 6, h: 0.7 }), ...both('crane', -2, 5.8, d(-2), { l: 14, w: 1.9, h: 4.4, el: 22, rot: 165 }),
+        ...lifeboats(-35, 7.7, t1, 7, 2.5, 2.2), ...both('raft', -24, 6.2, t1, {}), ...both('raft', -28, 5.4, t2, {}), ...both('searchlight', -32, 7.0, t3 + 0.5, {}), ...both('whip', -37, 4.6, br, { h: 6 }),
+        ...both('windlass', 45.4, 1.8, d(45.4), { l: 1.6, w: 1.8, h: 1 }), F('windlass', -48, 0, d(-48), { l: 1.8, w: 2.2, h: 1.2, rot: 90 }), F('breakwater', 31.4, 0, d(31.4), { l: 1.4, w: 2 * hb(31.4) * 0.7, h: 1.1 }),
+        ...both('vent', 20, 6.2, d(20), { n: 2, rot: 90 }), ...both('vent', -16, 6.4, d(-16), { n: 2, rot: 90 }),
+        ...common(100, d, hb, [38, 20, -20, -47]), ...navyKit({ L: 100, d, hb, x0: -46, x1: -22, t1, w: 14 * 0.95 })] }; } },
+    ship: { loa: 100, B: 15.4, D: 7.4, T: 3.1, cb: 0.72, engines: 2, ptype: 'fpp', vmax: 16, rpm: 900, gear: 4, accTime: 60, propD: 2.6, PD: 0.95, AR: 6, hR: 2.6, rudders: 2, rudMax: 35, rudTime: 15, respTime: 6, turnDia: 380, bowAnchors: 1, sternAnchors: 1, chainLen: 275, anchorW: 2.5, chainW: 30, lineR: 20, lineLen: 180, windAL: 1150, windAF: 270, windXc: -8, flags: 'hq' } }
 ];

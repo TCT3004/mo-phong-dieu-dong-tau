@@ -6,7 +6,7 @@ import { modelGroup, accMesh } from './shipdraw/mesh3.js';
 import { genModel } from './shipdraw/shipgen.js';
 import { buildFit } from './shipdraw/fittings.js';
 import { Acc } from './shipdraw/prims.js';
-import { deckPt, hawse, lineEnd, freeboard } from './moored.js';
+import { deckPt, hawse, lineEnd, freeboard, anchorDown } from './moored.js';
 
 const MAXL = 600;
 // mô hình đơn giản cho tàu trong kho chưa vẽ: thân + một khối thượng tầng phía lái + buồng lái
@@ -35,10 +35,10 @@ export class MooredView {
   }
   // dựng lại khi danh sách tàu (id / loại) đổi. pmap: ref → thông số tàu trong kho
   set(list, pmap) {
-    const sig = list.map((s) => s.id + ':' + s.ref + ':' + (s.anchors || []).length + ':' + s.mode + ':' + (pmap[s.ref] ? pmap[s.ref].loa : 0)).join('|'); if (sig === this.sig) return; this.sig = sig;
+    const sig = list.map((s) => s.id + ':' + s.ref + ':' + (s.anchors || []).map((a) => (anchorDown(a) ? a.side : 'x')).join(',') + ':' + s.mode + ':' + (pmap[s.ref] ? pmap[s.ref].loa : 0)).join('|'); if (sig === this.sig) return; this.sig = sig;
     const THREE = this.T3; for (const it of this.items) this.g.remove(it.g, it.anch); this.items = [];
     for (const sh of list) {
-      const p = pmap[sh.ref]; if (!p) continue; const t = this.tmpl(sh.ref, p), g = t.grp.clone(true), down = new Set((sh.anchors || []).map((a) => a.side));
+      const p = pmap[sh.ref]; if (!p) continue; const t = this.tmpl(sh.ref, p), g = t.grp.clone(true), down = new Set((sh.anchors || []).filter(anchorDown).map((a) => a.side));
       g.traverse((o) => { if (o.userData && o.userData.anchor && (down.has(o.userData.anchor.side) || (down.size && !o.userData.anchor.side))) o.visible = false; }); // neo đã thả thì quả neo trên mạn ẩn đi
       const lp = (c, x, y, z, s) => { const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.glow, color: c, blending: THREE.AdditiveBlending, depthWrite: false, fog: false })); sp.position.set(y, z - t.T, -x); sp.scale.setScalar(s); sp.visible = false; g.add(sp); return sp; };
       const L = sh.L, fb = freeboard(sh), lights = [];
@@ -46,7 +46,7 @@ export class MooredView {
       for (const x of [L * 0.25, -L * 0.1]) lights.push(lp(0xffe08a, x, 0, t.T + fb + 5, 7)); // đèn chiếu boong
       // neo nằm đáy
       const anch = new THREE.Group(); this.g.add(anch);
-      for (const a of sh.anchors || []) { const h = Math.max(0.8, Math.min(2.4, L / 45)), acc = new Acc(0x34383c, true), dm = new Acc(0, true); const I = buildFit({ id: 'a', kind: 'anchor', x: 0, y: 0, z: 0, rot: 0, l: h * 0.85, w: 0.5, h }, { metal: acc, super: acc, dark: acc, white: acc, hawse: dm }, []); const m = accMesh(THREE, acc, I.attach || [0, 0, 0], 0); m.rotation.x = -Math.PI / 2; m.userData.a = a; anch.add(m); }
+      for (const a of (sh.anchors || []).filter(anchorDown)) { const h = Math.max(0.8, Math.min(2.4, L / 45)), acc = new Acc(0x34383c, true), dm = new Acc(0, true); const I = buildFit({ id: 'a', kind: 'anchor', x: 0, y: 0, z: 0, rot: 0, l: h * 0.85, w: 0.5, h }, { metal: acc, super: acc, dark: acc, white: acc, hawse: dm }, []); const m = accMesh(THREE, acc, I.attach || [0, 0, 0], 0); m.rotation.x = -Math.PI / 2; anch.add(m); }
       this.g.add(g); this.items.push({ sh, g, T: t.T, lights, anch, mo: { z: 0, p: 0, r: 0, t: null } });
     }
   }
@@ -74,8 +74,9 @@ export class MooredView {
         Lp.set([...a, ...m], nl * 6); nl++; Lp.set([...m, ...b], nl * 6); nl++;
       }
       // neo: quả neo nằm đáy (thân quay về phía tàu), xích võng từ lỗ neo xuống đáy rồi nằm trên đáy
-      for (const m of it.anch.children) {
-        const a = m.userData.a, dep = Math.max(1, W.depthAt(a.x, a.y)), yb = -dep - tide, [hx, hy] = hawse(sh, a.side), h0 = w2(it, hx, hy, fb - 0.6), dx = a.x - h0[0], dz = -a.y - h0[2], dist = Math.hypot(dx, dz) || 1;
+      const dl = (sh.anchors || []).filter(anchorDown); // neo đang thả (lấy mới mỗi khung hình: kéo neo / đặt lại thì theo ngay)
+      for (const [j, m] of it.anch.children.entries()) {
+        const a = dl[j]; m.visible = !!a; if (!a) continue; const dep = Math.max(1, W.depthAt(a.x, a.y)), yb = -dep - tide, [hx, hy] = hawse(sh, a.side), h0 = w2(it, hx, hy, fb - 0.6), dx = a.x - h0[0], dz = -a.y - h0[2], dist = Math.hypot(dx, dz) || 1;
         m.position.set(a.x, yb + 0.25, -a.y); m.rotation.set(-Math.PI / 2, 0, Math.atan2(dx, -dz)); // nằm ngang
         const ux = dx / dist, uz = dz / dist, hang = Math.min(dist * 0.6, Math.max(dep * 1.3, 8)), td = [h0[0] + ux * hang, yb, h0[2] + uz * hang];
         let prev = h0; for (let i = 1; i <= 6 && nc < MAXL - 1; i++) { const s = i / 6, q = [h0[0] + (td[0] - h0[0]) * s, h0[1] + (yb - h0[1]) * (1 - (1 - s) * (1 - s)), h0[2] + (td[2] - h0[2]) * s]; Cp.set([...prev, ...q], nc * 6); nc++; prev = q; }

@@ -48,7 +48,7 @@ export class World {
     for (const b of o.berths) b.pts = b.pts.map(mp);
     for (const r of o.routes || []) r.pts = r.pts.map(mp);
     for (const q of o.starts || []) [q.x, q.y] = map(q.x, q.y);
-    for (const sh of o.ships || []) { [sh.x, sh.y] = map(sh.x, sh.y); for (const a of sh.anchors || []) [a.x, a.y] = map(a.x, a.y); }
+    for (const sh of o.ships || []) { [sh.x, sh.y] = map(sh.x, sh.y); for (const a of sh.anchors || []) if (a.x !== null && a.x !== undefined) [a.x, a.y] = map(a.x, a.y); }
     if (this.start) [this.start.x, this.start.y] = map(this.start.x, this.start.y);
     this.rebuild();
   }

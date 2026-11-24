@@ -1,4 +1,5 @@
 // Giao diện kho tàu dùng chung: chọn loại → tên tàu (tab 1, tab 2), khung «Lưu vào kho» (tab 1, hộp thoại vẽ tàu).
+import { uiAlert, uiConfirm } from './dialog.js';
 import { A, esc, saveShip } from './app.js';
 import { defaultShip } from './physics.js';
 import { listFleet, fleetTypes, getFleetShip, saveFleetShip, deleteFleetShip } from './fleet.js';
@@ -36,7 +37,7 @@ export async function fleetSaveForm(host, onDone) {
     const type = q('.flT').value.trim() || 'Khác', name = q('.flN').value.trim();
     if (!name) { q('.flN').focus(); return; }
     const ex = list.find((e) => !e.builtin && e.type === type && e.name === name);
-    if (ex && !confirm('Trong kho đã có «' + name + '» (' + type + '). Ghi đè?')) return;
+    if (ex && !(await uiConfirm('Trong kho đã có «' + name + '» (' + type + '). Ghi đè?', { ok: 'Ghi đè' }))) return;
     const id = await saveFleetShip(type, name, Object.assign({}, A.p, { type, name }));
     A.p.type = type; A.p.name = name; A.p.fleetId = id; saveShip();
     host.hidden = true; host.innerHTML = ''; if (onDone) onDone(id, type, name);
@@ -49,22 +50,22 @@ export function fleetCard() {
     <div class="fld" style="min-width:160px"><label for="flType">Loại tàu</label><div class="in"><select id="flType"></select></div></div>
     <div class="fld" style="min-width:300px"><label for="flName">Tên tàu — chọn là nạp làm tàu điều động</label><div class="in"><select id="flName"></select></div></div>
     <button class="btn sm" id="flSave">Lưu tàu đang dùng vào kho…</button><button class="btn sm" id="flDel">Xóa khỏi kho</button></div>
-    <div id="flSaveBox" hidden></div><div class="muted" id="flInfo" style="margin-top:6px">Kho có sẵn 12 tàu mẫu chung chung (đã có mô hình 3D và thông số chạy được); tàu bạn lưu có dấu ★.</div></section>`;
+    <div id="flSaveBox" hidden></div><div class="muted" id="flInfo" style="margin-top:6px">Kho có sẵn 13 tàu mẫu chung chung (đã có mô hình 3D và thông số chạy được); tàu bạn lưu có dấu ★.</div></section>`;
 }
 export async function initFleetCard(reload) {
   const ts = document.getElementById('flType'), ns = document.getElementById('flName'); if (!ts) return;
   let list = await fillFleet(ts, ns, A.p.fleetId);
   ns.onchange = async () => {
     const id = ns.value; if (!id) return; const e = list.find((q) => q.id === id);
-    if (!confirm('Nạp «' + e.name + '» làm tàu điều động?\nThông số tab 1 và mô hình 3D sẽ thay bằng của tàu này (tàu đang dùng chưa lưu thì bấm «Lưu tàu đang dùng vào kho…» trước).')) { ns.value = A.p.fleetId || ''; return; }
+    if (!(await uiConfirm('Nạp «' + e.name + '» làm tàu điều động?\nThông số tab 1 và mô hình 3D sẽ thay bằng của tàu này (tàu đang dùng chưa lưu thì bấm «Lưu tàu đang dùng vào kho…» trước).', { ok: 'Nạp tàu' }))) { ns.value = A.p.fleetId || ''; return; }
     if (await useFleetShip(id)) reload();
   };
   document.getElementById('flSave').onclick = () => fleetSaveForm(document.getElementById('flSaveBox'), async (id) => { list = await fillFleet(ts, ns, id); document.getElementById('flInfo').textContent = 'Đã lưu «' + A.p.name + '» vào kho (' + A.p.type + ').'; });
   document.getElementById('flDel').onclick = async () => {
     const id = ns.value, e = list.find((q) => q.id === id);
-    if (!e) { alert('Chọn tàu cần xóa ở ô «Tên tàu» trước.'); return; }
-    if (e.builtin) { alert('Tàu mẫu có sẵn không xóa được.'); return; }
-    if (!confirm('Xóa «' + e.name + '» khỏi kho? (tàu đang điều động không bị ảnh hưởng)')) return;
+    if (!e) { uiAlert('Chọn tàu cần xóa ở ô «Tên tàu» trước.'); return; }
+    if (e.builtin) { uiAlert('Tàu mẫu có sẵn không xóa được.'); return; }
+    if (!(await uiConfirm('Xóa «' + e.name + '» khỏi kho? (tàu đang điều động không bị ảnh hưởng)', { ok: 'Xóa', danger: true }))) return;
     await deleteFleetShip(id); if (A.p.fleetId === id) { delete A.p.fleetId; saveShip(); } list = await fillFleet(ts, ns, A.p.fleetId);
   };
 }

@@ -3,7 +3,7 @@
 //
 // Tàu đậu sh = { id, ref (id tàu trong kho), type, name, L, B, T, D, mode, x, y, hdg (độ),
 //   berth (tên bến) + bs (m dọc bến, từ đầu bến) — kiểu cập bến; host (id tàu được cập mạn) + hside (±1) + ha (m dọc tàu kia) — cập mạn tàu khác;
-//   lines: [{ k (chỗ ra dây trên tàu, 0–7), to: { t: 'bol', berth, s } | { t: 'sb', id, k } }], anchors: [{ side, x, y, chain }] }
+//   lines: [{ k (chỗ ra dây trên tàu, 0–7), to: { t: 'bol', berth, s } | { t: 'sb', id, k } }], anchors: [{ side, x, y, chain }] (chain 0, x / y null = neo chưa thả / đã xóa) }
 export const MOOR_MODES = [['port', 'Cập mạn trái vào cầu'], ['stbd', 'Cập mạn phải vào cầu'], ['stern', 'Cập lái (thả 2 neo mũi)'], ['along', 'Cập mạn tàu khác'], ['anchor', 'Đậu neo']];
 // chỗ ra dây / cọc bích trên boong (thứ tự: mũi T/P, vai mũi T/P, vai lái T/P, lái T/P)
 export const PTS = ['Mũi trái', 'Mũi phải', 'Vai mũi trái', 'Vai mũi phải', 'Vai lái trái', 'Vai lái phải', 'Lái trái', 'Lái phải'];
@@ -96,6 +96,14 @@ export function defaultAnchors(W, sh) {
   else sh.anchors = [];
   return sh.anchors;
 }
+// neo đang thả (có trên đáy)
+export const anchorDown = (a) => a && a.chain > 0 && a.x !== null && a.x !== undefined;
+// kéo neo tới (x, y): độ dài xích theo khoảng cách từ lỗ neo (neo nằm cách lỗ neo ≈ 0,9 × xích)
+export function moveAnchor(sh, a, x, y) { const [hx, hy] = b2w(sh, ...hawse(sh, a.side)); a.x = x; a.y = y; a.chain = Math.max(5, Math.round(Math.hypot(x - hx, y - hy) / 0.9)); }
+// xóa neo: mất quả neo + xích, độ dài về 0
+export function clearAnchor(a) { a.chain = 0; a.x = null; a.y = null; }
+// thả lại neo đã xóa: hướng mặc định theo kiểu cập, xích cho trước hoặc theo độ sâu
+export function redropAnchor(W, sh, a, chain) { const d = Math.max(3, W.depthAt(sh.x, sh.y)), c = chain > 0 ? chain : Math.round(Math.max(30, Math.min(220, d * (sh.mode === 'anchor' ? 6 : 4.5) + sh.L * 0.3))); Object.assign(a, anchorAt(sh, a.side, c, sh.mode === 'stern' ? a.side * 22 : 0)); }
 // neo nằm đáy theo hướng (độ, so với mũi tàu) từ lỗ neo, cách xa khoảng 0,9 × xích
 export function anchorAt(sh, side, chain, brg) { const [hx, hy] = hawse(sh, side), a = brg * D2R, r = chain * 0.9, [x, y] = b2w(sh, hx + Math.cos(a) * r, hy + Math.sin(a) * r); return { side, x, y, chain }; }
 

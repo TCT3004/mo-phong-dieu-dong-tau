@@ -1,6 +1,7 @@
 // Hộp thoại vẽ tàu từ sơ đồ: BÀN VẼ 3 HÌNH CHIẾU (mạn · mặt boong · nhìn từ mũi / lái) cùng tỷ lệ, thẳng hàng như bản vẽ kỹ thuật,
 // vạch gióng qua lại giữa các hình, thước kiểu CAD (bắt dính lưới / điểm / vạch gióng, Shift vẽ thẳng, gõ số), ảnh sơ đồ làm nền;
 // chế độ «một hình» để đặt mốc, đo kích thước cho từng ảnh. Xem 3D ngay, rồi dùng mô hình cho tàu.
+import { uiConfirm, uiPrompt } from './dialog.js';
 import * as THREE from 'three';
 import { A, $, $$, num, esc, saveShip } from './app.js';
 import { openPdf } from './pdfload.js';
@@ -45,9 +46,9 @@ const HINT = {
   dim: 'Bấm điểm đầu rồi các điểm tiếp theo (đo nối tiếp) — mỗi đoạn hiện một ô kích thước, sửa thành số thật (m). Chuột phải / Esc để dừng.'
 };
 
-export function openShipDraw() {
+export async function openShipDraw() {
   // bản đang vẽ giữ qua các lần mở; tàu đang dùng đã đổi (chọn tàu khác trong kho, mở file…) thì mở mô hình của tàu đó
-  if (st && JSON.stringify(A.p.model || null) !== st.src && (!st.edited || !st.model.parts.length || confirm('Tàu đang dùng đã đổi sang «' + (A.p.name || 'tàu khác') + '».\nMở mô hình của tàu này? (bản vẽ đang dở «' + (st.model.name || '') + '» chưa «Dùng mô hình cho tàu» sẽ bỏ — muốn giữ thì bấm Hủy rồi «Xuất file…»)'))) st = null;
+  if (st && JSON.stringify(A.p.model || null) !== st.src && (!st.edited || !st.model.parts.length || await uiConfirm('Tàu đang dùng đã đổi sang «' + (A.p.name || 'tàu khác') + '».\nMở mô hình của tàu này? (bản vẽ đang dở «' + (st.model.name || '') + '» chưa «Dùng mô hình cho tàu» sẽ bỏ — muốn giữ thì bấm Hủy rồi «Xuất file…»)', { ok: 'Mở mô hình tàu này' }))) st = null;
   if (!st) st = { src: JSON.stringify(A.p.model || null), edited: false, model: A.p.model ? clone(A.p.model) : emptyModel(), mode: 'board', cur: null, tool: 'edit', sel: null, draft: null, chain: null, drag: null, mouse: null, img: new Map(), data: new Map(), v: { cx: 0, cy: 0, sc: 1 }, b: null, tol: 40, lastPoint: null, grid: 0.5, snap: { grid: true, pts: true, guides: true }, showBack: true, typed: '', ver: 0, cc: new Map(), active: {}, cam3: 'orbit', hist: [], hi: -1, place: null };
   st.model.guides = st.model.guides || []; st.model.fits = st.model.fits || []; st.showBack = true;
   if (!st.hist.length) { st.hist = [JSON.stringify(st.model)]; st.hi = 0; }
@@ -255,7 +256,7 @@ function bind() {
   $$('[data-snap]').forEach((i) => { i.onchange = () => { st.snap[i.dataset.snap] = i.checked; }; });
   $('#sdGuides').onclick = (e) => { const b = e.target.closest('button'); if (b && b.dataset.gdel !== undefined) { st.model.guides.splice(+b.dataset.gdel, 1); changed(); } };
   $('#sdGuides').onchange = (e) => { const i = e.target.dataset.gv; if (i === undefined) return; st.model.guides[+i].v = num(e.target.value.replace(',', '.'), st.model.guides[+i].v); changed(); };
-  $('#sdViews').onclick = (e) => { const b = e.target.closest('button'); if (!b) return; if (b.dataset.v) { st.cur = b.dataset.v; st.active[viewById(b.dataset.v).kind] = b.dataset.v; st.sel = null; if (st.mode === 'single') fitView(); refreshAll(); } else if (b.dataset.del) { const v = viewById(b.dataset.del); if (v && confirm('Bỏ hình «' + v.name + '» và các chi tiết vẽ trên nó?')) { st.model.views = st.model.views.filter((q) => q !== v); st.model.parts = st.model.parts.filter((p) => p.view !== v.id); if (st.cur === v.id) st.cur = st.model.views[0] ? st.model.views[0].id : null; if (!view()) st.mode = 'board'; st.sel = null; refreshAll(); changed(); } } };
+  $('#sdViews').onclick = async (e) => { const b = e.target.closest('button'); if (!b) return; if (b.dataset.v) { st.cur = b.dataset.v; st.active[viewById(b.dataset.v).kind] = b.dataset.v; st.sel = null; if (st.mode === 'single') fitView(); refreshAll(); } else if (b.dataset.del) { const v = viewById(b.dataset.del); if (v && await uiConfirm('Bỏ hình «' + v.name + '» và các chi tiết vẽ trên nó?', { ok: 'Bỏ hình', danger: true })) { st.model.views = st.model.views.filter((q) => q !== v); st.model.parts = st.model.parts.filter((p) => p.view !== v.id); if (st.cur === v.id) st.cur = st.model.views[0] ? st.model.views[0].id : null; if (!view()) st.mode = 'board'; st.sel = null; refreshAll(); changed(); } } };
   $('#sdViews').onchange = (e) => { const s = e.target; if (s.dataset.k) { const v = viewById(s.dataset.k); v.kind = s.value; v.refs = {}; if (!v.imgId) blankRefs(v); refreshAll(); changed(); } };
   $('#sdRefs').onclick = (e) => { const b = e.target.closest('button'); if (!b) return; if (b.dataset.cal) { setMode('single', b.dataset.cal); setTool('ref:' + (REFS[view().kind].find((k) => !(view().refs || {})[k]) || REFS[view().kind][0])); } else if (b.dataset.m2) setMode('board'); else if (b.dataset.ref) setTool('ref:' + b.dataset.ref); else if (b.dataset.t2) setTool(st.tool === 'dim' ? 'edit' : 'dim'); else if (b.dataset.ddel !== undefined) { view().dims.splice(+b.dataset.ddel, 1); changed(); } };
   $('#sdRefs').onchange = (e) => { const i = e.target.dataset.dim; if (i === undefined) return; const q = view().dims[+i]; q.m = num(e.target.value, 0); changed(); };
@@ -270,11 +271,11 @@ function bind() {
     else if (t.id === 'sdRoofDeck') o.roofDeck = t.checked; else if (t.id === 'sdHullNoCol') { if (t.value) o.hullNoCol = t.value; else delete o.hullNoCol; } else return;
     drawCols(); changed(false); };
   $('#sdCols').oninput = (e) => { if (e.target.id !== 'sdHullNo') return; st.model.opts.hullNo = e.target.value; clearTimeout(st.tn); st.tn = setTimeout(() => changed(false), 400); };
-  $('#sdTpl').onclick = () => {
-    if (st.model.parts.length && !confirm('Thay mô hình đang vẽ bằng mẫu tàu pháo chung chung?')) return;
+  $('#sdTpl').onclick = async () => {
+    if (st.model.parts.length && !(await uiConfirm('Thay mô hình đang vẽ bằng mẫu tàu pháo chung chung?'))) return;
     st.model = makeTemplate(); st.model.guides = []; st.cur = st.model.views[0].id;
     { const k = ship().L / TEMPLATE_SHIP.loa; if (Math.abs(k - 1) > 1e-3) for (const f of st.model.fits || []) for (const q of ['x', 'y', 'z', 'l', 'w', 'h', 'bl']) if (f[q] !== undefined) f[q] = r2(f[q] * k); } st.sel = null; st.img.clear(); st.data.clear(); st.active = {};
-    if (confirm('Đặt luôn thông số tàu ở tab 1 theo mẫu (dài 62 m, rộng 9,5 m, mớn 2,8 m, 2 máy, hết lái 25°)?\nKhông đặt thì mẫu tự co giãn theo chiều dài, chiều rộng tàu hiện có.')) { Object.assign(A.p, TEMPLATE_SHIP, { name: 'Tàu pháo mẫu' }); saveShip(); }
+    if (await uiConfirm('Đặt luôn thông số tàu ở tab 1 theo mẫu (dài 62 m, rộng 9,5 m, mớn 2,8 m, 2 máy, hết lái 25°)?\nKhông đặt thì mẫu tự co giãn theo chiều dài, chiều rộng tàu hiện có.')) { Object.assign(A.p, TEMPLATE_SHIP, { name: 'Tàu pháo mẫu' }); saveShip(); }
     st.mode = 'board'; st.ver++; fitBoard(); refreshAll(); changed();
   };
   $('#sdApply').onclick = apply;
@@ -315,7 +316,7 @@ async function addFile(f) {
     let cv, name = f.name.replace(/\.[^.]+$/, '');
     if (/\.pdf$/i.test(f.name) || f.type === 'application/pdf') {
       const pdf = await openPdf(new Uint8Array(await f.arrayBuffer())); let pg = 1;
-      if (pdf.numPages > 1) { pg = Math.round(num(prompt('File PDF có ' + pdf.numPages + ' trang. Nạp trang số mấy?', '1'), 1)); pg = Math.max(1, Math.min(pdf.numPages, pg)); name += ' (tr. ' + pg + ')'; }
+      if (pdf.numPages > 1) { pg = Math.round(num(await uiPrompt('File PDF có ' + pdf.numPages + ' trang. Nạp trang số mấy?', '1'), 1)); pg = Math.max(1, Math.min(pdf.numPages, pg)); name += ' (tr. ' + pg + ')'; }
       const page = await pdf.getPage(pg), v0 = page.getViewport({ scale: 1 }), sc = Math.min(5000 / Math.max(v0.width, v0.height), Math.sqrt(20e6 / (v0.width * v0.height)));
       const vp = page.getViewport({ scale: sc }); cv = document.createElement('canvas'); cv.width = Math.round(vp.width); cv.height = Math.round(vp.height);
       const g = cv.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, cv.width, cv.height); await page.render({ canvasContext: g, viewport: vp }).promise;
@@ -892,9 +893,9 @@ function setGroup(geom) { const P = st.p3; if (!P) return; if (P.grp) { P.scene.
 function liveRebuild() { let geom; try { geom = buildModel(st.model, ship()); } catch (e) { return; } st.geom = geom; if (st.p3) { setGroup(geom); build3dExtras(); } paint(); }
 
 // ---------- dùng cho tàu, xuất / nhập ----------
-function apply() {
+async function apply() {
   const m = clone(st.model); delete m.template; const msg = $('#sdMsg');
-  if (!m.parts.length) { if (!confirm('Mô hình chưa có chi tiết nào. Bỏ mô hình, dùng lại tàu đơn giản?')) return; A.p.model = null; }
+  if (!m.parts.length) { if (!(await uiConfirm('Mô hình chưa có chi tiết nào. Bỏ mô hình, dùng lại tàu đơn giản?'))) return; A.p.model = null; }
   else {
     A.p.model = m;
     if ($('#sdWind').checked) { const g = buildModel(m, ship()); A.p.windAL = Math.round(g.areas.AL); A.p.windAF = Math.round(g.areas.AF); A.p.windXc = Math.round(g.areas.xc * 10) / 10; }
@@ -911,7 +912,7 @@ async function exportFile() {
 async function importFile(f) {
   try {
     const o = JSON.parse(await f.text()); if (!o || o.loai !== 'mo-hinh-tau' || !o.model) throw new Error('không phải file mô hình tàu của app');
-    if (st.model.parts.length && !confirm('Thay mô hình đang vẽ bằng mô hình trong file?')) return;
+    if (st.model.parts.length && !(await uiConfirm('Thay mô hình đang vẽ bằng mô hình trong file?'))) return;
     for (const [id, url] of Object.entries(o.images || {})) { const b = await (await fetch(url)).blob(); await putImg(id, b); }
     st.model = o.model; st.model.opts = st.model.opts || { shade: 'haze', rails: true }; st.model.guides = st.model.guides || []; st.cur = st.model.views[0] ? st.model.views[0].id : null; st.sel = null; st.img.clear(); st.data.clear(); st.fitted = false; st.active = {}; st.mode = 'board'; st.ver++;
     fitBoard(); refreshAll(); changed(); for (const v of st.model.views) loadImg(v); $('#sdMsg').textContent = 'Đã nhập «' + (st.model.name || f.name) + '».';

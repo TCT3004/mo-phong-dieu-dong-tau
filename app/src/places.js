@@ -23,7 +23,7 @@ export function worldToPlaces(W) {
     routes: (o.routes || []).map((r) => ({ name: r.name, pts: r.pts.map((q) => ll(q[0], q[1])) })),
     routeSel: o.routeSel === undefined ? -1 : o.routeSel,
     starts: (o.starts || []).map((q) => { const p = ll(q.x, q.y); return { name: q.name, lat: p[0], lon: p[1], hdg: q.hdg || 0 }; }),
-    ships: (o.ships || []).map((sh) => { const c = clean(sh), p = ll(sh.x, sh.y); delete c.x; delete c.y; c.lat = p[0]; c.lon = p[1]; c.anchors = (sh.anchors || []).map((a) => { const q = ll(a.x, a.y); return { side: a.side, chain: a.chain, lat: q[0], lon: q[1] }; }); return c; }),
+    ships: (o.ships || []).map((sh) => { const c = clean(sh), p = ll(sh.x, sh.y); delete c.x; delete c.y; c.lat = p[0]; c.lon = p[1]; c.anchors = (sh.anchors || []).map((a) => { if (!(a.chain > 0) || a.x === null || a.x === undefined) return { side: a.side, chain: 0, lat: null, lon: null }; const q = ll(a.x, a.y); return { side: a.side, chain: a.chain, lat: q[0], lon: q[1] }; }); return c; }),
     start: W.start ? Object.assign(ll(W.start.x, W.start.y).reduce((a, v, i) => (a[i ? 'lon' : 'lat'] = v, a), {}), { hdg: W.start.hdg || 0 }) : null
   };
 }
@@ -36,7 +36,7 @@ export function placesToWorld(P, W) {
     routes: (P.routes || []).map((r) => ({ name: r.name, pts: r.pts.map(w) })),
     routeSel: P.routeSel === undefined ? -1 : P.routeSel,
     starts: (P.starts || []).map((q) => { const p = toWorld(q.lat, q.lon); return { name: q.name, x: p[0], y: p[1], hdg: q.hdg || 0 }; }),
-    ships: (P.ships || []).map((sh) => { const c = Object.assign({}, sh), p = toWorld(sh.lat, sh.lon); c.x = p[0]; c.y = p[1]; delete c.lat; delete c.lon; c.lines = (sh.lines || []).map((l) => Object.assign({}, l, { to: Object.assign({}, l.to) })); c.anchors = (sh.anchors || []).map((a) => { const q = toWorld(a.lat, a.lon); return { side: a.side, chain: a.chain, x: q[0], y: q[1] }; }); return c; })
+    ships: (P.ships || []).map((sh) => { const c = Object.assign({}, sh), p = toWorld(sh.lat, sh.lon); c.x = p[0]; c.y = p[1]; delete c.lat; delete c.lon; c.lines = (sh.lines || []).map((l) => Object.assign({}, l, { to: Object.assign({}, l.to) })); c.anchors = (sh.anchors || []).map((a) => { if (a.lat === null || a.lat === undefined || !(a.chain > 0)) return { side: a.side, chain: 0, x: null, y: null }; const q = toWorld(a.lat, a.lon); return { side: a.side, chain: a.chain, x: q[0], y: q[1] }; }); return c; })
   };
   if (W.objs.routeSel >= W.objs.routes.length) W.objs.routeSel = W.objs.routes.length - 1;
   W.start = P.start ? Object.assign({ hdg: P.start.hdg || 0 }, (([x, y]) => ({ x, y }))(toWorld(P.start.lat, P.start.lon))) : null;

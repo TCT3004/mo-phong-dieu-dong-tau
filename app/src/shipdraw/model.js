@@ -78,6 +78,8 @@ function buildHull(H, sh) {
   for (let k = 1; k <= 10; k++) add(T + 0.35 + (zMax - T - 0.35) * k / 10, sh.hull);
   const R = xs.map((x) => { const zb = H.zBot(x), zt = Math.max(zb + 0.01, H.zTop(x)), wS = H.hbs(x, 1), wP = H.hbs(x, -1); return lv.map((l) => { const z = clamp(l.z, zb, zt), f = H.S(x, (z - zb) / (zt - zb)); return { s: acc.v(x, wS * f, z, l.c), p: acc.v(x, -wP * f, z, l.c) }; }); });
   for (let i = 0; i + 1 < NS; i++) for (let k = 0; k + 1 < lv.length; k++) { if (lv[k + 1].brk) continue; const a = R[i][k], b = R[i + 1][k], c = R[i + 1][k + 1], d = R[i][k + 1]; acc.quad(a.s, b.s, c.s, d.s); acc.quad(a.p, d.p, c.p, b.p); }
+  // đáy: nối mép dưới hai mạn suốt chiều dài (mặt cắt đáy bằng / tròn không để hở khe)
+  for (let i = 0; i + 1 < NS; i++) { const a = R[i][0], b = R[i + 1][0]; acc.quad(a.p, b.p, b.s, a.s); }
   // boong
   for (let i = 0; i + 1 < NS; i++) { const x0 = xs[i], x1 = xs[i + 1], z0 = H.zTop(x0), z1 = H.zTop(x1), s0 = H.S(x0, 1), s1 = H.S(x1, 1); dk.quad(dk.v(x0, -H.hbs(x0, -1) * s0, z0), dk.v(x0, H.hbs(x0, 1) * s0, z0), dk.v(x1, H.hbs(x1, 1) * s1, z1), dk.v(x1, -H.hbs(x1, -1) * s1, z1)); }
   // vách lái (và mũi nếu mũi cụt): đỉnh riêng (không chung với mạn) để cạnh vách sắc nét
@@ -264,15 +266,32 @@ export function buildModel(model, ship) {
   if (opts.rails !== false) {
     // một vòng lan can khép kín: mạn phải từ lái tới mũi, hai bên gặp nhau ở sống mũi, mạn trái về lái, ngang qua lái; 2 thanh (cao 1 m và 0,5 m)
     const st = Math.max(1.5, H.L / 40), wAt = (x, s) => H.hbs(x, s) * H.S(x, 1) - 0.06, x0 = H.xa + 0.5;
-    let xb = H.xf - 0.15; while (xb > x0 + 2 && Math.min(wAt(xb, 1), wAt(xb, -1)) < 0.12) xb -= 0.05;
+    const blunt = Math.min(wAt(H.xf - 0.3, 1), wAt(H.xf - 0.3, -1)) > 0.6; // mũi bằng (tàu đổ bộ…)
+    let xb = H.xf - (blunt ? 0.3 : 0.15); if (!blunt) while (xb > x0 + 2 && Math.min(wAt(xb, 1), wAt(xb, -1)) < 0.12) xb -= 0.05;
     const tipX = Math.min(H.xf - 0.12, xb + Math.min(0.6, 0.3 + Math.max(wAt(xb, 1), wAt(xb, -1)))), xsR = [];
     for (let x = x0; x < xb - 0.01;) { xsR.push(x); x += x > xb - H.L * 0.12 ? Math.min(st / 2, 0.5) : st / 2; } xsR.push(xb);
-    const side = (s) => xsR.map((x) => [x, s * Math.max(0.05, wAt(x, s))]), path = [...side(1), [tipX, 0], ...side(-1).reverse()];
-    if (wAt(x0, 1) + wAt(x0, -1) > 1) path.push(path[0]); // khép ngang qua lái
+    const side = (s) => xsR.map((x) => [x, s * Math.max(0.05, wAt(x, s))]), openBow = blunt && opts.bowRail === false;
+    // mũi nhọn: hai mạn gặp nhau ở sống mũi; mũi bằng: nối thẳng ngang; có cầu dẫn mũi: để hở (đi từ mũi mạn trái về lái rồi lên mũi mạn phải)
+    const path = openBow ? [...side(-1).reverse(), ...side(1)] : [...side(1), ...(blunt ? [] : [[tipX, 0]]), ...side(-1).reverse()];
+    if (!openBow && wAt(x0, 1) + wAt(x0, -1) > 1) path.push(path[0]); // khép ngang qua lái
     const zA = (q, k) => [q[0], q[1], deckZ(Math.min(H.xf - 0.05, q[0])) + k];
     for (let i = 0; i + 1 < path.length; i++) for (const k of [1, 0.5]) cyl(accs.white, zA(path[i], k), zA(path[i + 1], k), k === 1 ? 0.028 : 0.02, k === 1 ? 0.028 : 0.02, 4);
     let acc = 0; for (let i = 0; i < path.length; i++) { if (i) acc += Math.hypot(path[i][0] - path[i - 1][0], path[i][1] - path[i - 1][1]); if (i === 0 || acc >= st * 0.98 || i === path.length - 1 || (path[i][1] === 0)) { const q = zA(path[i], 0), t = zA(path[i], 1); cyl(accs.white, q, t, 0.025, 0.025, 4); acc = 0; } }
     if (opts.roofRails !== false) roofRails(solids, accs.white);
+  }
+  // cửa mũi hai cánh (tàu đổ bộ): đường ghép cánh cửa vẽ nổi trên mặt vỏ — mép sau, mép dưới, mép trên, đường giữa ở sống mũi, bản lề
+  if (opts.bowDoors) {
+    const { x0, z0, z1 } = opts.bowDoors, D = accs.dark, r = 0.05, on = (x, z, s) => [x, s * (H.yAt(clamp(x, H.xa, H.xf), z, s) + 0.035), z];
+    const stem = (z) => { let x = H.xf - 0.05; while (x > x0 && H.yAt(x, z, 1) < 0.12) x -= 0.05; return x; };
+    for (const s of [-1, 1]) {
+      const line = (pts) => { for (let i = 0; i + 1 < pts.length; i++) cyl(D, pts[i], pts[i + 1], r, r, 5); };
+      const nz = 10, nx = 14, xe0 = stem(z0), xe1 = stem(z1);
+      line(Array.from({ length: nz + 1 }, (_, i) => on(x0, z0 + (z1 - z0) * i / nz, s)));
+      line(Array.from({ length: nx + 1 }, (_, i) => on(x0 + (xe0 - x0) * i / nx, z0, s)));
+      line(Array.from({ length: nx + 1 }, (_, i) => on(x0 + (xe1 - x0) * i / nx, z1, s)));
+      for (const zh of [z0 + (z1 - z0) * 0.25, z0 + (z1 - z0) * 0.75]) { const p = on(x0 + 0.15, zh, s); box(D, p[0], p[1], p[2], 0.5, 0.18, 0.4); }
+    }
+    { const pts = Array.from({ length: 11 }, (_, i) => { const z = z0 + (z1 - z0) * i / 10, x = stem(z); return [x + 0.05, 0, z]; }); for (let i = 0; i + 1 < pts.length; i++) cyl(D, pts[i], pts[i + 1], r, r, 5); }
   }
   // tự đặt những gì chưa có: mắt người điều động, đèn hàng hải tối thiểu
   const br = blocks.filter((b) => b.bridge)[0] || blocks.filter((b) => b.q.node.color === 'super').sort((a, b) => b.z1 - a.z1)[0];
