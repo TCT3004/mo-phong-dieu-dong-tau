@@ -1,6 +1,6 @@
 // Trạng thái chung + vòng mô phỏng.
 import { defaultShip, buildModel, newState, stepShip, squat, displayRpm, stepLabel, KN, D2R } from './physics.js';
-import { World, defaultEnv, envAt, makeAnchors, makeLines, externalForces, wrap180, body2w } from './world.js';
+import { World, defaultEnv, envAt, makeAnchors, makeLines, externalForces, wrap180, body2w, FREE_SPD } from './world.js';
 import { CS, setOrigin, toLL } from './chartsys.js';
 import { Weather } from './weather.js';
 import { loadPlaces, placesToWorld, savePlaces } from './places.js';
@@ -111,10 +111,12 @@ export const Orders = {
   engine(i, id) { const s = A.sim; s.steps[i] = id; const lb = stepLabel(A.p, id); const nm = engName(A.M.nE, i); logOrder(id === 'st' ? (A.M.nE === 1 ? 'Dừng máy' : nm + ' dừng') : nm + ' ' + lb.toLowerCase(), 'engine'); },
   anchor(id, act) {
     const s = A.sim, a = s.anchors.find((q) => q.id === id); if (!a) return; const nm = a.name.toLowerCase();
-    if (act === 'drop') { a.st = 'drop'; a.target = 0; logOrder('Thả ' + nm, 'anchor'); }
-    else if (act === 'dredge') { a.st = 'drop'; a.target = Math.max(a.chain + 1, Math.round((s.h + 3) * 1.5)); logOrder('Thả ' + nm + ' kéo lê (' + a.target + ' m xích)', 'anchor'); }
-    else if (act === 'brake' && a.chain > 0) { a.st = 'hold'; a.target = 0; logOrder('Hãm ' + nm + ' ở ' + a.chain.toFixed(0) + ' m xích', 'anchor'); }
-    else if (act === 'heave' && a.chain > 0) { a.st = 'heave'; a.target = 0; logOrder('Kéo ' + nm, 'anchor'); }
+    if (act === 'drop') { a.st = 'drop'; a.target = 0; a.free = false; logOrder('Thả ' + nm, 'anchor'); }
+    else if (act === 'free') { if (!(a.st === 'drop' && a.free)) a.vf = FREE_SPD; a.st = 'drop'; a.target = 0; a.free = true; logOrder('Thả tự do ' + nm, 'anchor'); }
+    else if (act === 'dredge') { a.st = 'drop'; a.free = false; a.target = Math.max(a.chain + 1, Math.round((s.h + 3) * 1.5)); logOrder('Thả ' + nm + ' kéo lê (' + a.target + ' m xích)', 'anchor'); }
+    else if (act === 'brake' && a.chain > 0) { a.st = 'hold'; a.target = 0; a.free = false; logOrder('Hãm ' + nm + ' ở ' + a.chain.toFixed(0) + ' m xích', 'anchor'); }
+    else if (act === 'heave' && a.chain > 0) { a.st = 'heave'; a.target = 0; a.free = false; logOrder('Kéo ' + nm, 'anchor'); }
+    else if (act === 'lv1' || act === 'lv2') { const lv = act === 'lv2' ? 2 : 1; if (a.lv === lv) return; a.lv = lv; logOrder(a.name + ': tời cấp ' + lv, 'anchor'); }
   },
   light(k, on) { A.sim.lights[k] = on; logOrder((on ? 'Bật ' : 'Tắt ') + LIGHTS.find((l) => l[0] === k)[1].toLowerCase(), 'light'); },
   lightPreset(i) { const p = LIGHT_PRESETS[i]; LIGHTS.forEach((l) => { A.sim.lights[l[0]] = p[1].includes(l[0]); }); logOrder('Đèn hàng hải: ' + p[0].toLowerCase(), 'light'); }

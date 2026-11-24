@@ -63,10 +63,11 @@ const B = {
     cyl(W, [a, 0, zc], [b, 0, zc], r, r, 16); cyl(W, [a - e, 0, zc], [a, 0, zc], r * 0.55, r, 16); cyl(W, [b, 0, zc], [b + e, 0, zc], r, r * 0.55, 16);
     for (const u of [-l * 0.18, l * 0.18]) cyl(D, [u - 0.03, 0, zc], [u + 0.03, 0, zc], r * 1.03, r * 1.03, 16);
   },
-  // neo ở lỗ neo trên mạn: v hướng ra ngoài mạn (mạn trái thì xoay 180°)
-  anchor(K, f) {
+  // neo ở lỗ neo trên mạn: v hướng ra ngoài mạn (mạn trái thì xoay 180°). Miệng lỗ neo (K('hawse')) nằm yên trên vỏ, quả neo rơi được;
+  // I.attach: chỗ xích nối vào quả neo (đầu thân neo, sát miệng lỗ neo)
+  anchor(K, f, I) {
     const h = f.h, l = f.l, M = K('metal'), t = Math.max(0.08, h * 0.09);
-    cyl(M, [0, -0.05, h * 0.42], [0, 0.2, h * 0.42], h * 0.17, h * 0.17, 14);
+    cyl(K('hawse'), [0, -0.05, h * 0.42], [0, 0.2, h * 0.42], h * 0.17, h * 0.17, 14); I.attach = M.m(0, 0.12, h * 0.45);
     box(M, 0, 0.13, h * 0.05, t * 1.2, t, h * 0.8);
     box(M, 0, 0.15, -h * 0.38, l * 0.55, t * 1.6, t * 1.2);
     for (const s of [-1, 1]) cyl(M, [s * l * 0.22, 0.16, -h * 0.4], [s * l * 0.5, 0.22, -h * 0.05], t * 0.9, t * 0.25, 6);
@@ -126,7 +127,7 @@ const B = {
 export function buildFit(f, accs, movers) {
   const K0 = FIT_KINDS[f.kind]; if (!K0) return null;
   const g = Object.assign(fitDefaults(f.kind, 60), f); for (const k of ['l', 'w', 'h']) g[k] = Math.max(0.03, +g[k] || K0[k]);
-  const bb = newBB(), I = { bb }, K = (c, loc) => new TAcc(accs[c] || accs.super, xform(g, loc), bb);
+  const bb = newBB(), I = { bb }, K = (c, loc) => new TAcc(accs[c] || (c === 'hawse' ? accs.metal : null) || accs.super, xform(g, loc), bb);
   B[f.kind](K, g, I, movers || [], accs);
   return I;
 }

@@ -60,18 +60,24 @@ function decalTex(THREE, d, dark) {
   g.lineJoin = 'round'; g.lineWidth = H * 0.06; g.strokeStyle = dark ? 'rgba(230,234,236,.9)' : 'rgba(20,24,28,.85)'; g.strokeText(d.text, c.width / 2, H * 0.53); g.fillStyle = dark ? '#15191c' : '#f4f6f7'; g.fillText(d.text, c.width / 2, H * 0.53);
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; return t;
 }
+// một bộ gom đỉnh (tọa độ tàu) → mesh có gốc tại pivot (tọa độ tàu); T: mớn nước (dùng cho quả neo mặc định của cảnh)
+export function accMesh(THREE, acc, pivot, T) {
+  const piv = [pivot[1], pivot[2] - T, -pivot[0]], r = creased(acc, T, 34, null, piv), geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(r.pos, 3)); geo.setAttribute('normal', new THREE.BufferAttribute(r.nor, 3));
+  const m = new THREE.Mesh(geo, shipMat(THREE, { color: acc.col, side: THREE.DoubleSide, rough: 0.45, metal: 0.5 })); m.position.set(piv[0], piv[1], piv[2]); return m;
+}
 // opt.inside: cảnh chính — khối (thượng tầng, buồng lái…) chỉ vẽ mặt ngoài để camera đứng trong buồng lái nhìn xuyên ra như qua kính
 // opt.shadows: đổ bóng và nhận bóng
 export function modelGroup(THREE, geom, opt = {}) {
   const g = new THREE.Group(), T = geom.dims.T, roof = geom.roofDeck !== false && geom.colors ? geom.colors.deck : null;
-  g.userData.spin = [];
+  g.userData.spin = []; g.userData.anchors = [];
   for (const it of geom.items) {
     const piv = it.pivot ? [it.pivot[1], it.pivot[2] - T, -it.pivot[0]] : null;
     const r = creased(it, T, it.crease || (it.tag === 'hullside' ? 42 : 34), it.tag === 'roof' ? roof : null, piv);
     const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.BufferAttribute(r.pos, 3)); geo.setAttribute('normal', new THREE.BufferAttribute(r.nor, 3));
     if (r.col) geo.setAttribute('color', new THREE.BufferAttribute(r.col, 3)); if (r.win) geo.setAttribute('aWin', new THREE.BufferAttribute(r.win, 2));
     const metal = it.col === 0x3a3f44, mesh = new THREE.Mesh(geo, shipMat(THREE, { color: r.col ? 0xffffff : it.col, vc: !!r.col, side: opt.inside && it.flat ? THREE.FrontSide : THREE.DoubleSide, win: !!r.win, rough: metal ? 0.45 : it.tag === 'deck' ? 0.85 : 0.68, metal: metal ? 0.5 : 0.04 }));
-    if (piv) { mesh.position.set(piv[0], piv[1], piv[2]); mesh.userData.spin = it.spin || 24; g.userData.spin.push(mesh); }
+    if (piv) { mesh.position.set(piv[0], piv[1], piv[2]); if (it.spin) { mesh.userData.spin = it.spin; g.userData.spin.push(mesh); } if (it.anchor) { mesh.userData.anchor = it.anchor; g.userData.anchors.push(mesh); } }
     if (opt.shadows) { mesh.castShadow = true; mesh.receiveShadow = true; }
     g.add(mesh);
   }

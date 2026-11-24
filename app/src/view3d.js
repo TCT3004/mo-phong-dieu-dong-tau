@@ -3,7 +3,9 @@ import * as THREE from 'three';
 import { sampleWorld, DEF_CLASS_DEPTH } from './chartsys.js';
 import { body2w } from './world.js';
 import { buildModel } from './shipdraw/model.js';
-import { modelGroup, skyEnv } from './shipdraw/mesh3.js';
+import { modelGroup, skyEnv, accMesh } from './shipdraw/mesh3.js';
+import { buildFit } from './shipdraw/fittings.js';
+import { Acc } from './shipdraw/prims.js';
 import { makeFlags } from './flags.js';
 
 export const QUALITY = {
@@ -138,7 +140,7 @@ export class View3D {
   // tàu vẽ từ sơ đồ (thông số tàu có `model`): dựng theo mô hình; lỗi thì quay về tàu đơn giản
   buildShipModel(M) {
     const T = M.d, geom = buildModel(M.p.model, { L: M.loa, B: M.B, D: +M.p.D || M.d * 1.6, T, cb: +M.p.cb || 0.6 }), g = this.shipG;
-    const mg = modelGroup(THREE, geom, { inside: true, shadows: this.shadows }); g.add(mg); this.shipGeom = geom; this.spin = mg.userData.spin || [];
+    const mg = modelGroup(THREE, geom, { inside: true, shadows: this.shadows }); g.add(mg); this.shipGeom = geom; this.spin = mg.userData.spin || []; this.modelAnch = mg.userData.anchors || [];
     if (this.shadows) { const sc = this.sun.shadow.camera, R = Math.max(20, geom.dims.L * 0.62); sc.left = -R; sc.right = R; sc.top = R; sc.bottom = -R; sc.near = 1; sc.far = Math.max(400, geom.dims.L * 8); sc.updateProjectionMatrix(); }
     const e = geom.eye, H = geom.hull, hbE = H.hb(Math.max(H.xa, Math.min(H.xf, e.x)));
     this.dim = { L: geom.dims.L, B: geom.dims.B, fb: geom.dims.fb, shh: Math.max(3, e.z - T - geom.dims.fb + 1.6), bridgeX: e.x, eye: e.z - T, eyeY: e.y || 0, wingY: hbE + 0.4 };
@@ -148,7 +150,7 @@ export class View3D {
     const f = geom.flag; this.flags = makeFlags(g, M.p.flags || 'hq', geom.dims.L, f.x, f.z - T, f.span);
   }
   buildShip(M, anchors) {
-    const g = this.shipG; g.clear(); this.shipGeom = null; this.flags = null; this.spin = [];
+    const g = this.shipG; this.dropAnchors(false); g.clear(); this.shipGeom = null; this.flags = null; this.spin = []; this.modelAnch = []; this.anchMap = null;
     if (M.p.model && M.p.model.parts && M.p.model.parts.length) { try { this.buildShipModel(M); return; } catch (e) { console.error('Không dựng được mô hình tàu', e); g.clear(); } }
     const L = M.loa, B = M.B, D = +M.p.D || M.d * 1.6, T = M.d, fb = D - T;
     const sh = new THREE.Shape(); const hb = B / 2, bow = L / 2, st = -L / 2;
@@ -233,6 +235,55 @@ export class View3D {
       else { const bc = o.kind === 'buoyR' ? 0xd9362e : o.kind === 'buoyG' ? 0x2f9e55 : 0xe6c000; const t = new THREE.Mesh(o.kind === 'buoyG' ? new THREE.ConeGeometry(1.3, hgt, 10) : new THREE.CylinderGeometry(1.1, 1.3, hgt, 10), new THREE.MeshLambertMaterial({ color: bc })); t.position.set(o.x, hgt / 2 - 0.6, -o.y); t.userData.float = hgt / 2 - 0.6; g.add(t); }
       const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.glow, color: c, blending: THREE.AdditiveBlending, depthWrite: false, fog: false, sizeAttenuation: false }));
       sp.position.set(o.x, base + hgt + 0.5, -o.y); sp.scale.setScalar(0.035); sp.userData = o.kind === 'light' || /^beacon/.test(o.kind) ? { fix: base + hgt + 0.5 } : { float: hgt + 0.2 }; g.add(sp); this.marks.push({ sp, o });
+    }
+  }
+  // ---------- quả neo + xích ----------
+  // bỏ ghép neo: keep = giữ tàu (bài mới) thì quả neo của mô hình về lại chỗ cũ trên tàu; quả neo mặc định và xích thì gỡ
+  dropAnchors(keep) { for (const m of this.anchMap || []) { if (m.generic || !keep) { if (m.mesh.parent) m.mesh.parent.remove(m.mesh); } else { m.parent.add(m.mesh); m.mesh.position.copy(m.home); m.mesh.quaternion.identity(); } if (m.line.parent) m.line.parent.remove(m.line); } this.anchMap = null; }
+  // quả neo mặc định (tàu không vẽ neo ở chỗ đó): hình neo thư viện, gốc ở chỗ nối xích
+  genericAnchor(side) {
+    const L = this.dim ? this.dim.L : 60, h = Math.max(0.8, Math.min(2.2, L / 45)), acc = new Acc(0x3a3f44, true), dummy = new Acc(0, true);
+    const I = buildFit({ id: 'g', kind: 'anchor', x: 0, y: 0, z: 0, rot: side < 0 ? 180 : 0, l: h * 0.85, w: 0.5, h }, { metal: acc, super: acc, dark: acc, white: acc, hawse: dummy }, []);
+    const m = accMesh(THREE, acc, I.attach, 0); m.castShadow = this.shadows; return m;
+  }
+  // ghép quả neo của mô hình (mũi / lái, mạn) với từng neo mô phỏng; lỗ neo mô phỏng lấy theo chỗ quả neo trên mô hình
+  mapAnchors(anchors) {
+    this.dropAnchors(true); const pool = (this.modelAnch || []).slice(), G = this.shipGeom, T = G ? G.dims.T : 0, fb = this.dim ? this.dim.fb : 3;
+    this.anchMap = anchors.map((a) => {
+      const bow = a.id[0] === 'B', side = { P: -1, S: 1 }[a.id[1]] || 0; let best = null, bs = 0;
+      for (const m of pool) { const u = m.userData.anchor; if (u.bow !== bow) continue; const sc = side === 0 ? (u.side >= 0 ? 2 : 1) : u.side === side ? 3 : u.side === 0 ? 1 : 0; if (sc > bs) { bs = sc; best = m; } }
+      let mesh = best, parent, home; const generic = !mesh;
+      if (mesh) { pool.splice(pool.indexOf(mesh), 1); parent = mesh.parent; home = mesh.position.clone(); a.bx = -home.z; a.by = home.x; }
+      else {
+        let hz = fb - 1;
+        if (G) { const H = G.hull, x = Math.max(H.xa + 1, Math.min(H.xf - 0.5, a.bx)), z = H.zTop(x) - 1; a.bx = x; if (side) a.by = side * (H.yAt(x, z, side) + 0.2); hz = z - T; }
+        mesh = this.genericAnchor(side); parent = this.shipG; home = new THREE.Vector3(a.by, hz, -a.bx); mesh.position.copy(home); parent.add(mesh);
+      }
+      const line = new THREE.Line(new THREE.BufferGeometry().setAttribute('position', new THREE.BufferAttribute(new Float32Array(16 * 3), 3)), new THREE.LineBasicMaterial({ color: 0x5f6266 })); line.frustumCulled = false; line.visible = false; this.scene.add(line);
+      return { a, mesh, parent, home, line, generic, init: false };
+    });
+    this.anchFor = anchors;
+  }
+  // mỗi khung hình: neo trong lỗ thì nằm yên chỗ cũ; đang thả thì quả neo treo dưới lỗ neo theo độ dài xích (rơi trước, xích ra theo);
+  // chạm đáy thì nằm ở chỗ neo ăn, thân neo quay về phía tàu; thu neo thì lên dần rồi vào đúng chỗ cũ. depth: độ sâu nước tại tàu
+  anchors3D(anchors, depth) {
+    if (!anchors || !anchors.length) return; if (!this.anchMap || this.anchFor !== anchors) this.mapAnchors(anchors);
+    this.shipG.updateMatrixWorld(true);
+    const seabed = -Math.max(1, depth), qYaw = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), this.shipG.rotation.y), qX = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -Math.PI / 2);
+    for (const m of this.anchMap) {
+      const { a, mesh, parent, home, line } = m;
+      if (a.st === 'stow' || a.chain <= 0.02) { if (mesh.parent !== parent) parent.add(mesh); mesh.position.copy(home); mesh.quaternion.identity(); line.visible = false; m.init = false; continue; }
+      const H = parent.localToWorld(home.clone());
+      if (mesh.parent !== this.scene) { const q0 = new THREE.Quaternion(); this.shipG.getWorldQuaternion(q0); this.scene.add(mesh); mesh.quaternion.copy(q0); }
+      let P, tq;
+      if (a.ax === null) { P = new THREE.Vector3(H.x, Math.max(seabed + 0.3, H.y - a.chain), H.z); tq = qYaw; }
+      else { P = new THREE.Vector3(a.ax, seabed + 0.3, -a.ay); tq = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.atan2(-(H.x - P.x), -(H.z - P.z))).multiply(qX); }
+      mesh.position.copy(P); mesh.quaternion.slerp(tq, m.init ? 0.12 : 0.25); m.init = true;
+      // xích: treo võng từ lỗ neo xuống chỗ chạm đáy rồi nằm trên đáy tới quả neo (thẳng căng khi xích ngắn)
+      const pts = [], dx = P.x - H.x, dz = P.z - H.z, dh = Math.hypot(dx, dz), hv = H.y - P.y, k = a.chain - dh;
+      if (a.ax === null || dh < 0.05 || k <= 0.01 || hv <= 0) pts.push(H, P);
+      else { const sh = Math.max(0, Math.min(dh, (hv * hv - k * k) / (2 * k))), Tx = H.x + dx / dh * sh, Tz = H.z + dz / dh * sh; for (let i = 0; i <= 12; i++) { const u = 1 - i / 12; pts.push(new THREE.Vector3(Tx + (H.x - Tx) * u, P.y + hv * u * u, Tz + (H.z - Tz) * u)); } pts.push(P); }
+      const arr = line.geometry.attributes.position; pts.forEach((q, i) => arr.setXYZ(i, q.x, q.y, q.z)); arr.needsUpdate = true; line.geometry.setDrawRange(0, pts.length); line.visible = true;
     }
   }
   setSegs(list) {

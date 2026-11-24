@@ -119,6 +119,8 @@ export function envAt(env, daySec, t, wx) {
 }
 
 // ---------- neo ----------
+// tốc độ xích (m/s): tời theo cấp của từng neo (cấp 1, cấp 2) cho thả, thả kéo lê và kéo; thả tự do 3 m/s, neo chạm đáy thì chậm dần còn 1 m/s (không tự dừng)
+export const ANCHOR_SPD = { 1: 1, 2: 2 }, FREE_SPD = 3, FREE_BOTTOM_SPD = 1;
 export function makeAnchors(M) {
   const p = M.p, a = [], L = M.loa, B = M.B;
   const nb = Math.round(num(p.bowAnchors, 2)), ns = Math.round(num(p.sternAnchors, 0));
@@ -126,7 +128,7 @@ export function makeAnchors(M) {
   else a.push({ id: 'BC', name: 'Neo mũi', bx: L * 0.49, by: 0 });
   if (ns === 1) a.push({ id: 'SC', name: 'Neo lái', bx: -L * 0.49, by: 0 });
   if (ns >= 2) { a.push({ id: 'SP', name: 'Neo lái trái', bx: -L * 0.47, by: -B * 0.3 }); a.push({ id: 'SS', name: 'Neo lái phải', bx: -L * 0.47, by: B * 0.3 }); }
-  for (const q of a) Object.assign(q, { st: 'stow', chain: 0, target: 0, ax: null, ay: null, drag: false, ten: 0 });
+  for (const q of a) Object.assign(q, { st: 'stow', chain: 0, target: 0, ax: null, ay: null, drag: false, ten: 0, lv: 1, free: false, vf: FREE_SPD });
   return a;
 }
 export function makeLines(M) {
@@ -149,14 +151,16 @@ export function externalForces(W, S, M, anchors, lines, h, dt, info) {
   for (const a of anchors) {
     a.ten = 0; if (a.st === 'stow') continue;
     const [hx, hy] = body2w(S, a.bx, a.by);
+    const v = ANCHOR_SPD[a.lv] || 1;
     if (a.st === 'drop') {
-      a.chain = Math.min(clen, a.chain + 1.2 * dt);
+      if (a.free) { const tg = a.ax === null ? FREE_SPD : FREE_BOTTOM_SPD; a.vf += (tg - a.vf) * Math.min(1, dt / 1.2); }
+      a.chain = Math.min(clen, a.chain + (a.free ? a.vf : v) * dt);
       if (a.target && a.chain >= a.target) { a.chain = a.target; a.st = 'hold'; a.target = 0; }
       if (a.chain >= clen) a.st = 'hold';
     } else if (a.st === 'heave') {
-      if (a.ten < 3 * Wa) a.chain = Math.max(0, a.chain - 0.15 * dt);
+      if (a.ten < 3 * Wa) a.chain = Math.max(0, a.chain - v * dt);
       if (a.chain <= hv - 1) { a.ax = null; }
-      if (a.chain <= 0) { a.st = 'stow'; a.drag = false; continue; }
+      if (a.chain <= 0) { a.st = 'stow'; a.drag = false; a.free = false; continue; }
     }
     if (a.ax === null) { if (a.chain >= hv && a.st !== 'heave') { a.ax = hx; a.ay = hy; } else continue; }
     const dx = a.ax - hx, dy = a.ay - hy, dh = Math.hypot(dx, dy) || 1e-6;

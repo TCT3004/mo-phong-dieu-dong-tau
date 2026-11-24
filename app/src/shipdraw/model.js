@@ -134,7 +134,7 @@ export function buildModel(model, ship) {
   const faccs = { ...accs, super: accs.fsuper };
   const accFor = (node) => accs[node.color] || accs.super;
   const match = (q, kind) => { let best = null, bo = 0; for (const o of P) { if (o === q || o.key !== q.key || o.vk !== kind || !o.closed) continue; const ov = Math.min(q.bb[2], o.bb[2]) - Math.max(q.bb[0], o.bb[0]); if (kind !== 'side' && kind !== 'top') return o; if (ov > bo) { bo = ov; best = o; } } return best; };
-  const used = new Set(); const lights = [], blocks = [], solids = [], movers = [], fitInfo = {}; let eye = null; const links = {}, src = {}, rng = [];
+  const used = new Set(); const lights = [], blocks = [], solids = [], movers = [], anchs = [], fitInfo = {}; let eye = null; const links = {}, src = {}, rng = [];
   // ghi vùng tam giác mỗi chi tiết sinh ra (để sáng khối 3D khi chọn, bấm khối trên 3D để chọn chi tiết)
   const mark = (ids, fn) => { const s0 = Object.values(accs).map((a) => a.idx.length); fn(); Object.values(accs).forEach((a, i) => { if (a.idx.length > s0[i]) rng.push({ ids, acc: a, t0: s0[i] / 3, t1: a.idx.length / 3 }); }); };
   // bề rộng mặc định khi không có mặt boong / hình nhìn từ mũi
@@ -222,6 +222,13 @@ export function buildModel(model, ship) {
       default: if (!q.role.startsWith('hull')) mark([q.p.id], () => prim(q)); break;
     }
   }
+  // quả neo: khối riêng có gốc ở chỗ nối xích (cảnh 3D cho rơi theo xích, thu về đúng chỗ cũ); miệng lỗ neo ở lại trên vỏ
+  function anchorFit(f) {
+    const acc = new Acc(0x3a3f44, true, 'anchor'), aa = { metal: acc, super: acc, dark: acc, white: acc, orange: acc, hull: acc, deck: acc, hawse: accs.metal };
+    const I = buildFit(f, aa, movers); if (!I) return null;
+    anchs.push({ id: f.id, acc, pivot: I.attach, side: Math.abs(I.attach[1]) < 0.3 ? 0 : Math.sign(I.attach[1]), bow: I.attach[0] >= 0 });
+    return I;
+  }
   // chi tiết vẽ theo hình mạn dạng cũ (radar, pháo, bè, neo, tời, xuồng): dựng bằng hình của thư viện chi tiết
   function prim(q) {
     const n = q.node, num = q.p.num || {}, id = q.p.id, cx = (q.bb[0] + q.bb[2]) / 2, len = q.bb[2] - q.bb[0], ht = q.bb[3] - q.bb[1];
@@ -241,7 +248,7 @@ export function buildModel(model, ship) {
       }
       case 'boat': { if (q.vk !== 'side') break; const w = num.w > 0 ? num.w : len * 0.36; F({ kind: 'boat', x: cx, y: (n.side || 1) * Math.max(w / 2, hbAt(cx) - w / 2 - 0.25), z: q.bb[1], l: len, w, h: Math.max(0.5, ht) }); break; }
       case 'raft': { if (q.vk !== 'side') break; const r = ht / 2; F({ kind: 'raft', x: cx, y: (n.side || 1) * Math.max(r, hbAt(cx) - r - 0.2), z: q.bb[1], l: Math.max(0.6, len), w: ht, h: ht }); break; }
-      case 'anchor': { if (q.vk !== 'side') break; const z = (q.bb[1] + q.bb[3]) / 2, s = n.side || 1; F({ kind: 'anchor', x: cx, y: s * H.yAt(clamp(cx, H.xa, H.xf), z, s), z, rot: s > 0 ? 0 : 180, l: Math.max(0.5, len), w: 0.5, h: Math.max(0.6, ht) }); break; }
+      case 'anchor': { if (q.vk !== 'side') break; const z = (q.bb[1] + q.bb[3]) / 2, s = n.side || 1; anchorFit({ id, kind: 'anchor', x: cx, y: s * H.yAt(clamp(cx, H.xa, H.xf), z, s), z, rot: s > 0 ? 0 : 180, l: Math.max(0.5, len), w: 0.5, h: Math.max(0.6, ht) }); break; }
       case 'winch': { if (q.vk !== 'side') break; F({ kind: 'windlass', x: cx, y: 0, z: q.bb[1], l: Math.max(0.5, len), w: num.w > 0 ? num.w : 1.4, h: Math.max(0.4, ht) }); break; }
       case 'cyl': { if (q.vk !== 'side') break; tubeV(accs.fsuper, [{ x: cx, y: 0, z: q.bb[1], r: len / 2 }, { x: cx, y: 0, z: q.bb[3], r: len / 2 }], 20); break; }
       case 'tube': { if (q.vk !== 'side') break; const r = ht / 2; cyl(accs.fsuper, [q.bb[0], 0, q.bb[1] + r], [q.bb[2], 0, q.bb[1] + r], r, r, 16); break; }
@@ -252,7 +259,7 @@ export function buildModel(model, ship) {
   // chi tiết chỉ vẽ ở mặt boong (không có hình mạn): dựng sau cùng; chỉ có ở hình mũi / lái thì báo
   for (const q of P) { if (used.has(q) || !SOLID.has(q.role) || !q.closed) continue; if (q.vk === 'top') solid(q); else if (q.vk === 'front' || q.vk === 'back') { used.add(q); src[q.p.id] = 'chưa dựng — cần thêm hình mạn hoặc mặt boong'; warn.push('Có chi tiết chỉ vẽ ở hình nhìn từ ' + (q.vk === 'back' ? 'lái' : 'mũi') + ' — vẽ thêm ở hình mạn hoặc mặt boong để app biết nằm ở đâu dọc tàu'); } }
   // chi tiết đặt sẵn từ thư viện
-  for (const f of model.fits || []) { if (!FIT_KINDS[f.kind]) continue; mark([f.id], () => { const I = buildFit(f, faccs, movers); if (I) fitInfo[f.id] = I; }); }
+  for (const f of model.fits || []) { if (!FIT_KINDS[f.kind]) continue; mark([f.id], () => { const I = f.kind === 'anchor' ? anchorFit(f) : buildFit(f, faccs, movers); if (I) fitInfo[f.id] = I; }); }
   // lan can mép boong
   if (opts.rails !== false) {
     const st = Math.max(1.5, H.L / 40); for (let x = H.xa + 1; x < H.xf - 1; x += st) { const z = deckZ(x); for (const s of [-1, 1]) { const w = H.hbs(x, s) * H.S(x, 1) - 0.06; if (w >= 0.3) cyl(accs.white, [x, s * w, z], [x, s * w, z + 1], 0.025, 0.025, 4); } }
@@ -289,6 +296,7 @@ export function buildModel(model, ship) {
   const ranges = {}; for (const r of rng) { const it = items.indexOf(r.acc); for (const id of r.ids) (ranges[id] || (ranges[id] = [])).push({ it, t0: r.t0, t1: r.t1 }); }
   // phần quay (radar): mỗi cái một khối riêng có tâm quay
   for (const m of movers) { if (!m.acc.idx.length) continue; m.acc.pivot = m.pivot; m.acc.spin = m.rpm; items.push(m.acc); (ranges[m.id] || (ranges[m.id] = [])).push({ it: items.length - 1, t0: 0, t1: m.acc.idx.length / 3 }); }
+  for (const a of anchs) { if (!a.acc.idx.length) continue; a.acc.pivot = a.pivot; a.acc.anchor = { side: a.side, bow: a.bow }; items.push(a.acc); (ranges[a.id] || (ranges[a.id] = [])).push({ it: items.length - 1, t0: 0, t1: a.acc.idx.length / 3 }); }
   for (const q of P) if (q.role.startsWith('hull')) ranges[q.p.id] = [0, 1].map((it) => ({ it, t0: 0, t1: items[it].idx.length / 3 }));
   const fitBB = {}; for (const [id, I] of Object.entries(fitInfo)) fitBB[id] = I.bb;
   return { items, lights, eye, flag, links, src, ranges, solids, auto: autoViews(solids), fitBB, colors: sh, roofDeck: opts.roofDeck !== false, decals: hullDecals(H, opts.hullNo), hullNoCol: opts.hullNoCol || (((sh.hull >> 16 & 255) * 0.3 + (sh.hull >> 8 & 255) * 0.59 + (sh.hull & 255) * 0.11) > 150 ? 'k' : 'w'), bridge: br ? { xf: br.x1, hb: br.ym, z1: br.z1 } : null, hull: H, areas: areas(items, ship.T), warn: [...new Set(warn)], dims: { L: H.L, B: 2 * Math.max(...Array.from({ length: 41 }, (_, i) => H.hb(H.xa + H.L * i / 40))), xa: H.xa, xf: H.xf, fb: deckZ(0) - ship.T, T: ship.T } };

@@ -211,15 +211,18 @@ function drawPanel() {
     const key = 'neo' + s.anchors.map((a) => a.id).join();
     if (built !== key) {
       built = key;
-      el.innerHTML = `<div class="muted" style="margin-bottom:6px">Độ sâu nước <b id="aH" class="mono" style="color:#E6EDF2"></b> · kéo lê: xích ≈ 1,5× độ sâu · đứng neo: xích ≥ 3× độ sâu</div><div id="aWarn" class="note bad" style="display:none;margin-bottom:6px;font-weight:700"></div>` + s.anchors.map((a) => `<div class="rowi"><div class="flex" style="justify-content:space-between;gap:6px"><b>${a.name}</b><span class="pill" id="aS${a.id}"></span></div><div style="display:flex;align-items:center;gap:8px;margin:5px 0"><span class="mono" style="font-size:15px;font-weight:600;white-space:nowrap"><span id="aC${a.id}">0</span> <span class="muted">/ ${num(A.p.chainLen, 0)} m xích</span></span><div class="bar" style="flex:1"><i id="aB${a.id}"></i></div><span class="muted" id="aR${a.id}" style="white-space:nowrap"></span></div><div class="grid g4" style="gap:5px">${[['drop', 'Thả neo'], ['dredge', 'Thả kéo lê'], ['brake', 'Hãm'], ['heave', 'Kéo neo']].map((d) => `<button class="btn sm" data-act="anchor" data-id="${a.id}" data-do="${d[0]}">${d[1]}</button>`).join('')}</div></div>`).join('');
+      el.innerHTML = `<div class="muted" style="margin-bottom:6px">Độ sâu nước <b id="aH" class="mono" style="color:#E6EDF2"></b> · kéo lê: xích ≈ 1,5× độ sâu · đứng neo: xích ≥ 3× độ sâu</div><div id="aWarn" class="note bad" style="display:none;margin-bottom:6px;font-weight:700"></div>` + s.anchors.map((a) => `<div class="rowi"><div class="flex" style="gap:6px;align-items:center;flex-wrap:nowrap"><b style="white-space:nowrap">${a.name}</b><div class="seg" id="aLv${a.id}" title="Tốc độ tời khi thả, thả kéo lê và kéo neo" style="flex:0 0 auto">${[1, 2].map((k) => `<button data-act="anchor" data-id="${a.id}" data-do="lv${k}" style="padding:0 6px">Cấp ${k}</button>`).join('')}</div><span class="pill" id="aS${a.id}" style="margin-left:auto;min-width:0;overflow:hidden;text-overflow:ellipsis;padding:1px 6px"></span></div><div style="display:flex;align-items:center;gap:8px;margin:4px 0"><span class="mono" style="font-size:15px;font-weight:600;white-space:nowrap"><span id="aC${a.id}">0</span> <span class="muted">/ ${num(A.p.chainLen, 0)} m xích</span></span><div class="bar" style="flex:1"><i id="aB${a.id}"></i></div><span class="muted" id="aR${a.id}" style="white-space:nowrap"></span></div><div class="grid" style="grid-template-columns:1fr 1.15fr 1.3fr .75fr 1fr;gap:4px">${[['drop', 'Thả neo', 'Thả bằng tời theo cấp đang chọn'], ['free', 'Thả tự do', 'Nhả phanh cho neo rơi tự do; neo chạm đáy thì xích chạy chậm lại — bấm Hãm để dừng'], ['dredge', 'Thả kéo lê', 'Thả đến khoảng 1,5× độ sâu rồi tự hãm'], ['brake', 'Hãm', 'Hãm phanh tời giữ xích'], ['heave', 'Kéo neo', 'Kéo bằng tời theo cấp đang chọn']].map((d) => `<button class="btn sm" data-act="anchor" data-id="${a.id}" data-do="${d[0]}" title="${d[2]}" style="padding:0 2px;white-space:nowrap;font-size:11.5px;min-height:28px">${d[1]}</button>`).join('')}</div></div>`).join('');
     }
     $('#aH').textContent = Math.max(0, s.h).toFixed(1) + ' m'; let warn = '';
     for (const a of s.anchors) {
       const hv = Math.max(1, s.h + 3), sc = a.chain / hv; let st = 'Trong lỗ neo', c = '#B8C7D1';
-      if (a.st === 'drop') { st = a.target ? 'Đang thả để kéo lê' : a.ax !== null ? 'Đang thả · đã chạm đáy' : 'Đang thả'; c = '#FFB547'; }
-      else if (a.st === 'heave') { st = a.ax === null ? 'Đang kéo · neo đã rời đáy' : 'Đang kéo neo'; c = '#FFB547'; }
-      else if (a.st === 'hold') { if (a.ax === null) { st = 'Đã hãm · chưa chạm đáy'; c = '#FFB547'; } else if (sc < 2.5) { st = a.drag ? 'Neo kéo lê (đang cày đáy)' : 'Neo kéo lê'; c = '#7FD4FF'; } else if (a.drag) { st = 'NEO TRÔI'; c = '#FF8A8A'; warn = a.name; } else { st = 'Đứng neo · neo đã ăn'; c = '#86E0A8'; } }
-      const e1 = $('#aS' + a.id); e1.textContent = st; e1.style.color = c; e1.style.borderColor = c;
+      // chữ ngắn để vừa một dòng cạnh nút cấp; rê chuột lên để xem đủ
+      let full = st;
+      if (a.st === 'drop') { const bot = a.ax !== null && !a.target; st = a.target ? 'Thả kéo lê' : a.free ? (bot ? 'Tự do · chạm đáy' : 'Thả tự do') : (bot ? 'Thả · chạm đáy' : 'Đang thả'); full = (a.target ? 'Đang thả để kéo lê' : a.free ? 'Thả tự do' : 'Đang thả bằng tời') + (bot ? ' · neo đã chạm đáy, xích còn chạy' : ''); c = '#FFB547'; }
+      else if (a.st === 'heave') { st = a.ax === null ? 'Kéo · rời đáy' : 'Đang kéo'; full = a.ax === null ? 'Đang kéo · neo đã rời đáy' : 'Đang kéo neo'; c = '#FFB547'; }
+      else if (a.st === 'hold') { if (a.ax === null) { st = 'Hãm · chưa chạm đáy'; c = '#FFB547'; } else if (sc < 2.5) { st = a.drag ? 'Kéo lê · cày đáy' : 'Neo kéo lê'; c = '#7FD4FF'; } else if (a.drag) { st = 'NEO TRÔI'; c = '#FF8A8A'; warn = a.name; } else { st = 'Neo đã ăn'; c = '#86E0A8'; } full = st === 'Neo đã ăn' ? 'Đứng neo · neo đã ăn' : st === 'Kéo lê · cày đáy' ? 'Neo kéo lê (đang cày đáy)' : st; }
+      const e1 = $('#aS' + a.id); e1.textContent = st; e1.title = full; e1.style.color = c; e1.style.borderColor = c;
+      $$('#aLv' + a.id + ' button').forEach((b) => b.classList.toggle('on', b.dataset.do === 'lv' + (a.lv || 1)));
       $('#aC' + a.id).textContent = a.chain.toFixed(0); $('#aB' + a.id).style.width = Math.min(100, a.chain / num(A.p.chainLen, 275) * 100) + '%';
       $('#aR' + a.id).textContent = '= ' + sc.toFixed(1) + '× độ sâu · căng ' + (a.ten / 9810).toFixed(0) + ' t';
     }
@@ -395,6 +398,5 @@ function drawMini(d, night) {
 export function lineSegs3D() {
   const s = A.sim, S = s.S, M = A.M, fb = (num(A.p.D, M.d * 1.6) - M.d), out = [], tide = s.e.tide;
   for (const l of s.lines) if (l.st !== 'chua') { const [fx, fy] = body2w(S, l.fx, l.side * M.B / 2 * l.fyk); const top = (A.W.bollards.find((b) => b.n === l.bn) || { top: 4.5 }).top; out.push([fx, fb + 0.3, -fy, l.bx, top + 0.9 - tide, -l.by, (l.pct || 0) > 80 ? 0xff5555 : 0xe8e0c8]); }
-  for (const a of s.anchors) if (a.st !== 'stow') { const [hx, hy] = body2w(S, a.bx, a.by); if (a.ax !== null) out.push([hx, fb - 1, -hy, a.ax, -Math.max(1, s.h), -a.ay, 0x777777]); else out.push([hx, fb - 1, -hy, hx, -Math.min(a.chain, Math.max(1, s.h)), -hy, 0x777777]); }
-  return out;
+  return out; // xích neo do view3d vẽ cùng quả neo
 }
