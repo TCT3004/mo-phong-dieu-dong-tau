@@ -1,5 +1,6 @@
 // Thư viện chi tiết đặt sẵn (thuần JS): cột dàn lưới, radar quay, ăng-ten, bè, neo, tời, cột bích, đèn pha, còi, cầu thang,
-// ống khói, tháp pháo, giá phóng, xuồng, cần cẩu hàng, nắp hầm hàng, container, ống phóng lôi, cửa mũi, đường ống boong, đệm va. Hình CHUNG CHUNG theo kích thước người dùng nhập — không theo mẫu tàu thật nào.
+// ống khói, tháp pháo, giá phóng, xuồng, cần cẩu hàng, nắp hầm hàng, container, ống phóng lôi, cửa mũi, đường ống boong, đệm va,
+// cột đơn, ống thông gió, cần xuồng, ống phóng mồi bẫy, thùng boong, cột cờ mũi / lái, tấm chắn sóng, cầu chằng container. Hình CHUNG CHUNG theo kích thước người dùng nhập — không theo mẫu tàu thật nào.
 // Chi tiết f = { id, kind, x, y, z (điểm đặt: giữa đáy), rot (độ, từ hướng mũi sang mạn phải), l (dài theo hướng của nó), w (rộng), h (cao), … }.
 // Hệ riêng khi dựng: u về trước, v sang phải, w lên từ điểm đặt.
 import { Acc, TAcc, xform, newBB, box, cyl, tubeV, ellipsoid, loftRings } from './prims.js';
@@ -29,7 +30,15 @@ export const FIT_KINDS = {
   torpedo: { name: 'Ống phóng lôi', l: 7, w: 1.4, h: 1.3, scale: true, n: 2, tip: 'n ống đặt cạnh nhau, miệng ống hướng theo chiều xoay' },
   ramp: { name: 'Cửa mũi / cầu dẫn', l: 0.45, w: 5, h: 6, scale: true, el: 12, tip: 'Tấm cầu dẫn dựng ở mũi, bản lề ở điểm đặt: h = chiều dài tấm, w = rộng, l = dày; el = góc ngả về phía mũi so với phương đứng' },
   pipes: { name: 'Đường ống boong', l: 30, w: 2.4, h: 1.6, tip: 'Bó ống chạy dọc boong + lối đi trên cao (tàu dầu)' },
-  fender: { name: 'Đệm va', l: 6, w: 0.7, h: 0.7, tip: 'Ống cao su đen nằm ngang (tàu lai: đặt quanh mũi / lái)' }
+  fender: { name: 'Đệm va', l: 6, w: 0.7, h: 0.7, tip: 'Ống cao su đen nằm ngang (tàu lai: đặt quanh mũi / lái)' },
+  mast: { name: 'Cột đơn (có sàn, xà)', l: 3, w: 0.4, h: 7, scale: true, tip: 'Cột thép tròn thon dần, sàn radar ở 70% chiều cao, xà treo cờ; l = độ vươn của xà, w = đường kính chân cột' },
+  vent: { name: 'Ống thông gió', l: 0.7, w: 0.7, h: 1.4, n: 1, tip: 'n = 1: kiểu nấm; n = 2: kiểu cổ ngỗng (miệng quay theo chiều xoay)' },
+  davit: { name: 'Cần hạ xuồng', l: 5, w: 1.6, h: 2.6, scale: true, tip: 'Cặp cần cong vươn ra mạn (v hướng ra ngoài: mạn trái xoay 180°); đặt xuồng treo ở đầu cần' },
+  chaff: { name: 'Ống phóng mồi bẫy', l: 1.2, w: 1.0, h: 1.0, rows: 2, cols: 3, el: 45, tip: 'Cụm ống ngóc lên el độ, hướng theo chiều xoay' },
+  locker: { name: 'Thùng / tủ trên boong', l: 1.4, w: 0.8, h: 0.9 },
+  staff: { name: 'Cột cờ mũi / lái', l: 0.12, w: 0.12, h: 3.5, tip: 'Cột mảnh có quả cầu đỉnh (cờ mũi ở sống mũi, cờ lái ở lái)' },
+  breakwater: { name: 'Tấm chắn sóng mũi', l: 1.2, w: 6, h: 1.1, scale: true, tip: 'Tấm chữ V có gân trên boong mũi, mũi chữ V hướng về trước' },
+  lashing: { name: 'Cầu chằng container', l: 1.2, w: 14, h: 5, tip: 'Khung chằng buộc giữa các dãy container (w = bề ngang, h = cao)' }
 };
 // cỡ mặc định khi đặt mới trên tàu dài L (m)
 export function fitDefaults(kind, L) {
@@ -105,7 +114,10 @@ const B = {
   },
   funnel(K, f) {
     const l = f.l, w = f.w, h = f.h, rk = h * 0.12, ring = (t, k) => ({ x: -rk * t, y: 0, z: h * t, rx: l / 2 * k, ry: w / 2 * k });
-    tubeV(K('super'), [ring(0, 1), ring(0.45, 0.97), ring(0.86, 0.9)], 22); tubeV(K('dark'), [ring(0.86, 0.9), ring(1, 0.88)], 22);
+    if (f.n) { const B = K(['red', 'blue', 'green', 'yellow'][(f.n - 1) % 4]); tubeV(K('super'), [ring(0, 1), ring(0.45, 0.97), ring(0.58, 0.955)], 22); tubeV(B, [ring(0.58, 0.955), ring(0.76, 0.925)], 22); tubeV(K('super'), [ring(0.76, 0.925), ring(0.86, 0.9)], 22); }
+    else tubeV(K('super'), [ring(0, 1), ring(0.45, 0.97), ring(0.86, 0.9)], 22);
+    tubeV(K('dark'), [ring(0.86, 0.9), ring(1, 0.88)], 22);
+    for (const s of [-1, 1]) cyl(K('dark'), [-rk * 0.95 + s * l * 0.12, 0, h * 0.9], [-rk * 1.05 + s * l * 0.12, 0, h * 1.12], Math.min(l, w) * 0.07, Math.min(l, w) * 0.06, 8); // ống xả nhô trên đỉnh
   },
   turret(K, f) {
     const l = f.l, w = f.w, h = f.h, S = K('super'), M = K('metal'), D = K('dark'), n = clamp(Math.round(f.n || 1), 1, 3), bl = f.bl > 0 ? f.bl : l * 1.2;
@@ -179,6 +191,44 @@ const B = {
     for (let u = -l / 2 + 1; u <= l / 2 - 1; u += 4) { box(D, u, 0, 0.15, 0.2, w * 0.9, 0.3); cyl(D, [u, 0, 0], [u, 0, h - 0.08], 0.07, 0.07, 6); }
     box(S, 0, 0, h - 0.04, l, Math.min(1, w * 0.4), 0.08);
     for (const s of [-1, 1]) cyl(P, [-l / 2, s * Math.min(0.5, w * 0.2), h + 0.9], [l / 2, s * Math.min(0.5, w * 0.2), h + 0.9], 0.025, 0.025, 4);
+  },
+  // cột đơn: thân tròn thon, sàn có lan can ở 70%, xà treo cờ ở 86%, cột ngọn
+  mast(K, f, I) {
+    const h = f.h, r0 = Math.max(0.06, f.w / 2), A = K('white'), D = K('dark'), zp = h * 0.7, zy = h * 0.86, span = Math.max(0.6, f.l / 2), ps = Math.max(0.8, Math.min(2.4, h * 0.2));
+    cyl(A, [0, 0, 0], [0, 0, h], r0, r0 * 0.45, 12);
+    box(D, 0, 0, zp, ps, ps, 0.08); for (const [a, b] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) cyl(A, [a * ps / 2, b * ps / 2, zp], [a * ps / 2, b * ps / 2, zp + 0.7], 0.018, 0.018, 4);
+    for (const [p0, p1] of [[[-1, -1], [1, -1]], [[1, -1], [1, 1]], [[1, 1], [-1, 1]], [[-1, 1], [-1, -1]]]) cyl(A, [p0[0] * ps / 2, p0[1] * ps / 2, zp + 0.7], [p1[0] * ps / 2, p1[1] * ps / 2, zp + 0.7], 0.018, 0.018, 4);
+    for (const s of [-1, 1]) cyl(A, [0, 0, zp - ps * 0.6], [0, s * ps * 0.5, zp - 0.04], 0.03, 0.03, 4); // giá đỡ sàn
+    cyl(A, [0, -span, zy], [0, span, zy], 0.045, 0.045, 6); const tm = h * 0.16; cyl(A, [0, 0, h], [0, 0, h + tm], r0 * 0.3, r0 * 0.15, 8);
+    I.yard = { z: f.z + zy, span }; I.top = f.z + h + tm;
+  },
+  vent(K, f) {
+    const l = f.l, w = f.w, h = f.h, r = Math.min(l, w) * 0.3, S = K('white'), D = K('dark');
+    if ((f.n || 1) >= 2) { cyl(S, [0, 0, 0], [0, 0, h * 0.75], r, r, 12); cyl(S, [0, 0, h * 0.75], [r * 1.2, 0, h * 0.98], r, r, 12); cyl(D, [r * 1.2, 0, h * 0.98], [r * 2.2, 0, h * 0.62], r, r * 1.15, 12); }
+    else { cyl(S, [0, 0, 0], [0, 0, h * 0.8], r, r, 12); cyl(S, [0, 0, h * 0.8], [0, 0, h * 0.86], Math.min(l, w) / 2, Math.min(l, w) / 2, 14); ellipsoid(S, [0, 0, h * 0.86], Math.min(l, w) / 2, Math.min(l, w) / 2, h * 0.14, 14, 6); }
+  },
+  davit(K, f) {
+    const l = f.l, w = f.w, h = f.h, A = K('white'), D = K('dark'), r = Math.max(0.05, Math.min(0.12, h * 0.035));
+    for (const u of [-l / 2, l / 2]) { box(D, u, 0, 0.1, 0.5, 0.6, 0.2); const p0 = [u, -0.1, 0], p1 = [u, w * 0.15, h * 0.75], p2 = [u, w * 0.75, h], p3 = [u, w, h * 0.92]; cyl(A, p0, p1, r, r, 8); cyl(A, p1, p2, r, r * 0.9, 8); cyl(A, p2, p3, r * 0.9, r * 0.8, 8); cyl(D, p3, [u, w, h * 0.55], r * 0.25, r * 0.25, 4); }
+    cyl(A, [-l / 2, w * 0.15, h * 0.75], [l / 2, w * 0.15, h * 0.75], r * 0.6, r * 0.6, 6); // thanh giằng
+  },
+  chaff(K, f) {
+    const l = f.l, w = f.w, h = f.h, rows = clamp(Math.round(f.rows || 2), 1, 3), cols = clamp(Math.round(f.cols || 3), 1, 6), el = (f.el === undefined ? 45 : clamp(+f.el, 0, 85)) * Math.PI / 180, D = K('dark'), S = K('super');
+    box(D, 0, 0, h * 0.15, l * 0.7, w * 0.9, h * 0.3); const r = Math.min(w / cols, h / rows) * 0.36, tl = l * 0.75;
+    for (let i = 0; i < rows; i++) for (let j = 0; j < cols; j++) { const v = -w / 2 + w * (j + 0.5) / cols, z0 = h * 0.3 + r + i * r * 2.3, u0 = -tl / 2 * Math.cos(el); cyl(S, [u0, v, z0], [u0 + tl * Math.cos(el), v, z0 + tl * Math.sin(el)], r, r, 10); }
+  },
+  locker(K, f) { const l = f.l, w = f.w, h = f.h, S = K('super'), D = K('dark'); box(S, 0, 0, h * 0.45, l, w, h * 0.9); box(S, 0, 0, h * 0.93, l * 1.04, w * 1.06, h * 0.08); box(D, l * 0.25, w / 2 + 0.01, h * 0.6, 0.08, 0.03, 0.12); },
+  staff(K, f) { const h = Math.max(0.6, f.h), r = Math.max(0.03, f.w / 2); cyl(K('dark'), [0, 0, 0], [0, 0, 0.15], r * 2.2, r * 2.2, 8); cyl(K('white'), [0, 0, 0.15], [0, 0, h], r, r * 0.6, 8); ellipsoid(K('white'), [0, 0, h + r * 1.2], r * 1.6, r * 1.6, r * 1.6, 10, 6); },
+  breakwater(K, f) {
+    const l = f.l, w = f.w, h = f.h, t = 0.06, S = K('hull'), D = K('dark'), n = 5;
+    for (const s of [-1, 1]) { loftRings(S, [{ x: -l / 2, rings: [[[s * w / 2 - t, 0], [s * w / 2 + t, 0], [s * w / 2 + t, h * 0.8], [s * w / 2 - t, h * 0.8]]] }, { x: l / 2, rings: [[[s * 0.05 - t, 0], [s * 0.05 + t, 0], [s * 0.05 + t, h], [s * 0.05 - t, h]]] }]);
+      for (let i = 1; i < n; i++) { const k = i / n, u = -l / 2 + l * k, v = s * (w / 2 + (0.05 - w / 2) * k); cyl(D, [u - 0.4, v, 0], [u, v, h * (0.8 + 0.2 * k) * 0.9], 0.03, 0.03, 4); } }
+  },
+  lashing(K, f) {
+    const l = f.l, w = f.w, h = f.h, A = K('cgrey'), Y = K('yellow'), nb = Math.max(2, Math.round(w / 2.5));
+    for (let i = 0; i <= nb; i++) { const v = -w / 2 + w * i / nb; cyl(A, [0, v, 0], [0, v, h], 0.08, 0.08, 6); }
+    for (const z of [h * 0.45, h]) { box(A, 0, 0, z, l * 0.9, w, 0.1); cyl(Y, [l * 0.45, -w / 2, z + 1], [l * 0.45, w / 2, z + 1], 0.025, 0.025, 4); cyl(Y, [-l * 0.45, -w / 2, z + 1], [-l * 0.45, w / 2, z + 1], 0.025, 0.025, 4); }
+    for (let i = 0; i < nb; i++) { const v0 = -w / 2 + w * i / nb, v1 = v0 + w / nb; cyl(A, [0, v0, 0.1], [0, v1, h * 0.45], 0.04, 0.04, 4); }
   },
   fender(K, f) { const l = f.l, r = Math.max(0.1, Math.min(f.w, f.h) / 2); cyl(K('black'), [-l / 2 + r, 0, r], [l / 2 - r, 0, r], r, r, 12); ellipsoid(K('black'), [-l / 2 + r, 0, r], r, r, r, 10, 6); ellipsoid(K('black'), [l / 2 - r, 0, r], r, r, r, 10, 6); }
 };

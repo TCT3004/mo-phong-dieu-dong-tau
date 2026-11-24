@@ -5,8 +5,10 @@
 //   bow: 'raked' | 'bulb' | 'flat' | 'tug', rake (m), bw (bề rộng mũi bằng / B, kiểu 'flat'), stern: 'transom' | 'cruiser', tb (đáy vát lái / T),
 //   shA, shF (độ cong dọc boong ở lái / mũi, m), fc: { x0, h } (boong mũi nâng), poop: { x1, h } (boong lái nâng),
 //   par: [xa, xb] (đoạn thân song song, m), ts (nửa bề rộng lái / nửa B), bp (độ thon mũi), sec: 'box' | 'round' | 'v', br (bán kính hông, m),
-//   bulwark: [x0, x1, h] (mạn chắn sóng mũi),
-//   blocks: [{ k: 't1'..'t4' | 'bridge' | 'funnel' | 'funnelT' | 'funnelP' | 'box', x0, x1, z0?, h, w, sl (vát trước), sa (vát sau), fw (bề rộng trước / w), win }],
+//   bulwark: [x0, x1, h] (mạn chắn sóng mũi) hoặc bulwarks: [[x0, x1, h], …],
+//   blocks: [{ k: 't1'..'t4' | 'bridge' | 'funnel' | 'funnelT' | 'funnelP' | 'box', x0, x1, z0?, h, w, sl (vát trước), sa (vát sau), fw (bề rộng trước / w), win,
+//     tw (bề rộng nóc / chân: vách nghiêng, thêm hình nhìn từ mũi), lip: { s, f, a, t } (sàn đi lại nhô ra quanh nóc: hai bên, trước, sau, dày),
+//     visor (m: mái che nắng nhô trước nóc buồng lái) }],
 //   wings: { x0, x1, z, span }, masts: [{ id: 'truoc' | 'chinh' | 'sau', x, z0, h, yard (độ cao xà tính từ chân), radar }],
 //   anchors: [x, z], winch: [x0, x1],
 //   lights: { mast1: [x, z], mast2, side: [x, z], stern, anchF, anchA, nuc }, eye: [x, z],
@@ -70,19 +72,29 @@ export function genModel(spec) {
     : sp.sec === 'round' ? [[0, 0], [B * 0.22, T * 0.04], [B * 0.38, T * 0.25], [B * 0.47, T * 0.6], [B * 0.5, T * 1.1], [B * 0.5, D]]
       : [[0, 0], [B * 0.14, T * 0.07], [B * 0.32, T * 0.42], [B * 0.43, T * 0.85], [B * 0.48, T * 1.3], [B * 0.5, D]];
   add(front, ['than', 'matcat'], [...sec, ...sec.slice(1).reverse().map(([y, z]) => [-y, z])]);
-  if (sp.bulwark) { const [x0, x1, bh] = sp.bulwark, pts = []; for (let i = 0; i <= 8; i++) { const x = x0 + (x1 - x0) * i / 8; pts.push([x, deck(x) - 0.1]); } for (let i = 8; i >= 0; i--) { const x = x0 + (x1 - x0) * i / 8; pts.push([x, deck(x) + bh * (0.7 + 0.3 * i / 8)]); } add(side, ['than', 'manchan'], pts); }
+  for (const bw of sp.bulwarks || (sp.bulwark ? [sp.bulwark] : [])) { const [x0, x1, bh] = bw, pts = [], up = x1 > L * 0.3; for (let i = 0; i <= 8; i++) { const x = x0 + (x1 - x0) * i / 8; pts.push([x, deck(x) - 0.1]); } for (let i = 8; i >= 0; i--) { const x = x0 + (x1 - x0) * i / 8; pts.push([x, deck(x) + bh * (up ? 0.7 + 0.3 * i / 8 : 1)]); } add(side, ['than', 'manchan'], pts); }
 
   // ---- khối thượng tầng / buồng lái / ống khói
   const TYPE = { t1: ['tang', 't1', 'khoi'], t2: ['tang', 't2', 'khoi'], t3: ['tang', 't3', 'khoi'], t4: ['tang', 't4', 'khoi'], bridge: ['buong', 'chinh'], funnel: ['khoi', 'giua'], funnelT: ['khoi', 'T'], funnelP: ['khoi', 'P'], box: ['khac', 'hop'], fcb: ['than', 'boongmui'] };
   const minDeck = (x0, x1) => { let z = Infinity; for (let i = 0; i <= 6; i++) z = Math.min(z, deck(x0 + (x1 - x0) * i / 6)); return z; };
+  const last = () => parts[parts.length - 1].id;
+  // khối: hình mạn + mặt boong (+ hình nhìn từ mũi nếu vách nghiêng); các hình phụ mang grp = hình mạn để ghép đúng khối
+  const block = (type, x0, x1, z0, z1, w, o = {}) => {
+    const sl = o.sl || 0, sa = o.sa || 0, extra = {}; if (o.win !== undefined) extra.win = !!o.win; if (o.fillet) extra.fillet = o.fillet;
+    add(side, type, [[x0, z0], [x1, z0], [x1 - sl, z1], [x0 + sa, z1]], extra); const sid = last();
+    const yc = o.yc || 0, fw = o.fw === undefined ? 1 : o.fw;
+    add(top, type, [[x0, yc - w / 2], [x1, yc - w * fw / 2], [x1, yc + w * fw / 2], [x0, yc + w / 2]], Object.assign({ grp: sid }, extra));
+    if (o.tw && !yc) { const wt = w * Math.min(fw, 1); add(front, type, [[-wt / 2, z0], [wt / 2, z0], [wt * o.tw / 2, z1], [-wt * o.tw / 2, z1]], { grp: sid }); }
+    return sid;
+  };
   for (const b of sp.blocks || []) {
-    const z0 = b.z0 === undefined ? minDeck(b.x0, b.x1) : b.z0, z1 = z0 + b.h, sl = b.sl || 0, sa = b.sa || 0, extra = {};
-    if (b.win !== undefined) extra.win = !!b.win; if (b.fillet) extra.fillet = b.fillet;
-    add(side, TYPE[b.k], [[b.x0, z0], [b.x1, z0], [b.x1 - sl, z1], [b.x0 + sa, z1]], extra);
-    const yc = b.k === 'funnelT' ? -(b.y || B * 0.2) : b.k === 'funnelP' ? (b.y || B * 0.2) : 0, fw = b.fw === undefined ? 1 : b.fw;
-    add(top, TYPE[b.k], [[b.x0, yc - b.w / 2], [b.x1, yc - b.w * fw / 2], [b.x1, yc + b.w * fw / 2], [b.x0, yc + b.w / 2]], extra);
+    const z0 = b.z0 === undefined ? minDeck(b.x0, b.x1) : b.z0, z1 = z0 + b.h, sl = b.sl || 0, yc = b.k === 'funnelT' ? -(b.y || B * 0.2) : b.k === 'funnelP' ? (b.y || B * 0.2) : 0;
+    const lip = b.lip, lt = lip ? lip.t || 0.18 : 0;
+    block(TYPE[b.k], b.x0, b.x1, z0, z1 - lt, b.w, { sl: sl * (1 - lt / b.h), sa: (b.sa || 0) * (1 - lt / b.h), fw: b.fw, win: b.win, fillet: b.fillet, yc, tw: b.tw });
+    if (lip) { const xf = b.x1 - sl + (lip.f || 0), xa = b.x0 + (b.sa || 0) - (lip.a || 0), ww = b.w * (b.tw || 1) + 2 * (lip.s || 0); block(TYPE[b.k], xa, xf, z1 - lt, z1, ww, { fw: b.fw ? (b.w * b.fw * (b.tw || 1) + 2 * (lip.s || 0)) / ww : 1, win: false }); }
+    if (b.visor) { const xf = b.x1 - sl; block(TYPE.box, xf - 0.4, xf + b.visor, z1 - 0.1, z1 + 0.04, b.w * (b.tw || 1) + 0.5, { win: false }); }
   }
-  if (sp.wings) { const { x0, x1, z, span } = sp.wings, bw = sp.wings.w || B * 0.42; add(side, ['buong', 'canhT'], rect(x0, z, x1, z + 0.5)); add(top, ['buong', 'canhT'], rect(x0, -span, x1, -bw)); add(side, ['buong', 'canhP'], rect(x0, z, x1, z + 0.5)); add(top, ['buong', 'canhP'], rect(x0, bw, x1, span)); }
+  if (sp.wings) { const { x0, x1, z, span } = sp.wings, bw = sp.wings.w || B * 0.42, wt = sp.wings.t || 0.5; for (const [k, s] of [['canhT', -1], ['canhP', 1]]) { add(side, ['buong', k], rect(x0, z, x1, z + wt)); const sid = last(); add(top, ['buong', k], s < 0 ? rect(x0, -span, x1, -bw) : rect(x0, bw, x1, span), { grp: sid }); } }
   for (const m of sp.masts || []) {
     const w0 = m.w || Math.max(0.18, L / 300), z1 = m.z0 + m.h;
     add(side, ['cot', m.id || 'chinh', 'than'], [[m.x - w0, m.z0], [m.x + w0 * 0.6, m.z0], [m.x + w0 * 0.15, z1], [m.x - w0 * 0.35, z1]]);

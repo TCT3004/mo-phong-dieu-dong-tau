@@ -7,6 +7,7 @@
 export const MOOR_MODES = [['port', 'Cập mạn trái vào cầu'], ['stbd', 'Cập mạn phải vào cầu'], ['stern', 'Cập lái (thả 2 neo mũi)'], ['along', 'Cập mạn tàu khác'], ['anchor', 'Đậu neo']];
 // chỗ ra dây / cọc bích trên boong (thứ tự: mũi T/P, vai mũi T/P, vai lái T/P, lái T/P)
 export const PTS = ['Mũi trái', 'Mũi phải', 'Vai mũi trái', 'Vai mũi phải', 'Vai lái trái', 'Vai lái phải', 'Lái trái', 'Lái phải'];
+export const PTS_S = ['Mũi T', 'Mũi P', 'Vai mũi T', 'Vai mũi P', 'Vai lái T', 'Vai lái P', 'Lái T', 'Lái P'];
 export const LINE_NAMES = ['Dây mũi', 'Dây mũi', 'Dây chéo mũi', 'Dây chéo mũi', 'Dây chéo lái', 'Dây chéo lái', 'Dây lái', 'Dây lái'];
 const D2R = Math.PI / 180;
 
@@ -46,8 +47,10 @@ export function placeShip(W, sh, x, y) {
     if (x === null) { const bi = berthIdx(W, sh.berth); if (bi < 0) return false; const segs = berthSegs(W).filter((s) => s.bi === bi); const s = segs.find((q) => sh.bs <= q.s0 + q.len) || segs[segs.length - 1]; if (!s) return false; hit = { s, t: Math.max(0, Math.min(s.len, sh.bs - s.s0)) }; }
     else { hit = nearSeg(W, x, y); if (!hit) return false; }
     const { s, t } = hit, fx = s.ax + s.tx * t, fy = s.ay + s.ty * t, gap = m === 'stern' ? sh.L / 2 + 2 : sh.B / 2 + 0.8;
-    sh.hdg = (m === 'port' ? Math.atan2(-s.ny, s.nx) : m === 'stbd' ? Math.atan2(s.ny, -s.nx) : Math.atan2(s.nx, s.ny)) / D2R;
-    sh.x = fx + s.nx * gap; sh.y = fy + s.ny * gap; sh.berth = W.objs.berths[s.bi].name; sh.bs = s.s0 + t; sh.host = null;
+    // dh: tàu nằm lệch so với vuông góc / song song bến (người dùng chỉnh hướng mũi), xoay quanh chỗ tiếp bến
+    const dh = Math.max(-60, Math.min(60, sh.dh || 0)) * D2R, c = Math.cos(dh), sn = Math.sin(dh), nx = s.nx * c + s.ny * sn, ny = -s.nx * sn + s.ny * c;
+    sh.hdg = (m === 'port' ? Math.atan2(-s.ny, s.nx) : m === 'stbd' ? Math.atan2(s.ny, -s.nx) : Math.atan2(s.nx, s.ny)) / D2R + (sh.dh || 0);
+    sh.x = fx + nx * gap; sh.y = fy + ny * gap; sh.berth = W.objs.berths[s.bi].name; sh.bs = s.s0 + t; sh.host = null;
     return true;
   }
   if (m === 'along') {
@@ -57,7 +60,7 @@ export function placeShip(W, sh, x, y) {
     const p = h.hdg * D2R, fx = Math.sin(p), fy = Math.cos(p), rx = Math.cos(p), ry = -Math.sin(p);
     if (x !== null) { sh.hside = (x - h.x) * rx + (y - h.y) * ry >= 0 ? 1 : -1; if ((h.mode === 'port' && sh.hside < 0) || (h.mode === 'stbd' && sh.hside > 0)) sh.hside = -sh.hside; const lim = Math.max(0, (h.L - sh.L) / 2) + sh.L * 0.25; sh.ha = Math.max(-lim, Math.min(lim, (x - h.x) * fx + (y - h.y) * fy)); }
     const off = h.B / 2 + sh.B / 2 + 0.8;
-    sh.x = h.x + fx * (sh.ha || 0) + rx * sh.hside * off; sh.y = h.y + fy * (sh.ha || 0) + ry * sh.hside * off; sh.hdg = h.hdg; sh.host = h.id; sh.berth = null;
+    sh.x = h.x + fx * (sh.ha || 0) + rx * sh.hside * off; sh.y = h.y + fy * (sh.ha || 0) + ry * sh.hside * off; sh.hdg = h.hdg + Math.max(-20, Math.min(20, sh.dh || 0)); sh.host = h.id; sh.berth = null;
     return true;
   }
   if (x !== null) { sh.x = x; sh.y = y; } sh.berth = null; sh.host = null; // đậu neo: hướng do người dùng đặt

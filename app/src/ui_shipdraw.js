@@ -46,8 +46,8 @@ const HINT = {
 };
 
 export function openShipDraw() {
-  // bản đang vẽ giữ qua các lần mở; chưa sửa gì thì lấy lại theo thông số tàu hiện tại
-  if (st && !st.edited && JSON.stringify(A.p.model || null) !== st.src) st = null;
+  // bản đang vẽ giữ qua các lần mở; tàu đang dùng đã đổi (chọn tàu khác trong kho, mở file…) thì mở mô hình của tàu đó
+  if (st && JSON.stringify(A.p.model || null) !== st.src && (!st.edited || !st.model.parts.length || confirm('Tàu đang dùng đã đổi sang «' + (A.p.name || 'tàu khác') + '».\nMở mô hình của tàu này? (bản vẽ đang dở «' + (st.model.name || '') + '» chưa «Dùng mô hình cho tàu» sẽ bỏ — muốn giữ thì bấm Hủy rồi «Xuất file…»)'))) st = null;
   if (!st) st = { src: JSON.stringify(A.p.model || null), edited: false, model: A.p.model ? clone(A.p.model) : emptyModel(), mode: 'board', cur: null, tool: 'edit', sel: null, draft: null, chain: null, drag: null, mouse: null, img: new Map(), data: new Map(), v: { cx: 0, cy: 0, sc: 1 }, b: null, tol: 40, lastPoint: null, grid: 0.5, snap: { grid: true, pts: true, guides: true }, showBack: true, typed: '', ver: 0, cc: new Map(), active: {}, cam3: 'orbit', hist: [], hi: -1, place: null };
   st.model.guides = st.model.guides || []; st.model.fits = st.model.fits || []; st.showBack = true;
   if (!st.hist.length) { st.hist = [JSON.stringify(st.model)]; st.hi = 0; }

@@ -2,7 +2,7 @@
 import { A, esc, num } from './app.js';
 import { getFleetShip, ensureFleetShip } from './fleet.js';
 import { fillFleet } from './ui_fleet.js';
-import { MOOR_MODES, PTS, LINE_NAMES, placeShip, defaultLines, defaultAnchors, newMoored, outline, b2w, deckPt, hawse, lineEnd, dependsOn } from './moored.js';
+import { MOOR_MODES, PTS, PTS_S, LINE_NAMES, placeShip, defaultLines, defaultAnchors, newMoored, outline, b2w, deckPt, hawse, lineEnd, dependsOn } from './moored.js';
 import { fmtDist } from './nav.js';
 
 export const ms = { ref: 'tpl:hang50', mode: 'port' };
@@ -48,12 +48,12 @@ export function mooredCard(sel) {
   if (sel) {
     const sh = sel, hostOpts = ships.filter((q) => q !== sh && !dependsOn(W, q, sh)).map((q) => [q.id, q.name]);
     h += `<section class="card"><h2>Đang chọn: ${esc(sh.name)}</h2><div class="muted" style="margin-bottom:6px">${esc(sh.type || '')} · dài ${Math.round(sh.L)} m · rộng ${sh.B.toFixed(1).replace('.', ',')} m · mớn ${sh.T.toFixed(1).replace('.', ',')} m</div>
-      <div class="grid g2">${fsel('msMode2', 'Kiểu cập', MOOR_MODES, sh.mode)}<div class="fld"><label for="msHdg">Hướng mũi</label><div class="in"><input id="msHdg" value="${Math.round(((sh.hdg % 360) + 360) % 360)}" ${sh.mode === 'anchor' ? '' : 'disabled title="Cập bến / cập mạn: hướng theo bến hoặc tàu kia"'}><span class="u">°</span></div></div></div>
+      <div class="grid g2">${fsel('msMode2', 'Kiểu cập', MOOR_MODES, sh.mode)}<div class="fld"><label for="msHdg">Hướng mũi${sh.mode === 'anchor' ? '' : ' (lệch ' + Math.round(sh.dh || 0) + '°)'}</label><div class="in"><input id="msHdg" inputmode="decimal" value="${Math.round(((sh.hdg % 360) + 360) % 360)}" title="${sh.mode === 'anchor' ? 'Hướng mũi tàu đậu neo' : 'Cập bến / cập mạn: hướng theo bến hoặc tàu kia; gõ số khác để tàu nằm lệch (xoay quanh chỗ tiếp bến)'}"><span class="u">°</span></div></div></div>
       ${sh.mode === 'along' ? `<div style="margin-top:6px">${fsel('msHost', 'Cập vào tàu', hostOpts, sh.host)}</div>` : ''}
-      <div class="flex" style="gap:6px;margin-top:6px">${sh.mode === 'port' || sh.mode === 'stbd' ? '<button class="btn sm" id="msFlip">Quay đầu (đổi mạn cập)</button>' : ''}${sh.mode === 'along' ? '<button class="btn sm" id="msSide">Sang mạn kia của tàu kia</button>' : ''}${sh.mode === 'anchor' ? '<button class="btn sm" data-rot="-10">↺ 10°</button><button class="btn sm" data-rot="10">↻ 10°</button>' : ''}</div>
+      <div class="flex" style="gap:6px;margin-top:6px">${sh.mode === 'port' || sh.mode === 'stbd' ? '<button class="btn sm" id="msFlip">Quay đầu (đổi mạn cập)</button>' : ''}${sh.mode === 'along' ? '<button class="btn sm" id="msSide">Sang mạn kia của tàu kia</button>' : ''}<button class="btn sm" data-rot="-5">↺ 5°</button><button class="btn sm" data-rot="5">↻ 5°</button>${sh.mode !== 'anchor' && sh.dh ? '<button class="btn sm" id="msStraight">Nằm thẳng lại</button>' : ''}</div>
       <div class="lbl" style="margin-top:10px">Dây buộc (${sh.lines.length})</div>${linesTable(sh)}
       <div class="flex" style="gap:6px;margin-top:6px"><button class="btn sm" id="msLineAdd">+ Thêm dây</button><button class="btn sm" id="msLineReset">Đặt lại dây mặc định</button></div>
-      ${sh.anchors.length ? `<div class="lbl" style="margin-top:10px">Neo</div>${sh.anchors.map((a, i) => `<div class="flex" style="gap:6px;align-items:center;margin-top:4px"><span style="width:84px">Neo ${a.side < 0 ? 'trái' : 'phải'}</span><div class="fld" style="flex:1"><div class="in"><input data-chain="${i}" value="${Math.round(a.chain)}" aria-label="Chiều dài xích neo"><span class="u">m xích</span></div></div></div>`).join('')}` : ''}
+      ${sh.anchors.length ? `<div class="lbl" style="margin-top:10px">Neo</div>${sh.anchors.map((a, i) => `<div class="flex" style="gap:6px;align-items:center;margin-top:4px"><span style="width:96px">Xích neo ${a.side < 0 ? 'trái' : 'phải'}</span><div class="fld" style="flex:1"><div class="in"><input data-chain="${i}" value="${Math.round(a.chain)}" aria-label="Chiều dài xích neo"><span class="u">m</span></div></div></div>`).join('')}` : ''}
       <div class="muted" style="margin-top:6px">Kéo tàu trên hải đồ để dời (dây, neo đặt lại mặc định). Khi chạy bài: tàu hiện ở 3D, hải đồ nhỏ, radar; chạm vào là va chạm; tàu mình đưa dây sang cọc bích của tàu này được.</div>
       <button class="btn warn sm" id="msDel" style="margin-top:8px">Xóa tàu này</button></section>`;
   }
@@ -62,8 +62,8 @@ export function mooredCard(sel) {
 // danh sách dây: chỗ ra dây trên tàu → cọc bích (trên bến hoặc trên tàu khác) trong vòng 150 m
 function linesTable(sh) {
   if (!sh.lines.length) return '<div class="muted">Chưa có dây.</div>';
-  return `<table style="margin-top:4px"><tbody>${sh.lines.map((l, i) => { const opts = targets(sh, l.k), cur = key(l.to); if (cur && !opts.some((o) => o[0] === cur)) opts.unshift([cur, '(đang buộc)']);
-    return `<tr><td style="padding:2px"><select class="cell" data-lk="${i}" aria-label="Chỗ ra dây" style="height:26px;font-size:11.5px">${PTS.map((n, k) => `<option value="${k}" ${k === l.k ? 'selected' : ''}>${n}</option>`).join('')}</select></td><td style="padding:2px"><select class="cell" data-lt="${i}" aria-label="Buộc vào" style="height:26px;font-size:11.5px">${opts.map((o) => `<option value="${esc(o[0])}" ${o[0] === cur ? 'selected' : ''}>${esc(o[1])}</option>`).join('')}</select></td><td style="padding:2px"><button class="btn sm" data-ldel="${i}" aria-label="Xóa dây" style="padding:0 7px">✕</button></td></tr>`; }).join('')}</tbody></table>`;
+  return `<div style="margin-top:4px">${sh.lines.map((l, i) => { const opts = targets(sh, l.k), cur = key(l.to); if (cur && !opts.some((o) => o[0] === cur)) opts.unshift([cur, '(đang buộc)']);
+    return `<div style="display:grid;grid-template-columns:86px minmax(0,1fr) 26px;gap:4px;align-items:center;margin-top:3px"><select class="cell" data-lk="${i}" aria-label="Chỗ ra dây" title="${PTS[l.k]}">${PTS_S.map((n, k) => `<option value="${k}" ${k === l.k ? 'selected' : ''}>${n}</option>`).join('')}</select><select class="cell" data-lt="${i}" aria-label="Buộc vào">${opts.map((o) => `<option value="${esc(o[0])}" ${o[0] === cur ? 'selected' : ''}>${esc(o[1])}</option>`).join('')}</select><button class="btn sm" data-ldel="${i}" aria-label="Xóa dây" style="padding:0;height:26px;min-height:26px">✕</button></div>`; }).join('')}</div>`;
 }
 const key = (to) => (to.t === 'bol' ? 'b|' + to.berth + '|' + to.s.toFixed(2) : 's|' + to.id + '|' + to.k);
 const parseKey = (k) => { const a = k.split('|'); return a[0] === 'b' ? { t: 'bol', berth: a[1], s: +a[2] } : { t: 'sb', id: a[1], k: +a[2] }; };
@@ -71,8 +71,8 @@ function targets(sh, k) {
   const W = A.W, [fx, fy] = b2w(sh, ...deckPt(sh, k, true)), out = [];
   for (const b of W.bollards) {
     if (b.ship === sh.id) continue; const d = Math.hypot(b.x - fx, b.y - fy); if (d > 150) continue;
-    if (b.bi >= 0) out.push([d, 'b|' + W.objs.berths[b.bi].name + '|' + b.s.toFixed(2), 'B' + b.n + ' · ' + W.objs.berths[b.bi].name + ' (' + fmtDist(d) + ')']);
-    else { const q = W.objs.ships.find((s) => s.id === b.ship); if (q) out.push([d, 's|' + q.id + '|' + b.k, q.name + ' · ' + PTS[b.k].toLowerCase() + ' (' + fmtDist(d) + ')']); }
+    if (b.bi >= 0) out.push([d, 'b|' + W.objs.berths[b.bi].name + '|' + b.s.toFixed(2), 'B' + b.n + ' · ' + fmtDist(d)]);
+    else { const q = W.objs.ships.find((s) => s.id === b.ship); if (q) out.push([d, 's|' + q.id + '|' + b.k, q.name.replace(/ \(mẫu\)$/, '').slice(0, 16) + ' · ' + PTS_S[b.k] + ' · ' + fmtDist(d)]); }
   }
   return out.sort((a, b) => a[0] - b[0]).slice(0, 14).map((o) => [o[1], o[2]]);
 }
@@ -89,7 +89,7 @@ export function mooredEdit(e, sh) {
   if (e.type === 'change') {
     if (t.id === 'msMode2' && sh) { const old = sh.mode; sh.mode = t.value; if (sh.mode === 'along' && !sh.host) { const h = W.objs.ships.find((q) => q !== sh && !dependsOn(W, q, sh)); if (!h) { sh.mode = old; alert('Chưa có tàu khác để cập mạn.'); return true; } sh.host = h.id; sh.hside = 1; sh.ha = 0; }
       if (!placeShip(W, sh, sh.mode === 'anchor' || sh.mode === 'along' ? null : sh.x, sh.mode === 'anchor' || sh.mode === 'along' ? null : sh.y)) { sh.mode = old; alert('Không đổi được — chưa có cầu bến gần.'); } W.rebuild(); defaultLines(W, sh); defaultAnchors(W, sh); return true; }
-    if (t.id === 'msHdg' && sh) { sh.hdg = num(t.value, sh.hdg); W.rebuild(); defaultAnchors(W, sh); return true; }
+    if (t.id === 'msHdg' && sh) { const v = num(t.value, sh.hdg); setHdg(W, sh, v); return true; }
     if (t.id === 'msHost' && sh) { sh.host = t.value; sh.ha = 0; placeShip(W, sh, null, null); W.rebuild(); defaultLines(W, sh); return true; }
     if (t.dataset.lk !== undefined && sh) { sh.lines[+t.dataset.lk].k = +t.value; return true; }
     if (t.dataset.lt !== undefined && sh) { sh.lines[+t.dataset.lt].to = parseKey(t.value); return true; }
@@ -99,13 +99,20 @@ export function mooredEdit(e, sh) {
   const b = t.closest('button'); if (!b || !sh) return false;
   if (b.id === 'msFlip') { sh.mode = sh.mode === 'port' ? 'stbd' : 'port'; placeShip(W, sh, null, null); W.rebuild(); defaultLines(W, sh); return true; }
   if (b.id === 'msSide') { sh.hside = -(sh.hside || 1); placeShip(W, sh, null, null); W.rebuild(); defaultLines(W, sh); return true; }
-  if (b.dataset.rot) { sh.hdg += +b.dataset.rot; W.rebuild(); defaultAnchors(W, sh); return true; }
+  if (b.dataset.rot) { setHdg(W, sh, sh.hdg + +b.dataset.rot); return true; }
+  if (b.id === 'msStraight') { sh.dh = 0; placeShip(W, sh, null, null); W.rebuild(); defaultLines(W, sh); defaultAnchors(W, sh); return true; }
   if (b.id === 'msLineReset') { defaultLines(W, sh); return true; }
   if (b.id === 'msLineAdd') { const k = sh.lines.length % 8, o = targets(sh, k)[0]; if (!o) { alert('Không có cọc bích nào trong vòng 150 m.'); return true; } sh.lines.push({ k, to: parseKey(o[0]) }); return true; }
   if (b.dataset.ldel !== undefined) { sh.lines.splice(+b.dataset.ldel, 1); return true; }
   return false;
 }
 
+// đổi hướng mũi: đậu neo thì đặt thẳng; cập bến / cập mạn thì lưu độ lệch so với hướng theo bến / tàu kia
+function setHdg(W, sh, v) {
+  if (sh.mode === 'anchor') { sh.hdg = v; W.rebuild(); defaultAnchors(W, sh); return; }
+  const base = sh.hdg - (sh.dh || 0); let d = ((v - base) % 360 + 540) % 360 - 180; d = Math.max(sh.mode === 'along' ? -20 : -60, Math.min(sh.mode === 'along' ? 20 : 60, d));
+  sh.dh = d; placeShip(W, sh, null, null); W.rebuild(); defaultLines(W, sh); defaultAnchors(W, sh);
+}
 // vẽ tàu đậu, dây, neo lên khung hải đồ
 export function drawMoored(v, g, sel) {
   const W = A.W, mpp = v.mPerPx();

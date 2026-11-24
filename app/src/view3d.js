@@ -197,6 +197,14 @@ export class View3D {
       cls[o] = c; dep[o] = q.rec ? (q.rec.classDepth || DEF_CLASS_DEPTH)[c] : W.noChartDepth; dist[o] = c === 0 ? 1e9 : 0; if (c < 2) any = true;
     }
     if (!any) return;
+    // trước mép cầu bến là nước sâu theo «Độ sâu trước bến» (như world.depthAt); dưới tàu đậu cũng là nước — không để bãi cạn / đất hải đồ nổi lên dưới tàu
+    { const rng = (arr, lo, hi) => { let a = 0, b = arr.length - 1; while (a < b && arr[a + 1] < lo) a++; while (b > a && arr[b - 1] > hi) b--; return [a, b]; };
+      const wet = (x0, x1, y0, y1, test, d) => { const [i0, i1] = rng(xs, x0, x1), [j0, j1] = rng(ys, y0, y1); for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) { if (!test(xs[i], ys[j])) continue; const o = j * n + i; if (cls[o] < 2) cls[o] = 4; dep[o] = Math.max(cls[o] < 2 ? 0 : dep[o], d); dist[o] = 0; } };
+      const back = Math.min(22, d0 * 1.05); // ô đất ngay sau mép cầu cũng hạ xuống (khối cầu bến che), để sườn đất không lấn ra trước mép cầu
+      for (const g of W.segs) { if (g.ship) continue; const F = 70, E = 15, px = [g.ax - g.tx * E, g.bx + g.tx * E, g.ax - g.tx * E + g.nx * F, g.bx + g.tx * E + g.nx * F], py = [g.ay - g.ty * E, g.by + g.ty * E, g.ay - g.ty * E + g.ny * F, g.by + g.ty * E + g.ny * F];
+        wet(Math.min(...px), Math.max(...px), Math.min(...py), Math.max(...py), (x, y) => { const t = (x - g.ax) * g.tx + (y - g.ay) * g.ty, sd = (x - g.ax) * g.nx + (y - g.ay) * g.ny; return t > -E && t < g.len + E && sd > -back && sd < F; }, g.depth); }
+      for (const sh of W.objs.ships || []) { const p = sh.hdg * Math.PI / 180, sn = Math.sin(p), cs = Math.cos(p), R = sh.L / 2 + 8;
+        wet(sh.x - R, sh.x + R, sh.y - R, sh.y + R, (x, y) => { const dx = x - sh.x, dy = y - sh.y; return Math.abs(dx * sn + dy * cs) < sh.L / 2 + 6 && Math.abs(dx * cs - dy * sn) < sh.B / 2 + 6; }, sh.T + 2); } }
     // khoảng cách từ đất tới mép nước (m) để dựng đồi cao dần vào trong
     const dx = (i) => xs[i] - xs[i - 1], dy = (j) => ys[j] - ys[j - 1];
     for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) { const o = j * n + i; if (!dist[o]) continue; let d = dist[o]; if (i) d = Math.min(d, dist[o - 1] + dx(i)); if (j) d = Math.min(d, dist[o - n] + dy(j)); if (i && j) d = Math.min(d, dist[o - n - 1] + Math.hypot(dx(i), dy(j))); dist[o] = d; }
@@ -220,7 +228,7 @@ export class View3D {
     this.terrain = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ vertexColors: true })); this.terrain.frustumCulled = false; this.scene.add(this.terrain);
     // cây, nhà, kho trên bờ (vùng lưới mịn), gắn vào địa hình để lên xuống theo triều
     const Df = axis[Math.floor(D / d0)] || D;
-    try { this.scen = buildScenery(THREE, { xs, ys, n, cls, dist, pos, cx, cy, D: Df, segs: W.segs || [], glow: this.glow }, this.qn); if (this.scen) this.terrain.add(this.scen); } catch (err) { console.warn('cảnh trên bờ', err); this.scen = null; }
+    try { this.scen = buildScenery(THREE, { xs, ys, n, cls, dist, pos, cx, cy, D: Df, segs: (W.segs || []).filter((q) => !q.ship), glow: this.glow }, this.qn); if (this.scen) this.terrain.add(this.scen); } catch (err) { console.warn('cảnh trên bờ', err); this.scen = null; }
   }
   // tàu đậu ở cảng: pmap = ref → thông số tàu trong kho
   setMoored(list, pmap) { this.moored.set(list || [], pmap || {}); }
@@ -228,12 +236,13 @@ export class View3D {
     this.W = W; const g = this.objG; g.clear(); this.marks = [];
     const quayM = new THREE.MeshLambertMaterial({ color: 0x8d9499 }), bolM = new THREE.MeshLambertMaterial({ color: 0x20262b }), fenM = new THREE.MeshLambertMaterial({ color: 0x15191c });
     for (const s of W.segs) {
+      if (s.ship) continue; // cạnh va chạm của tàu đậu không phải cầu bến
       const hgt = s.top + s.depth + 2, m = new THREE.Mesh(new THREE.BoxGeometry(s.len, hgt, 24), quayM);
       const mx = (s.ax + s.bx) / 2 - s.nx * 12, my = (s.ay + s.by) / 2 - s.ny * 12;
       m.position.set(mx, s.top - hgt / 2, -my); m.userData.fix = s.top - hgt / 2; m.rotation.y = Math.atan2(s.ty, s.tx); g.add(m);
       for (let t = 6; t < s.len; t += 12) { const f = new THREE.Mesh(new THREE.BoxGeometry(1.6, 3, 0.8), fenM); f.position.set(s.ax + s.tx * t + s.nx * 0.3, s.top - 2.2, -(s.ay + s.ty * t + s.ny * 0.3)); f.userData.fix = s.top - 2.2; f.rotation.y = m.rotation.y; g.add(f); }
     }
-    for (const b of W.bollards) { const m = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.45, 0.9, 8), bolM); m.position.set(b.x, b.top + 0.45, -b.y); m.userData.fix = b.top + 0.45; g.add(m); }
+    for (const b of W.bollards) { if (b.bi < 0) continue; const m = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.45, 0.9, 8), bolM); m.position.set(b.x, b.top + 0.45, -b.y); m.userData.fix = b.top + 0.45; g.add(m); }
     for (const o of W.objs.lights) {
       const c = COL[o.color] || COL.W, hgt = +o.height || (o.kind === 'light' ? 9 : 4);
       let base = 0;

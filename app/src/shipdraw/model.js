@@ -262,8 +262,16 @@ export function buildModel(model, ship) {
   for (const f of model.fits || []) { if (!FIT_KINDS[f.kind]) continue; mark([f.id], () => { const I = f.kind === 'anchor' ? anchorFit(f) : buildFit(f, faccs, movers); if (I) fitInfo[f.id] = I; }); }
   // lan can mép boong
   if (opts.rails !== false) {
-    const st = Math.max(1.5, H.L / 40); for (let x = H.xa + 1; x < H.xf - 1; x += st) { const z = deckZ(x); for (const s of [-1, 1]) { const w = H.hbs(x, s) * H.S(x, 1) - 0.06; if (w >= 0.3) cyl(accs.white, [x, s * w, z], [x, s * w, z + 1], 0.025, 0.025, 4); } }
-    for (const s of [-1, 1]) { let prev = null; for (let x = H.xa + 1; x < H.xf - 1; x += st / 2) { const w = H.hbs(x, s) * H.S(x, 1) - 0.06, p = [x, s * w, deckZ(x) + 1]; if (prev && w > 0.3) cyl(accs.white, prev, p, 0.025, 0.025, 4); prev = w > 0.3 ? p : null; } }
+    // một vòng lan can khép kín: mạn phải từ lái tới mũi, hai bên gặp nhau ở sống mũi, mạn trái về lái, ngang qua lái; 2 thanh (cao 1 m và 0,5 m)
+    const st = Math.max(1.5, H.L / 40), wAt = (x, s) => H.hbs(x, s) * H.S(x, 1) - 0.06, x0 = H.xa + 0.5;
+    let xb = H.xf - 0.15; while (xb > x0 + 2 && Math.min(wAt(xb, 1), wAt(xb, -1)) < 0.12) xb -= 0.05;
+    const tipX = Math.min(H.xf - 0.12, xb + Math.min(0.6, 0.3 + Math.max(wAt(xb, 1), wAt(xb, -1)))), xsR = [];
+    for (let x = x0; x < xb - 0.01;) { xsR.push(x); x += x > xb - H.L * 0.12 ? Math.min(st / 2, 0.5) : st / 2; } xsR.push(xb);
+    const side = (s) => xsR.map((x) => [x, s * Math.max(0.05, wAt(x, s))]), path = [...side(1), [tipX, 0], ...side(-1).reverse()];
+    if (wAt(x0, 1) + wAt(x0, -1) > 1) path.push(path[0]); // khép ngang qua lái
+    const zA = (q, k) => [q[0], q[1], deckZ(Math.min(H.xf - 0.05, q[0])) + k];
+    for (let i = 0; i + 1 < path.length; i++) for (const k of [1, 0.5]) cyl(accs.white, zA(path[i], k), zA(path[i + 1], k), k === 1 ? 0.028 : 0.02, k === 1 ? 0.028 : 0.02, 4);
+    let acc = 0; for (let i = 0; i < path.length; i++) { if (i) acc += Math.hypot(path[i][0] - path[i - 1][0], path[i][1] - path[i - 1][1]); if (i === 0 || acc >= st * 0.98 || i === path.length - 1 || (path[i][1] === 0)) { const q = zA(path[i], 0), t = zA(path[i], 1); cyl(accs.white, q, t, 0.025, 0.025, 4); acc = 0; } }
     if (opts.roofRails !== false) roofRails(solids, accs.white);
   }
   // tự đặt những gì chưa có: mắt người điều động, đèn hàng hải tối thiểu
@@ -272,7 +280,7 @@ export function buildModel(model, ship) {
   const has = (k) => lights.some((l) => l.key === k), mid = br ? (br.x0 + br.x1) / 2 : 0;
   const mast = P.filter((q) => q.role === 'mast' && q.vk === 'side').sort((a, b) => b.bb[3] - a.bb[3])[0];
   // cột dàn lưới cao hơn cột vẽ thì đèn cột / cờ theo cột dàn
-  const lm = (model.fits || []).filter((f) => f.kind === 'latmast' && fitInfo[f.id]).map((f) => ({ f, I: fitInfo[f.id] })).sort((a, b) => b.I.top - a.I.top)[0];
+  const lm = (model.fits || []).filter((f) => (f.kind === 'latmast' || f.kind === 'mast') && fitInfo[f.id]).map((f) => ({ f, I: fitInfo[f.id] })).sort((a, b) => b.I.top - a.I.top)[0];
   const lmTop = lm && (!mast || lm.I.top > mast.bb[3]) ? lm : null;
   if (!has('sideP')) lights.push({ key: 'sideP', x: br ? br.x1 - 1 : mid, y: -(hbAt(mid) + 0.1), z: br ? br.z1 - 1.2 : deckZ(mid) + 3, auto: true });
   if (!has('sideS')) lights.push({ key: 'sideS', x: br ? br.x1 - 1 : mid, y: hbAt(mid) + 0.1, z: br ? br.z1 - 1.2 : deckZ(mid) + 3, auto: true });
@@ -331,7 +339,7 @@ export function autoViews(solids) {
 function roofRails(solids, acc) {
   const roofs = solids.filter((s) => (s.cat === 'tang' || s.cat === 'buong') && (s.role === 'block' || s.role === 'wing') && s.x1 - s.x0 >= 1.5);
   const ext = (s, x) => { let best = null, bd = Infinity; for (const sl of s.slices) { const d = Math.abs(sl.x - x); if (d < bd) { bd = d; best = sl; } } if (!best || x < s.x0 - 0.05 || x > s.x1 + 0.05) return null; let a = Infinity, b = -Infinity, zt = -Infinity; for (const r of best.rings) for (const p of r) zt = Math.max(zt, p[1]); for (const r of best.rings) { const q = atV(r, zt - 0.03); if (q) { a = Math.min(a, q[0]); b = Math.max(b, q[1]); } } return a < b ? { a, b, zt } : null; };
-  const covered = (s, x, y, z) => roofs.some((t) => t !== s && t.z0 > z - 0.4 && t.z0 < z + 0.6 && t.z1 > z + 0.5 && (() => { const e = ext(t, x); if (!e) return false; let a = Infinity, b = -Infinity; const sl = t.slices.reduce((m, q) => (Math.abs(q.x - x) < Math.abs(m.x - x) ? q : m)); for (const r of sl.rings) for (const p of r) { a = Math.min(a, p[0]); b = Math.max(b, p[0]); } return y > a - 0.1 && y < b + 0.1; })());
+  const covered = (s, x, y, z) => roofs.some((t) => t !== s && t.z0 > z - 0.4 && t.z0 < z + 0.6 && t.z1 > z + 0.1 && (() => { const e = ext(t, x); if (!e) return false; let a = Infinity, b = -Infinity; const sl = t.slices.reduce((m, q) => (Math.abs(q.x - x) < Math.abs(m.x - x) ? q : m)); for (const r of sl.rings) for (const p of r) { a = Math.min(a, p[0]); b = Math.max(b, p[0]); } return y > a - 0.1 && y < b + 0.1; })());
   for (const s of roofs) {
     const up = [], dn = [];
     for (const sl of s.slices) { const e = ext(s, sl.x); if (!e || e.b - e.a < 1.2) continue; up.push([sl.x, e.b - 0.08, e.zt]); dn.push([sl.x, e.a + 0.08, e.zt]); }
