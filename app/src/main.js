@@ -1,6 +1,7 @@
 import { A, $, $$, clock, newSim, substep, DT, sunEl, appWind, saveSet, rebuildModel, loadObjs, checkOrigin, refreshDepth } from './app.js';
 import { CS, ensureAround } from './chartsys.js';
 import { View3D } from './view3d.js';
+import { getFleetShip } from './fleet.js';
 import { Sound } from './audio.js';
 import { windageState } from './windage.js';
 import { initShip, initChart, initEnv, initSet, drawChart, initCharts, chartView, pdfChartAdded, pdfTest } from './ui_setup.js';
@@ -18,7 +19,7 @@ A.snd = new Sound();
 function mkView() {
   if (A.gl) A.gl.remove();
   A.gl = document.createElement('canvas'); A.gl.className = 'gl';
-  try { A.view = new View3D(A.gl, A.set.quality); A.view.buildShip(A.M); terrain(); A.view.buildObjects(A.W); }
+  try { A.view = new View3D(A.gl, A.set.quality); A.view.buildShip(A.M); terrain(); A.view.buildObjects(A.W); refreshMoored(); }
   catch (e) { A.view = null; console.error(e); }
   mountGL();
 }
@@ -33,6 +34,8 @@ function go(tab) {
 }
 // địa hình 3D quanh tàu
 let terrGen = 0;
+// tàu đậu ở cảng trong 3D: lấy thông số các tàu trong kho mà tàu đậu dùng tới
+async function refreshMoored() { if (!A.view) return; const list = A.W.objs.ships || [], pmap = {}; for (const r of new Set(list.map((q) => q.ref))) { const p = await getFleetShip(r); if (p) pmap[r] = p; } A.view.setMoored(list, pmap); }
 function terrain() { if (!A.view || !A.sim) return; const S = A.sim.S; terrGen = CS.provider.gen; A.view.buildTerrain(A.W, S.x, S.y); }
 function hdr() {
   const s = A.sim; $('#hdrSub').textContent = (A.p.name || 'Tàu') + ' · ' + A.W.chartName(s.S.x, s.S.y) + ' · ' + (A.env.name || '');
@@ -58,13 +61,14 @@ Object.assign(A.hooks, {
   go, mountGL, scaleChanged: applyScale,
   simReset() { if (A.snd) A.snd.alarm(false); },
   shipEdited() { initShip(); A.hooks.shipChanged(); },
+  shipTab() { initShip(); },
   resetToStart(save) { if (save) saveSession(); newSim(); if (A.view) A.view.buildShip(A.M); rebuildRun(); hdr(); A.hooks.chartsChanged(); },
   shipChanged() { rebuildModel(); newSim(); if (A.view) A.view.buildShip(A.M); rebuildRun(); hdr(); },
   // kho hải đồ đổi (thêm / xóa tờ): nạp lưới độ sâu quanh tàu rồi dựng lại địa hình, cầu bến
-  chartsChanged() { const S = A.sim.S; ensureAround(S.x, S.y, 30000).then(() => { A.W.rebuild(); if (!A.sim.running) refreshDepth(); terrain(); if (A.view) A.view.buildObjects(A.W); hdr(); }); },
+  chartsChanged() { const S = A.sim.S; ensureAround(S.x, S.y, 30000).then(() => { A.W.rebuild(); if (!A.sim.running) refreshDepth(); terrain(); if (A.view) A.view.buildObjects(A.W); refreshMoored(); hdr(); }); },
   depthChanged() { terrain(); },
   pdfChartAdded,
-  objsChanged() { if (A.view) A.view.buildObjects(A.W); fillRoutes(); },
+  objsChanged() { if (A.view) A.view.buildObjects(A.W); refreshMoored(); fillRoutes(); },
   envChanged() { if (A.tab === 'env') initEnv(); },
   qualityChanged() { mkView(); },
   volChanged() { A.snd.setVol({ master: A.set.volMaster / 100, engine: A.set.volEngine / 100, bell: A.set.volBell / 100, env: (A.set.volEnv === undefined ? 70 : A.set.volEnv) / 100 }); A.snd.bellType = A.set.bellType || 'electric'; },

@@ -2,6 +2,7 @@
 // Tọa độ: "mét thế giới" của CS.frame (x Đông, y Bắc); lưu trữ lat/lon WGS-84 nằm ở places.js.
 import { D2R, G } from './physics.js';
 import { CS, sampleWorld, DEF_CLASS_DEPTH } from './chartsys.js';
+import { relayout, shipSegs, shipBollards } from './moored.js';
 
 const num = (v, d) => { const n = parseFloat(v); return isFinite(n) ? n : d; };
 export const wrap180 = (a) => ((((a + 180) % 360) + 360) % 360) - 180;
@@ -18,7 +19,7 @@ export function defaultEnv() {
 
 export class World {
   constructor() {
-    this.objs = { lights: [], berths: [], routes: [], routeSel: -1 };
+    this.objs = { lights: [], berths: [], routes: [], routeSel: -1, ships: [] };
     this.start = null; // { x, y, hdg } mét thế giới
     this.noChartDepth = 30;
     this.segs = []; this.bollards = [];
@@ -33,6 +34,7 @@ export class World {
   // độ sâu hải đồ (m, dương là dưới số 0 hải đồ; âm là đất/bãi cạn)
   depthAt(x, y) {
     for (const s of this.segs) {
+      if (s.ship) continue;
       const t = (x - s.ax) * s.tx + (y - s.ay) * s.ty, sd = (x - s.ax) * s.nx + (y - s.ay) * s.ny;
       if (t > -15 && t < s.len + 15 && sd > -6 && sd < 60) return s.depth;
     }
@@ -46,6 +48,7 @@ export class World {
     for (const b of o.berths) b.pts = b.pts.map(mp);
     for (const r of o.routes || []) r.pts = r.pts.map(mp);
     for (const q of o.starts || []) [q.x, q.y] = map(q.x, q.y);
+    for (const sh of o.ships || []) { [sh.x, sh.y] = map(sh.x, sh.y); for (const a of sh.anchors || []) [a.x, a.y] = map(a.x, a.y); }
     if (this.start) [this.start.x, this.start.y] = map(this.start.x, this.start.y);
     this.rebuild();
   }
@@ -73,6 +76,10 @@ export class World {
         this.bollards.push({ x: g.ax + g.tx * t - g.nx * 1.5, y: g.ay + g.ty * t - g.ny * 1.5, top: num(b.top, 4.5), n: this.bollards.length + 1, bi, s: sAl });
       }
     });
+    // tàu đậu: đặt lại theo bến / tàu kia, rồi thêm khối va chạm và cọc bích trên boong
+    if (!this.objs.ships) this.objs.ships = [];
+    relayout(this);
+    for (const sh of this.objs.ships) { this.segs.push(...shipSegs(sh)); this.bollards.push(...shipBollards(sh, this.bollards.length + 1)); }
   }
   // vị trí dọc theo mép cầu (m tính từ đầu bến) gần điểm (x, y) nhất
   alongBerth(bi, x, y) {
@@ -197,12 +204,12 @@ export function externalForces(W, S, M, anchors, lines, h, dt, info) {
   if (W.segs.length) {
     const L = M.loa, B = M.B;
     const pts = [[L / 2, 0], [L * 0.36, B / 2], [L * 0.36, -B / 2], [0, B / 2], [0, -B / 2], [-L * 0.4, B / 2], [-L * 0.4, -B / 2], [-L / 2, B * 0.3], [-L / 2, -B * 0.3]];
-    let dBow = 1e9, dStern = 1e9, vBow = 0, vStern = 0, hit = 0;
+    let dBow = 1e9, dStern = 1e9, vBow = 0, vStern = 0, hit = 0, hitShip = false;
     for (const s of W.segs) {
       for (let i = 0; i < pts.length; i++) {
         const [bx, by] = pts[i], [wx, wy] = body2w(S, bx, by);
         const t = (wx - s.ax) * s.tx + (wy - s.ay) * s.ty; if (t < -3 || t > s.len + 3) continue;
-        const sd = (wx - s.ax) * s.nx + (wy - s.ay) * s.ny; if (sd < -30 || sd > 400) continue;
+        const sd = (wx - s.ax) * s.nx + (wy - s.ay) * s.ny; if (sd < -(s.pen || 30) || sd > 400) continue;
         const vE = gE + S.r * (bx * cs - by * sn), vN = gN - S.r * (bx * sn + by * cs);
         const vn = vE * s.nx + vN * s.ny, vt = vE * s.tx + vN * s.ty;
         if (bx > 0 && sd < dBow) { dBow = sd; vBow = -vn; }
@@ -211,11 +218,11 @@ export function externalForces(W, S, M, anchors, lines, h, dt, info) {
           let F = 3e6 * -sd + (vn < 0 ? 4e6 * -vn : 0); if (F > 6e7) F = 6e7;
           const fr = -Math.sign(vt) * Math.min(0.25 * F, 5e5 * Math.abs(vt));
           add(bx, by, F * s.nx + fr * s.tx, F * s.ny + fr * s.ty);
-          hit = Math.max(hit, -vn);
+          if (-vn > hit) { hit = -vn; hitShip = !!s.ship; }
         }
       }
     }
-    if (info) { info.dBow = dBow; info.dStern = dStern; info.vBow = vBow; info.vStern = vStern; info.hit = hit; }
+    if (info) { info.dBow = dBow; info.dStern = dStern; info.vBow = vBow; info.vStern = vStern; info.hit = hit; info.hitShip = hitShip; }
   } else if (info) { info.dBow = 1e9; info.dStern = 1e9; info.vBow = 0; info.vStern = 0; info.hit = 0; }
   return { X, Y, N };
 }

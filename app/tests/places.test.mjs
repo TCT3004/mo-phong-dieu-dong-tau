@@ -20,7 +20,7 @@ test('gộp file đối tượng: thêm mới, nhập lại không nhân đôi, 
   setOrigin(20.51, 107.01);
   const W = new World(); placesToWorld(emptyPlaces(), W);
   const n = mergePlacesFile(W, FILE);
-  assert.deepEqual(n, { lights: 1, berths: 1, routes: 1, starts: 2 });
+  assert.deepEqual(n, { lights: 1, berths: 1, routes: 1, starts: 2, ships: 0 });
   mergePlacesFile(W, FILE);
   assert.equal(W.objs.lights.length, 1); assert.equal(W.objs.berths.length, 1); assert.equal(W.objs.starts.length, 2);
   const F2 = JSON.parse(JSON.stringify(FILE)); F2.berths[0].depth = 5;

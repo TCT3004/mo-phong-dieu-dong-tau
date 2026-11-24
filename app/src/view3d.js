@@ -9,6 +9,7 @@ import { Acc } from './shipdraw/prims.js';
 import { makeFlags } from './flags.js';
 import { Wake } from './wake.js';
 import { buildScenery } from './scenery.js';
+import { MooredView } from './moored3d.js';
 
 export const QUALITY = {
   // ter: [nửa vùng mịn (m), bước lưới vùng mịn (m), bước lưới xa nhất (m)]
@@ -44,6 +45,7 @@ export class View3D {
     this.shipG = new THREE.Group(); this.scene.add(this.shipG);
     this.terrain = null; this.objG = new THREE.Group(); this.scene.add(this.objG);
     this.lineG = new THREE.Group(); this.scene.add(this.lineG); this.linePool = [];
+    this.moored = new MooredView(THREE, this.scene, this.glow);
     this.marks = []; this.navL = {};
     let drag = null;
     canvas.addEventListener('pointerdown', (e) => { drag = [e.clientX, e.clientY]; canvas.setPointerCapture(e.pointerId); });
@@ -220,8 +222,10 @@ export class View3D {
     const Df = axis[Math.floor(D / d0)] || D;
     try { this.scen = buildScenery(THREE, { xs, ys, n, cls, dist, pos, cx, cy, D: Df, segs: W.segs || [], glow: this.glow }, this.qn); if (this.scen) this.terrain.add(this.scen); } catch (err) { console.warn('cảnh trên bờ', err); this.scen = null; }
   }
+  // tàu đậu ở cảng: pmap = ref → thông số tàu trong kho
+  setMoored(list, pmap) { this.moored.set(list || [], pmap || {}); }
   buildObjects(W) {
-    const g = this.objG; g.clear(); this.marks = [];
+    this.W = W; const g = this.objG; g.clear(); this.marks = [];
     const quayM = new THREE.MeshLambertMaterial({ color: 0x8d9499 }), bolM = new THREE.MeshLambertMaterial({ color: 0x20262b }), fenM = new THREE.MeshLambertMaterial({ color: 0x15191c });
     for (const s of W.segs) {
       const hgt = s.top + s.depth + 2, m = new THREE.Mesh(new THREE.BoxGeometry(s.len, hgt, 24), quayM);
@@ -339,6 +343,7 @@ export class View3D {
     for (const m of this.spin) m.rotation.y = -(e.t || 0) * m.userData.spin * Math.PI / 30;
     const dark = day0 < 0.55; // đèn theo độ cao mặt trời, không theo mây
     if (this.scen && this.scen.userData.night) this.scen.userData.night.visible = dark;
+    if (this.W) this.moored.update(this.W, e, dark, (x, z, t) => this.waveH(x, z, t));
     for (const k in this.navL) for (const sp of this.navL[k]) sp.visible = !!(e.lights && e.lights[k]) && dark;
     const haloK = 1 + 2.2 * (1 - Math.min(1, e.vis / 3000)) + 0.8 * (e.rain || 0);
     for (const m of this.marks) {

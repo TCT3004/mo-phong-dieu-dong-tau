@@ -52,7 +52,7 @@ test('chi tiết thư viện: mỗi loại dựng ra khối kín hướng ra ngo
     const all = [...Object.values(accs), ...mv.map((m) => m.acc)].filter((a) => a.idx.length);
     assert.ok(all.length, kind + ' có hình'); for (const a of all) assert.ok(a.idx.every((k) => k < a.pos.length / 3), kind + ' chỉ số đỉnh');
     assert.ok(all.reduce((s, a) => s + vol(a), 0) > 0, kind + ' thể tích có dấu dương');
-    const hb = I.bb[5] - I.bb[2]; assert.ok(isFinite(hb) && hb > f.h * 0.5 && hb < f.h * 1.7, kind + ' cao ' + hb.toFixed(2) + ' / ' + f.h);
+    const hb = I.bb[5] - I.bb[2], hMax = kind === 'crane' ? f.h + f.l : f.h * 1.7; assert.ok(isFinite(hb) && hb > f.h * 0.5 && hb < hMax, kind + ' cao ' + hb.toFixed(2) + ' / ' + f.h); // cần cẩu: h là trụ + ca bin, cần vươn cao hơn
     if (kind === 'radar') { assert.equal(mv.length, 1); assert.ok(Math.abs(mv[0].pivot[2] - (5 + f.h - 0.45)) < 1e-6, 'tâm quay ở đỉnh bệ'); }
   }
   const run = (rot) => { const accs = Object.fromEntries(['super', 'dark', 'white', 'metal'].map((k) => [k, new Acc(0, true)])); return buildFit({ id: 'r', kind: 'radar', x: 0, y: 0, z: 0, rot, l: 3.2, w: 0.5, h: 1.2 }, accs, []).bb; };

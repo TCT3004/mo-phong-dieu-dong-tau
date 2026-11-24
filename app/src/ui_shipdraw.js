@@ -11,6 +11,7 @@ import { buildModel, atH, atV, partShape } from './shipdraw/model.js';
 import { modelGroup, skyEnv } from './shipdraw/mesh3.js';
 import { FIT_KINDS, fitDefaults, mirrorFit } from './shipdraw/fittings.js';
 import { makeTemplate, TEMPLATE_SHIP } from './shipdraw/template.js';
+import { fleetSaveForm } from './ui_fleet.js';
 import { putImg, getImg } from './shipdraw/store.js';
 
 let st = null;
@@ -56,7 +57,8 @@ export function openShipDraw() {
   <div class="mhead"><b>Vẽ tàu từ sơ đồ</b><span class="muted" id="sdName"></span>
     <button class="btn sm" id="sdUndo" title="Hoàn tác (Ctrl+Z)">↶ Hoàn tác</button><button class="btn sm" id="sdRedo" title="Làm lại (Ctrl+Y)">↷ Làm lại</button>
     <button class="btn sm" id="sdTpl">Mẫu tàu pháo (chung chung)</button><button class="btn sm" id="sdExp">Xuất file…</button><label class="btn sm" style="display:inline-flex;align-items:center">Nhập file…<input type="file" id="sdImp" accept=".json" hidden></label>
-    <button class="btn sm pri" id="sdApply">Dùng mô hình cho tàu</button><button class="btn sm" id="sdClose">Đóng</button></div>
+    <button class="btn sm pri" id="sdApply">Dùng mô hình cho tàu</button><button class="btn sm" id="sdFleet" title="Dùng mô hình cho tàu rồi lưu tàu (thông số tab 1 + mô hình) vào kho tàu">Lưu vào kho…</button><button class="btn sm" id="sdClose">Đóng</button></div>
+  <div id="sdFleetBox" hidden style="position:fixed;right:28px;top:64px;z-index:50;background:#13202a;border:1px solid #33444F;border-radius:8px;padding:4px 12px 10px;max-width:680px;box-shadow:0 6px 24px #0008"></div>
   <div class="mbody" style="grid-template-columns:262px minmax(0,1fr) 300px">
     <div class="mleft">
       <section class="wst"><b>1 · Ảnh sơ đồ (làm nền)</b><div id="sdViews" style="margin-top:5px"></div>
@@ -276,6 +278,7 @@ function bind() {
     st.mode = 'board'; st.ver++; fitBoard(); refreshAll(); changed();
   };
   $('#sdApply').onclick = apply;
+  $('#sdFleet').onclick = () => { if (st.model.parts.length) apply(); fleetSaveForm($('#sdFleetBox'), (id, type, name) => { $('#sdMsg').textContent = 'Đã lưu «' + name + '» (' + type + ') vào kho tàu.'; if (A.hooks.shipTab) A.hooks.shipTab(); }); };
   $('#sdExp').onclick = exportFile;
   $('#sdImp').onchange = async (e) => { const f = e.target.files[0]; e.target.value = ''; if (f) importFile(f); };
   const c = $('#sdCv');

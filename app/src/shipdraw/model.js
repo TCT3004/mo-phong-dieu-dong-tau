@@ -130,7 +130,7 @@ export function buildModel(model, ship) {
   items.push(...buildHull(H, sh));
   const deckZ = (x) => H.zTop(clamp(x, H.xa, H.xf)), hbAt = (x) => Math.max(0.3, H.hb(clamp(x, H.xa, H.xf)));
   // super / hull: khối (nóc khối tô màu boong nếu chọn); fsuper: chi tiết cùng màu thượng tầng nhưng không tô nóc
-  const accs = { hull: new Acc(sh.hull, true, 'roof'), super: new Acc(sh.super, true, 'roof'), fsuper: new Acc(sh.super, true), dark: new Acc(sh.dark, true), deck: new Acc(sh.deck, true), metal: new Acc(0x3a3f44, true), white: new Acc(0xd8dcdf, true), orange: new Acc(0xd9762b, true) };
+  const accs = { hull: new Acc(sh.hull, true, 'roof'), super: new Acc(sh.super, true, 'roof'), fsuper: new Acc(sh.super, true), dark: new Acc(sh.dark, true), deck: new Acc(sh.deck, true), metal: new Acc(0x3a3f44, true), white: new Acc(0xd8dcdf, true), orange: new Acc(0xd9762b, true), yellow: new Acc(0xd9a62a, true), red: new Acc(0x9c3428, true), blue: new Acc(0x2c5684, true), green: new Acc(0x3c7350, true), cgrey: new Acc(0x8b9196, true), black: new Acc(0x1d1f21, true) };
   const faccs = { ...accs, super: accs.fsuper };
   const accFor = (node) => accs[node.color] || accs.super;
   const match = (q, kind) => { let best = null, bo = 0; for (const o of P) { if (o === q || o.key !== q.key || o.vk !== kind || !o.closed) continue; const ov = Math.min(q.bb[2], o.bb[2]) - Math.max(q.bb[0], o.bb[0]); if (kind !== 'side' && kind !== 'top') return o; if (ov > bo) { bo = ov; best = o; } } return best; };

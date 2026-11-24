@@ -1,5 +1,5 @@
 // Thư viện chi tiết đặt sẵn (thuần JS): cột dàn lưới, radar quay, ăng-ten, bè, neo, tời, cột bích, đèn pha, còi, cầu thang,
-// ống khói, tháp pháo, giá phóng, xuồng. Hình CHUNG CHUNG theo kích thước người dùng nhập — không theo mẫu tàu thật nào.
+// ống khói, tháp pháo, giá phóng, xuồng, cần cẩu hàng, nắp hầm hàng, container, ống phóng lôi, cửa mũi, đường ống boong, đệm va. Hình CHUNG CHUNG theo kích thước người dùng nhập — không theo mẫu tàu thật nào.
 // Chi tiết f = { id, kind, x, y, z (điểm đặt: giữa đáy), rot (độ, từ hướng mũi sang mạn phải), l (dài theo hướng của nó), w (rộng), h (cao), … }.
 // Hệ riêng khi dựng: u về trước, v sang phải, w lên từ điểm đặt.
 import { Acc, TAcc, xform, newBB, box, cyl, tubeV, ellipsoid, loftRings } from './prims.js';
@@ -22,7 +22,14 @@ export const FIT_KINDS = {
   funnel: { name: 'Ống khói', l: 3.4, w: 2.0, h: 3.2, scale: true },
   turret: { name: 'Tháp pháo', l: 3.2, w: 2.8, h: 1.8, scale: true, n: 1, bl: 4, tip: 'Nòng quay theo hướng xoay của chi tiết' },
   launcher: { name: 'Giá phóng', l: 2.6, w: 1.6, h: 1.6, scale: true, rows: 2, cols: 4, el: 15 },
-  boat: { name: 'Xuồng', l: 5.5, w: 2.0, h: 1.4, scale: true }
+  boat: { name: 'Xuồng', l: 5.5, w: 2.0, h: 1.4, scale: true },
+  crane: { name: 'Cần cẩu hàng', l: 14, w: 2.4, h: 6, scale: true, el: 35, tip: 'h = chiều cao trụ + ca bin; l = chiều dài cần, el = góc ngóc cần; xoay để quay cần' },
+  hatch: { name: 'Nắp hầm hàng', l: 12, w: 8, h: 1.4, scale: true, tip: 'Thành miệng hầm + các tấm nắp' },
+  containers: { name: 'Container xếp chồng', l: 12.2, w: 9.8, h: 5.2, tip: 'Tự chia container 20 ft (6,1 × 2,44 × 2,6 m) theo kích thước khối, màu ngẫu nhiên' },
+  torpedo: { name: 'Ống phóng lôi', l: 7, w: 1.4, h: 1.3, scale: true, n: 2, tip: 'n ống đặt cạnh nhau, miệng ống hướng theo chiều xoay' },
+  ramp: { name: 'Cửa mũi / cầu dẫn', l: 0.45, w: 5, h: 6, scale: true, el: 12, tip: 'Tấm cầu dẫn dựng ở mũi, bản lề ở điểm đặt: h = chiều dài tấm, w = rộng, l = dày; el = góc ngả về phía mũi so với phương đứng' },
+  pipes: { name: 'Đường ống boong', l: 30, w: 2.4, h: 1.6, tip: 'Bó ống chạy dọc boong + lối đi trên cao (tàu dầu)' },
+  fender: { name: 'Đệm va', l: 6, w: 0.7, h: 0.7, tip: 'Ống cao su đen nằm ngang (tàu lai: đặt quanh mũi / lái)' }
 };
 // cỡ mặc định khi đặt mới trên tàu dài L (m)
 export function fitDefaults(kind, L) {
@@ -121,7 +128,59 @@ const B = {
     const l = f.l, w = f.w, h = f.h;
     ellipsoid(K('orange'), [0, 0, h * 0.38], l / 2, w / 2, h * 0.38, 18, 10);
     box(K('white'), -l * 0.05, 0, h * 0.78, l * 0.5, w * 0.72, h * 0.34);
-  }
+  },
+  // cần cẩu: trụ tròn, ca bin, cần (hai thanh dàn) ngóc el độ về hướng u, móc treo
+  crane(K, f) {
+    const l = f.l, w = f.w, h = f.h, Y = K('yellow'), D = K('dark'), el = (f.el === undefined ? 35 : clamp(+f.el, 0, 80)) * Math.PI / 180, ph = h * 0.62, rp = w * 0.24;
+    cyl(Y, [0, 0, 0], [0, 0, ph], rp * 1.1, rp, 16); cyl(D, [0, 0, ph - 0.1], [0, 0, ph + 0.05], rp * 1.35, rp * 1.35, 16);
+    const hl = w * 1.15, hh = h - ph; box(Y, -hl * 0.1, 0, ph + hh / 2 + 0.05, hl, w * 0.85, hh); box(K('white'), hl * 0.36, w * 0.28, ph + hh * 0.62, hl * 0.22, w * 0.3, hh * 0.5);
+    const p0 = [hl * 0.25, 0, ph + hh * 0.35], tip = [p0[0] + l * Math.cos(el), 0, p0[2] + l * Math.sin(el)], r = clamp(w * 0.05, 0.06, 0.18);
+    for (const s of [-1, 1]) cyl(Y, [p0[0], s * w * 0.28, p0[2]], [tip[0], s * w * 0.05, tip[2]], r, r * 0.7, 6);
+    for (let i = 1; i < 6; i++) { const t = i / 6, a = [p0[0] + (tip[0] - p0[0]) * t, 0, p0[2] + (tip[2] - p0[2]) * t], wv = w * (0.28 + (0.05 - 0.28) * t); cyl(Y, [a[0], -wv, a[2]], [a[0], wv, a[2]], r * 0.5, r * 0.5, 4); }
+    cyl(D, [-hl * 0.3, 0, ph + hh + 0.05], tip, r * 0.25, r * 0.25, 4); // dây nâng cần
+    const hk = Math.max(1, Math.min(tip[2] - 1, l * 0.25)); cyl(D, tip, [tip[0], 0, tip[2] - hk], r * 0.2, r * 0.2, 4); box(D, tip[0], 0, tip[2] - hk - 0.2, 0.35, 0.3, 0.4);
+  },
+  // nắp hầm hàng: thành miệng hầm (màu vỏ) + các tấm nắp hơi gồ (màu boong), gân ngang
+  hatch(K, f) {
+    const l = f.l, w = f.w, h = f.h, hc = h * 0.6, n = Math.max(1, Math.round(l / 4)), pl = l / n, P = K('deck'), D = K('dark');
+    box(K('hull'), 0, 0, hc / 2, l, w, hc);
+    for (let i = 0; i < n; i++) { const u = -l / 2 + pl * (i + 0.5); loftRings(P, [{ x: u - pl / 2 + 0.04, rings: [[[-w / 2, hc], [w / 2, hc], [w / 2, hc + (h - hc) * 0.55], [0, h], [-w / 2, hc + (h - hc) * 0.55]]] }, { x: u + pl / 2 - 0.04, rings: [[[-w / 2, hc], [w / 2, hc], [w / 2, hc + (h - hc) * 0.55], [0, h], [-w / 2, hc + (h - hc) * 0.55]]] }]); }
+    for (let i = 1; i < n; i++) box(D, -l / 2 + pl * i, 0, hc + (h - hc) * 0.3, 0.1, w * 1.01, (h - hc) * 0.6);
+  },
+  // container 20 ft xếp theo dãy / hàng / tầng, màu theo băm số (vị trí đặt) để không đổi mỗi lần dựng
+  containers(K, f) {
+    const l = f.l, w = f.w, h = f.h, nb = Math.max(1, Math.round(l / 6.1)), nr = Math.max(1, Math.round(w / 2.44)), nt = Math.max(1, Math.round(h / 2.6)), cl = l / nb, cw = w / nr, ch = h / nt;
+    const cols = ['red', 'blue', 'green', 'yellow', 'white', 'orange', 'cgrey', 'blue', 'red', 'cgrey'], seed = Math.round((f.x || 0) * 7 + (f.y || 0) * 13 + (f.z || 0) * 3);
+    const hs = (a, b, c) => { let q = Math.imul(a + 31, 73856093) ^ Math.imul(b + 17, 19349663) ^ Math.imul(c + 7, 83492791) ^ Math.imul(seed, 2654435761); q = Math.imul(q ^ (q >>> 13), 1274126177); return ((q ^ (q >>> 16)) >>> 0) / 4294967296; };
+    for (let i = 0; i < nb; i++) for (let j = 0; j < nr; j++) for (let k = 0; k < nt; k++) {
+      if (k === nt - 1 && nt > 1 && hs(i, j, 99) < 0.18) continue; // tầng trên cùng thiếu vài chiếc
+      const A = K(cols[Math.floor(hs(i, j, k) * cols.length)]), u = -l / 2 + cl * (i + 0.5), v = -w / 2 + cw * (j + 0.5), z = ch * k;
+      box(A, u, v, z + ch * 0.48, cl - 0.18, cw - 0.1, ch * 0.96);
+      box(A, u, v, z + ch * 0.48, cl - 0.05, cw - 0.32, ch * 0.9); // gân hai đầu (lồi nhẹ)
+    }
+  },
+  // ống phóng lôi: n ống song song trên bệ, miệng ống về hướng u
+  torpedo(K, f) {
+    const l = f.l, w = f.w, h = f.h, n = clamp(Math.round(f.n || 2), 1, 4), S = K('super'), D = K('dark'), r = Math.min(w / n * 0.42, h * 0.36), zc = h - r * 1.05;
+    box(D, -l * 0.05, 0, zc * 0.4, l * 0.45, w * 0.7, zc * 0.8); cyl(D, [-l * 0.05, 0, 0], [-l * 0.05, 0, zc * 0.25], w * 0.42, w * 0.42, 16);
+    for (let i = 0; i < n; i++) { const v = (i - (n - 1) / 2) * (w / n); cyl(S, [-l / 2, v, zc], [l / 2, v, zc], r, r, 14); cyl(D, [l / 2 - 0.08, v, zc], [l / 2, v, zc], r * 1.12, r * 1.12, 14); cyl(D, [-l / 2, v, zc], [-l / 2 + 0.12, v, zc], r * 1.08, r * 1.08, 14); }
+  },
+  // cầu dẫn mũi: tấm dày l, rộng w, dài h dựng lên từ bản lề, ngả el độ về phía u; có gân ngang
+  ramp(K, f) {
+    const l = f.h, w = f.w, h = Math.min(f.l, f.h * 0.3), el = f.el === undefined ? 12 : clamp(+f.el, -30, 80), loc = { el: 90 - el };
+    box(K('hull', loc), l / 2, 0, h / 2, l, w, h);
+    const R = K('dark', loc); for (let i = 1; i < 5; i++) box(R, l * i / 5, 0, -0.04, 0.14, w * 0.96, 0.1);
+    cyl(K('dark'), [0, -w / 2, 0.1], [0, w / 2, 0.1], 0.18, 0.18, 10);
+  },
+  // đường ống boong (tàu dầu): 3 ống dọc + lối đi trên cao có trụ đỡ
+  pipes(K, f) {
+    const l = f.l, w = f.w, h = f.h, P = K('white'), S = K('super'), D = K('dark'), rp = clamp(w * 0.07, 0.08, 0.25);
+    for (const k of [-1, 0, 1]) { const v = k * w * 0.3, z = rp + 0.25; cyl(P, [-l / 2, v, z], [l / 2, v, z], rp, rp, 10); }
+    for (let u = -l / 2 + 1; u <= l / 2 - 1; u += 4) { box(D, u, 0, 0.15, 0.2, w * 0.9, 0.3); cyl(D, [u, 0, 0], [u, 0, h - 0.08], 0.07, 0.07, 6); }
+    box(S, 0, 0, h - 0.04, l, Math.min(1, w * 0.4), 0.08);
+    for (const s of [-1, 1]) cyl(P, [-l / 2, s * Math.min(0.5, w * 0.2), h + 0.9], [l / 2, s * Math.min(0.5, w * 0.2), h + 0.9], 0.025, 0.025, 4);
+  },
+  fender(K, f) { const l = f.l, r = Math.max(0.1, Math.min(f.w, f.h) / 2); cyl(K('black'), [-l / 2 + r, 0, r], [l / 2 - r, 0, r], r, r, 12); ellipsoid(K('black'), [-l / 2 + r, 0, r], r, r, r, 10, 6); ellipsoid(K('black'), [l / 2 - r, 0, r], r, r, r, 10, 6); }
 };
 // dựng một chi tiết vào các bộ gom màu (accs); radar thêm phần quay vào movers. Trả { bb, yard?, top? }
 export function buildFit(f, accs, movers) {

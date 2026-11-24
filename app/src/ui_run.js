@@ -297,6 +297,7 @@ export function uiTick() {
   // banner
   const bn = $('#banner'); let bt = '', cls = 'bad';
   if (s.aground) bt = 'TÀU MẮC CẠN — độ sâu không đủ. Lùi máy ra hoặc bắt đầu lại bài tập ở tab 4.';
+  else if (s.info.hitShip && s.info.hit > 0.08) bt = 'VA CHẠM TÀU ĐẬU — tốc độ va ' + (s.info.hit * 100).toFixed(0) + ' cm/s';
   else if (s.info.hit > 0.25) bt = 'VA CẦU MẠNH — tốc độ áp cầu ' + (s.info.hit * 100).toFixed(0) + ' cm/s';
   else if (performance.now() < flashT) { bt = flashMsg; cls = ''; }
   else if (!s.running) { bt = 'ĐANG TẠM DỪNG — bấm ▶ ở góc trên để chạy'; cls = ''; }
@@ -389,7 +390,7 @@ function drawMini(d, night) {
   const w = mini.cv.width, hh = mini.cv.height; g.translate(w - 22, hh - 42); g.rotate(mini.rot); g.fillStyle = 'rgba(9,14,18,.82)'; g.beginPath(); g.arc(0, 0, 12, 0, 7); g.fill(); g.fillStyle = '#E6EDF2'; g.beginPath(); g.moveTo(0, -9); g.lineTo(4, 4); g.lineTo(0, 1.5); g.lineTo(-4, 4); g.fill();
   g.restore();
   const nm = mini.ref ? mini.ref.name : A.W.hasCharts() ? 'Ngoài vùng hải đồ' : 'Biển trống (chưa nạp hải đồ)'; if ($('#mapName').textContent !== nm) $('#mapName').textContent = nm;
-  const bs = A.W.segs; let info = '';
+  const bs = A.W.segs.filter((q) => !q.ship); let info = '';
   if (bs.length) { let bd = 1e9, bb = 0; for (const q2 of bs) { const mx = (q2.ax + q2.bx) / 2, my = (q2.ay + q2.by) / 2, dd = Math.hypot(mx - S.x, my - S.y); if (dd < bd) { bd = dd; bb = Math.atan2(mx - S.x, my - S.y) / D2R; } } info = 'Tới cầu bến: ' + fmtDist(bd) + ' · ' + pad3(bb) + '°'; }
   $('#mapInfo').textContent = info; $('#mapInfoBox').style.display = info || s.mark ? 'block' : 'none';
   const bar = [50, 100, 200, 0.25 * NM, 0.5 * NM, NM, 2 * NM, 5 * NM].find((m) => m / mapScale >= 40) || 5 * NM;
@@ -397,6 +398,6 @@ function drawMini(d, night) {
 }
 export function lineSegs3D() {
   const s = A.sim, S = s.S, M = A.M, fb = (num(A.p.D, M.d * 1.6) - M.d), out = [], tide = s.e.tide;
-  for (const l of s.lines) if (l.st !== 'chua') { const [fx, fy] = body2w(S, l.fx, l.side * M.B / 2 * l.fyk); const top = (A.W.bollards.find((b) => b.n === l.bn) || { top: 4.5 }).top; out.push([fx, fb + 0.3, -fy, l.bx, top + 0.9 - tide, -l.by, (l.pct || 0) > 80 ? 0xff5555 : 0xe8e0c8]); }
+  for (const l of s.lines) if (l.st !== 'chua') { const [fx, fy] = body2w(S, l.fx, l.side * M.B / 2 * l.fyk); const bo = A.W.bollards.find((b) => b.n === l.bn) || { top: 4.5 }, top = bo.float ? bo.top + tide : bo.top; out.push([fx, fb + 0.3, -fy, l.bx, top + 0.9 - tide, -l.by, (l.pct || 0) > 80 ? 0xff5555 : 0xe8e0c8]); }
   return out; // xích neo do view3d vẽ cùng quả neo
 }

@@ -16,6 +16,8 @@ import { defaultEnv, tideAt, envWaveL } from './world.js';
 import { QUALITY } from './view3d.js';
 import { openWindage } from './windage.js';
 import { openShipDraw } from './ui_shipdraw.js';
+import { fleetCard, initFleetCard } from './ui_fleet.js';
+import { MOOR_HINT, shipAt, placeNew, dragShip, dropShip, deleteShip, mooredCard, initMooredCard, mooredEdit, drawMoored, fleetForFile, fleetFromFile } from './ui_moored.js';
 
 const fld = (k, label, unit, val, attr) => `<div class="fld"><label for="f_${k}">${label}</label><div class="in"><input id="f_${k}" data-k="${k}" value="${esc(val)}" ${attr || ''}>${unit ? `<span class="u">${unit}</span>` : ''}</div></div>`;
 const sel = (k, label, opts, val) => `<div class="fld"><label for="f_${k}">${label}</label><div class="in"><select id="f_${k}" data-k="${k}">${opts.map((o) => `<option value="${o[0]}" ${String(o[0]) === String(val) ? 'selected' : ''}>${o[1]}</option>`).join('')}</select></div></div>`;
@@ -34,6 +36,7 @@ export function initShip() {
   const p = A.p, el = $('#p-ship');
   el.innerHTML = `<div class="flex" style="justify-content:space-between;align-items:flex-end;margin-bottom:10px"><div><div style="font-size:20px;font-weight:700">Thông số tính năng điều động của tàu</div><div class="muted">Lấy từ Pilot card / Wheelhouse poster. Màn Điều động tính toán trực tiếp từ các số này.</div></div>
   <div><button class="btn" id="shipReset">Về tàu mẫu</button> <button class="btn" id="shipExport">Lưu ra file</button> <label class="btn" style="display:inline-flex;align-items:center">Mở từ file<input type="file" id="shipImport" accept=".json" hidden></label></div></div>
+  ${fleetCard()}
   <div id="shipCalc" class="note" style="margin-bottom:12px"></div>
   <div class="flex"><div class="col" style="flex:1 1 560px">${SHIP.map((g) => `<section class="card"><h2>${g[0]}</h2><div class="grid ${g[1]}">${g[2].map((f) => Array.isArray(f[2]) ? sel(f[0], f[1], f[2], p[f[0]]) : fld(f[0], f[1], f[2], p[f[0]], f[3] ? 'data-t="1"' : 'inputmode="decimal"')).join('')}</div></section>`).join('')}</div>
   <div class="col" style="flex:1 1 420px"><section class="card"><h2>Mô hình 3D tàu</h2><div class="muted" id="mdlInfo" style="margin-bottom:8px">${p.model && p.model.parts && p.model.parts.length ? 'Đang dùng mô hình vẽ từ sơ đồ: ' + p.model.parts.length + ' chi tiết trên ' + p.model.views.length + ' hình chiếu. Buồng lái, đèn hành trình theo mô hình.' : 'Đang dùng tàu đơn giản. Vẽ lại tàu theo sơ đồ (ảnh / PDF, 1–3 hình chiếu) để cảnh nhìn từ buồng lái, đèn và diện tích hứng gió giống tàu thật.'}</div><div class="flex" style="gap:8px"><button class="btn sm pri" id="mdlBtn">Vẽ tàu từ sơ đồ…</button>${p.model ? '<button class="btn sm" id="mdlOff">Bỏ mô hình (dùng tàu đơn giản)</button>' : ''}</div>
@@ -60,6 +63,7 @@ export function initShip() {
   if ($('#mdlOff')) $('#mdlOff').onclick = () => { if (confirm('Bỏ mô hình vẽ, dùng lại tàu đơn giản? (bản vẽ vẫn mở lại được nếu chưa đóng app)')) { A.p.model = null; saveShip(); initShip(); if (A.hooks.shipChanged) A.hooks.shipChanged(); } };
   $('#shipExport').onclick = () => { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify(A.p, null, 1)], { type: 'application/json' })); a.download = (A.p.name || 'tau') + '.json'; a.click(); };
   $('#shipImport').onchange = async (e) => { try { const o = JSON.parse(await e.target.files[0].text()); A.p = Object.assign(defaultShip(), o); saveShip(); initShip(); if (A.hooks.shipChanged) A.hooks.shipChanged(); } catch (x) { alert('File không đọc được'); } };
+  initFleetCard(() => { initShip(); if (A.hooks.shipChanged) A.hooks.shipChanged(); });
   calcShip();
 }
 // chiều quay từng chân vịt (người dùng tự chọn, không đặt sẵn)
@@ -167,6 +171,7 @@ function drawSide() {
   } else if (selObj && selObj.t === 'sound') {
     h += `<section class="card"><h2>Đang chọn: điểm độ sâu</h2>${fld('o_d', 'Độ sâu', 'm', selObj.o.d)}<button class="btn warn sm" id="oDel" style="margin-top:8px">Xóa</button></section>`;
   }
+  if (tool === 'ship' || (selObj && selObj.t === 'ship')) h += mooredCard(selObj && selObj.t === 'ship' ? selObj.o : null);
   if (A.sim && A.sim.t >= 2) { const S = A.sim.S, st0 = startPos(), dd = Math.hypot(S.x - st0.x, S.y - st0.y); if (dd > 20) h += `<section class="card"><h2>Vị trí tàu</h2><div class="muted">Bài tập đang dở: tàu đang cách vị trí xuất phát ${fmtDist(dd)} (hình tàu màu xanh lục trên hải đồ). Hải đồ tab 3 hiện vị trí tàu lúc này.</div><button class="btn sm" id="toStart" style="margin-top:8px;width:100%">Đưa tàu về vị trí xuất phát (bắt đầu lại)</button></section>`; }
   if (tool === 'route') h += routeCard();
   const sp = startPos(), r = cv && cv.ref;
@@ -181,12 +186,12 @@ function drawSide() {
     <div style="margin-top:8px">${sel('dsUser', 'Datum dùng cho tờ này', [['', 'Theo file (' + (r.datumSrc || 'không ghi') + ')'], ...Object.keys(DATUMS).map((k) => [k, DATUMS[k].name])], ds)}</div><div class="grid g2" style="margin-top:6px">${fld('offE', 'Dời tay về Đông', 'm', off[0])}${fld('offN', 'Dời tay về Bắc', 'm', off[1])}</div>
     <div class="muted" style="margin-top:6px">Bật «Lưới kinh vĩ» rồi so với lưới in trên tờ: lệch thì chọn lại datum hoặc dời tay (m). Ảnh không phải chia lại.</div></section>`;
   }
-  h += `<section class="card"><h2>Đối tượng đã đặt</h2><div class="muted" style="margin-bottom:4px">Lưu theo tọa độ WGS-84, dùng chung cho mọi tờ hải đồ.</div><div class="kv"><span>Đèn / phao</span><b>${W.objs.lights.length}</b></div><div class="kv"><span>Cầu bến · bích</span><b>${W.objs.berths.length} · ${W.bollards.length}</b></div><div class="kv"><span>Tuyến đi</span><b>${(W.objs.routes || []).length}</b></div><div class="kv"><span>Vị trí xuất phát</span><b>${W.start ? fmtLL(...toLL(sp.x, sp.y)) : 'chưa chọn'}</b></div><div class="kv"><span>Vị trí xuất phát có sẵn</span><b>${(W.objs.starts || []).length}</b></div>
-  <div class="flex" style="gap:6px;margin-top:8px"><button class="btn sm" id="objExp">Lưu ra file…</button><label class="btn sm" style="display:inline-flex;align-items:center">Mở từ file…<input type="file" id="objImp" accept=".json" hidden></label></div><div class="muted" style="margin-top:4px">File gồm đèn, phao, tiêu, cầu bến, cọc bích, tuyến đi, vị trí xuất phát — chép sang máy khác rồi mở ở đây. Mở file sẽ gộp vào đối tượng đang có (trùng tên thì thay).</div></section>`;
-  el.innerHTML = h;
+  h += `<section class="card"><h2>Đối tượng đã đặt</h2><div class="muted" style="margin-bottom:4px">Lưu theo tọa độ WGS-84, dùng chung cho mọi tờ hải đồ.</div><div class="kv"><span>Đèn / phao</span><b>${W.objs.lights.length}</b></div><div class="kv"><span>Cầu bến · bích</span><b>${W.objs.berths.length} · ${W.bollards.filter((b) => b.bi >= 0).length}</b></div><div class="kv"><span>Tuyến đi</span><b>${(W.objs.routes || []).length}</b></div><div class="kv"><span>Vị trí xuất phát</span><b>${W.start ? fmtLL(...toLL(sp.x, sp.y)) : 'chưa chọn'}</b></div><div class="kv"><span>Vị trí xuất phát có sẵn</span><b>${(W.objs.starts || []).length}</b></div><div class="kv"><span>Tàu đậu</span><b>${(W.objs.ships || []).length}</b></div>
+  <div class="flex" style="gap:6px;margin-top:8px"><button class="btn sm" id="objExp">Lưu ra file…</button><label class="btn sm" style="display:inline-flex;align-items:center">Mở từ file…<input type="file" id="objImp" accept=".json" hidden></label></div><div class="muted" style="margin-top:4px">File gồm đèn, phao, tiêu, cầu bến, cọc bích, tuyến đi, vị trí xuất phát, tàu đậu (kèm mô hình tàu, không kèm ảnh sơ đồ) — chép sang máy khác rồi mở ở đây. Mở file sẽ gộp vào đối tượng đang có (trùng tên thì thay).</div></section>`;
+  el.innerHTML = h; initMooredCard();
 }
-const TOOLS = [['pan', 'Chọn / kéo'], ['light', 'Đèn / phao'], ['berth', 'Cầu bến'], ['bollard', 'Cọc bích'], ['route', 'Tuyến đi'], ['start', 'Vị trí xuất phát'], ['measure', 'Đo']];
-const HINT = { pan: 'Kéo để di chuyển, lăn chuột để phóng to. Bấm vào đèn hoặc cầu bến để sửa. Bấm chuột phải vào đèn / cầu bến để xóa.', light: 'Bấm lên vị trí đèn hoặc phao trên hải đồ, rồi sửa thông tin ở khung bên phải.', berth: 'Bấm lần lượt dọc mép cầu (phía nước). Bấm đúp để kết thúc. Bấm chuột phải để bỏ điểm vừa đặt. Bích buộc dây tự đặt đều theo khoảng cách bạn nhập.', sound: 'Bấm lên con số độ sâu trên hải đồ rồi gõ giá trị.', start: 'Bấm lên chỗ tàu xuất phát. Hướng ban đầu nhập ở tab 4.', bollard: 'Kéo cọc bích dọc mép cầu để dời. Bấm lên mép cầu để thêm cọc. Chuột phải vào cọc để xóa. Số khoảng cách từ đầu bến hiện ở khung bên phải (bấm vào cầu bến bằng «Chọn / kéo» để xem).', measure: 'Bấm hai điểm để đo khoảng cách (hải lý, gần thì mét) và phương vị. Chuột phải để bỏ.', route: 'Bấm lên hải đồ để thêm điểm vào cuối tuyến đang chọn. Kéo một điểm để dời. Chuột phải vào điểm để xóa. Nhập tọa độ ở khung bên phải cũng được. Tuyến đang chọn hiện ở tab 3.' };
+const TOOLS = [['pan', 'Chọn / kéo'], ['light', 'Đèn / phao'], ['berth', 'Cầu bến'], ['bollard', 'Cọc bích'], ['ship', 'Tàu đậu'], ['route', 'Tuyến đi'], ['start', 'Vị trí xuất phát'], ['measure', 'Đo']];
+const HINT = { ship: MOOR_HINT, pan: 'Kéo để di chuyển, lăn chuột để phóng to. Bấm vào đèn, cầu bến hoặc tàu đậu để sửa (kéo tàu đậu để dời). Bấm chuột phải vào đèn / cầu bến / tàu đậu để xóa.', light: 'Bấm lên vị trí đèn hoặc phao trên hải đồ, rồi sửa thông tin ở khung bên phải.', berth: 'Bấm lần lượt dọc mép cầu (phía nước). Bấm đúp để kết thúc. Bấm chuột phải để bỏ điểm vừa đặt. Bích buộc dây tự đặt đều theo khoảng cách bạn nhập.', sound: 'Bấm lên con số độ sâu trên hải đồ rồi gõ giá trị.', start: 'Bấm lên chỗ tàu xuất phát. Hướng ban đầu nhập ở tab 4.', bollard: 'Kéo cọc bích dọc mép cầu để dời. Bấm lên mép cầu để thêm cọc. Chuột phải vào cọc để xóa. Số khoảng cách từ đầu bến hiện ở khung bên phải (bấm vào cầu bến bằng «Chọn / kéo» để xem).', measure: 'Bấm hai điểm để đo khoảng cách (hải lý, gần thì mét) và phương vị. Chuột phải để bỏ.', route: 'Bấm lên hải đồ để thêm điểm vào cuối tuyến đang chọn. Kéo một điểm để dời. Chuột phải vào điểm để xóa. Nhập tọa độ ở khung bên phải cũng được. Tuyến đang chọn hiện ở tab 3.' };
 export function initChart() {
   $('#p-chart').innerHTML = `<div class="flex" style="align-items:flex-start">
   <div class="col" style="flex:1 1 260px;max-width:320px"><section class="card"><h2>Kho hải đồ (.kap)</h2><div class="muted" style="margin-bottom:8px">Nạp một lần, app lưu trên máy. Các tờ tự ghép liền nhau theo tọa độ, tờ tỷ lệ lớn nằm trên — kéo, phóng to thu nhỏ thoải mái như OpenCPN. Thêm thư mục: app quét cả thư mục con, lấy file .kap. Hải đồ PDF cần bấm vài điểm tọa độ khi nạp. File .rar / .zip cần giải nén trước.</div>
@@ -222,17 +227,18 @@ export function initChart() {
   $('#libLL').onkeydown = (e) => { if (e.key === 'Enter' && libLL) { const [x, y] = toWorld(libLL[0], libLL[1]); cv.centerM(x, y); meas = [[x, y]]; drawChart(); } };
   $('#libLLx').onclick = () => { libLL = null; $('#libLL').value = ''; drawLib(); };
   CS.catalog.on((ev) => { if (ev.type === 'progress') libSoon(); else { drawLib(); drawStatus(); } });
-  const c = $('#chartCv'); let drag = null, moved = false;
+  const c = $('#chartCv'); let drag = null, moved = false, dragShipO = null;
   const pos = (e) => { const r = c.getBoundingClientRect(); return [(e.clientX - r.left) * c.width / r.width, (e.clientY - r.top) * c.height / r.height]; };
-  c.onpointerdown = (e) => { if (e.button === 2) return; drag = pos(e); moved = false; c.setPointerCapture(e.pointerId); dragWP = tool === 'route' ? nearWP(drag) : -1; dragBol = null; if (tool === 'bollard') { const q = nearBollard(drag); if (q) { const b = A.W.objs.berths[q.bi], arr = ensureBols(b, q.bi); let k = 0; arr.forEach((v, i) => { if (Math.abs(v - q.s) < Math.abs(arr[k] - q.s)) k = i; }); dragBol = { bi: q.bi, k }; selObj = { t: 'berth', o: b }; } } };
+  c.onpointerdown = (e) => { if (e.button === 2) return; drag = pos(e); moved = false; c.setPointerCapture(e.pointerId); dragShipO = tool === 'pan' ? shipAt(cv, drag) : null; if (dragShipO) selObj = { t: 'ship', o: dragShipO }; dragWP = tool === 'route' ? nearWP(drag) : -1; dragBol = null; if (tool === 'bollard') { const q = nearBollard(drag); if (q) { const b = A.W.objs.berths[q.bi], arr = ensureBols(b, q.bi); let k = 0; arr.forEach((v, i) => { if (Math.abs(v - q.s) < Math.abs(arr[k] - q.s)) k = i; }); dragBol = { bi: q.bi, k }; selObj = { t: 'berth', o: b }; } } };
   c.onpointermove = (e) => {
     const p = pos(e), [mx, my] = cv.s2m(p[0], p[1]); posText(p, mx, my);
     if (drag && dragBol) { const b = A.W.objs.berths[dragBol.bi], a = A.W.alongBerth(dragBol.bi, mx, my); if (a) { b.bols[dragBol.k] = Math.max(0, Math.min(b._len || 0, a.s)); A.W.rebuild(); moved = true; drawChart(); } return; }
+    if (drag && dragShipO) { if (moved || Math.hypot(p[0] - drag[0], p[1] - drag[1]) > 4) { moved = true; dragShip(dragShipO, mx, my); drawChart(); } return; }
     if (drag && dragWP >= 0) { const r = selRoute(); if (r && r.pts[dragWP]) { r.pts[dragWP] = [mx, my]; moved = true; drawChart(); } return; }
     if (drag && (tool === 'pan' || e.buttons === 4 || moved)) { const dx = p[0] - drag[0], dy = p[1] - drag[1]; if (Math.abs(dx) + Math.abs(dy) > 3 || moved) { moved = true; cv.panPx(dx, dy); drag = p; drawChart(); } }
     else if (drag && Math.hypot(p[0] - drag[0], p[1] - drag[1]) > 6) { moved = true; }
   };
-  c.onpointerup = (e) => { const p = pos(e); if (dragBol) { const was = moved, b = A.W.objs.berths[dragBol.bi]; dragBol = null; drag = null; if (was) { if (Array.isArray(b.bols)) b.bols.sort((p, q) => p - q); objsChanged(); return; } }
+  c.onpointerup = (e) => { const p = pos(e); if (dragShipO) { const o = dragShipO, was = moved; dragShipO = null; drag = null; if (was) dropShip(o); objsChanged(); return; } if (dragBol) { const was = moved, b = A.W.objs.berths[dragBol.bi]; dragBol = null; drag = null; if (was) { if (Array.isArray(b.bols)) b.bols.sort((p, q) => p - q); objsChanged(); return; } }
     if (dragWP >= 0 && moved) { dragWP = -1; drag = null; objsChanged(); return; } dragWP = -1; if (drag && !moved) clickChart(p, e.detail >= 2); drag = null; };
   c.ondblclick = () => { if (tool === 'berth' && draft && draft.length >= 2) { A.W.objs.berths.push({ name: 'Bến ' + (A.W.objs.berths.length + 1), pts: draft, depth: 8, top: 4.5, spacing: 25 }); selObj = { t: 'berth', o: A.W.objs.berths[A.W.objs.berths.length - 1] }; draft = null; objsChanged(); } };
   c.oncontextmenu = (e) => {
@@ -241,13 +247,17 @@ export function initChart() {
     if (meas) { meas = null; drawChart(); return; }
     const wi = nearWP(p); if (wi >= 0) { selRoute().pts.splice(wi, 1); objsChanged(); return; }
     if (tool === 'bollard') { const q = nearBollard(p); if (q) { const b = W.objs.berths[q.bi], arr = ensureBols(b, q.bi); let k = 0; arr.forEach((v, i) => { if (Math.abs(v - q.s) < Math.abs(arr[k] - q.s)) k = i; }); arr.splice(k, 1); selObj = { t: 'berth', o: b }; objsChanged(); } return; }
+    { const sh = shipAt(cv, p); if (sh) { if (confirm('Xóa tàu đậu «' + sh.name + '»?')) { deleteShip(sh); selObj = null; objsChanged(); } return; } }
     let best = null, bd = 16;
     for (const o of W.objs.lights) { const d = near(o.x, o.y); if (d < bd) { bd = d; best = [W.objs.lights, o]; } }
     for (const o of W.objs.berths) for (let i = 0; i + 1 < o.pts.length; i++) for (let t = 0; t <= 1; t += 0.05) { const d = near(o.pts[i][0] + (o.pts[i + 1][0] - o.pts[i][0]) * t, o.pts[i][1] + (o.pts[i + 1][1] - o.pts[i][1]) * t); if (d < bd) { bd = d; best = [W.objs.berths, o]; } }
     if (best) { best[0].splice(best[0].indexOf(best[1]), 1); selObj = null; objsChanged(); }
   };
   c.onwheel = (e) => { e.preventDefault(); const p = pos(e); cv.zoomAt(p[0], p[1], e.deltaY > 0 ? 0.8 : 1.25); drawChart(); };
+  const shipEdit = (e) => { if (mooredEdit(e, selObj && selObj.t === 'ship' ? selObj.o : null)) { objsChanged(); return true; } return false; };
   $('#chartSide').addEventListener('change', (e) => {
+    if (/^ms/.test(e.target.id || '') && ['msType', 'msName', 'msMode'].includes(e.target.id)) return;
+    if (shipEdit(e)) return;
     const t = e.target, o = A.W.objs, r = selRoute(), cr = cv && cv.ref;
     if (t.id === 'rtSel') { o.routeSel = +t.value; objsChanged(); return; }
     if (t.dataset.bol !== undefined && selObj && selObj.t === 'berth') { const b = selObj.o, bi = o.berths.indexOf(b), arr = ensureBols(b, bi), v = num(t.value, NaN); if (isFinite(v)) { arr[+t.dataset.bol] = Math.max(0, Math.min(b._len || v, v)); arr.sort((p, q) => p - q); objsChanged(); } return; }
@@ -266,6 +276,8 @@ export function initChart() {
     objsChanged();
   });
   $('#chartSide').addEventListener('click', (e) => {
+    if (e.target.id === 'msDel' && selObj && selObj.t === 'ship') { deleteShip(selObj.o); selObj = null; objsChanged(); return; }
+    if (shipEdit(e)) return;
     const t = e.target.closest('button'); if (!t) return; const o = A.W.objs, r = selRoute();
     if ((t.id === 'bolAdd' || t.id === 'bolReset') && selObj && selObj.t === 'berth') { const b = selObj.o, bi = o.berths.indexOf(b); if (t.id === 'bolReset') delete b.bols; else { const arr = ensureBols(b, bi); let gs = 0, gi = 0; const pts2 = [0, ...arr, b._len || 0]; for (let i = 0; i + 1 < pts2.length; i++) if (pts2[i + 1] - pts2[i] > gs) { gs = pts2[i + 1] - pts2[i]; gi = i; } arr.push((pts2[gi] + pts2[gi + 1]) / 2); arr.sort((p, q) => p - q); } objsChanged(); return; }
     if (t.id === 'toStart' && A.hooks.resetToStart) { A.hooks.resetToStart(true); drawChart(); drawSide(); return; }
@@ -280,11 +292,11 @@ export function initChart() {
     }
   });
   $('#chartSide').addEventListener('click', (e) => {
-    if (e.target.id === 'objExp') { const a = document.createElement('a'), d = new Date(); a.href = URL.createObjectURL(new Blob([JSON.stringify(placesFile(A.W), null, 1)], { type: 'application/json' })); a.download = 'doi-tuong-hai-do-' + d.getFullYear() + String(d.getMonth() + 1).padStart(2, '0') + String(d.getDate()).padStart(2, '0') + '.json'; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 3000); }
+    if (e.target.id === 'objExp') fleetForFile().then((fleet) => { const a = document.createElement('a'), d = new Date(), F = placesFile(A.W); if (fleet.length) F.fleet = fleet; a.href = URL.createObjectURL(new Blob([JSON.stringify(F, null, 1)], { type: 'application/json' })); a.download = 'doi-tuong-hai-do-' + d.getFullYear() + String(d.getMonth() + 1).padStart(2, '0') + String(d.getDate()).padStart(2, '0') + '.json'; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 3000); });
   });
   $('#chartSide').addEventListener('change', async (e) => {
     if (e.target.id !== 'objImp' || !e.target.files.length) return; const f = e.target.files[0]; e.target.value = '';
-    try { const n = mergePlacesFile(A.W, JSON.parse(await f.text())); selObj = null; objsChanged(); alert(`Đã mở ${f.name}: ${n.lights} đèn / phao / tiêu, ${n.berths} cầu bến, ${n.routes} tuyến đi, ${n.starts} vị trí xuất phát có sẵn.`); }
+    try { const F = JSON.parse(await f.text()); if (F && F.loai === 'doi-tuong-hai-do') await fleetFromFile(F); const n = mergePlacesFile(A.W, F); selObj = null; objsChanged(); alert(`Đã mở ${f.name}: ${n.lights} đèn / phao / tiêu, ${n.berths} cầu bến, ${n.routes} tuyến đi, ${n.starts} vị trí xuất phát có sẵn, ${n.ships} tàu đậu.`); }
     catch (err) { alert('Không mở được file: ' + err.message); }
   });
   $('#chartSide').addEventListener('click', (e) => { if (e.target.id === 'oDel' && selObj) { const arr = selObj.t === 'light' ? A.W.objs.lights : selObj.t === 'berth' ? A.W.objs.berths : A.W.objs.sounds; arr.splice(arr.indexOf(selObj.o), 1); selObj = null; objsChanged(); } });
@@ -307,7 +319,7 @@ function bolList(b) {
     <div class="muted" style="margin-top:4px">Dùng công cụ «Cọc bích» để kéo cọc dọc mép cầu, bấm lên mép cầu để thêm, chuột phải để xóa.</div>`;
 }
 const ensureBols = (b, bi) => { if (!Array.isArray(b.bols)) b.bols = A.W.autoBols(bi); b.bols.sort((p, q) => p - q); return b.bols; };
-function nearBollard(p) { let best = null, bd = 13; for (const q of A.W.bollards) { const s2 = cv.m2s(q.x, q.y), d = Math.hypot(s2[0] - p[0], s2[1] - p[1]); if (d < bd) { bd = d; best = q; } } return best; }
+function nearBollard(p) { let best = null, bd = 13; for (const q of A.W.bollards) { if (q.bi < 0) continue; const s2 = cv.m2s(q.x, q.y), d = Math.hypot(s2[0] - p[0], s2[1] - p[1]); if (d < bd) { bd = d; best = q; } } return best; }
 function routeCard() {
   const o = A.W.objs, rs = o.routes || [], r = selRoute();
   const ll = r ? r.pts.map((q) => toLL(q[0], q[1])) : [], lg = legsLL(ll);
@@ -332,10 +344,12 @@ function clickChart(p, dbl) {
   else if (tool === 'route') { let r = selRoute(); if (!r) { W.objs.routes = W.objs.routes || []; W.objs.routes.push({ name: 'Tuyến ' + (W.objs.routes.length + 1), pts: [] }); W.objs.routeSel = W.objs.routes.length - 1; r = selRoute(); } r.pts.push([x, y]); objsChanged(); }
   else if (tool === 'start') { W.start = { x, y, hdg: num(startPos().hdg, 0) }; saveObjs(); if (A.sim && A.sim.t < 2 && A.hooks.resetToStart) A.hooks.resetToStart(false); drawChart(); drawSide(); if (A.hooks.envChanged) A.hooks.envChanged(); }
   else if (tool === 'measure') { if (!meas || meas.length === 2) meas = [[x, y]]; else meas.push([x, y]); drawChart(); }
+  else if (tool === 'ship') { const hit = shipAt(cv, p); if (hit && $('#msMode') && $('#msMode').value !== 'along') { selObj = { t: 'ship', o: hit }; drawChart(); drawSide(); return; } placeNew(x, y).then((sh) => { if (sh) { selObj = { t: 'ship', o: sh }; objsChanged(); } }); }
   else {
     let best = null, bd = 14;
     for (const o of W.objs.lights) { const d = near(o.x, o.y); if (d < bd) { bd = d; best = { t: 'light', o }; } }
     for (const o of W.objs.berths) for (const q of o.pts) { const d = near(q[0], q[1]); if (d < bd) { bd = d; best = { t: 'berth', o }; } }
+    if (!best) { const sh = shipAt(cv, p); if (sh) best = { t: 'ship', o: sh }; }
     selObj = best; drawChart(); drawSide();
   }
 }
@@ -343,8 +357,9 @@ function clickChart(p, dbl) {
 export function drawOverlay(v, opt) {
   const g = v.ctx, W = A.W; g.save(); g.lineJoin = 'round';
   for (const b of W.objs.berths) { g.strokeStyle = '#FFB300'; g.lineWidth = selObj && selObj.o === b && !opt ? 6 : 4; g.beginPath(); b.pts.forEach((q, i) => { const s = v.m2s(q[0], q[1]); if (i) g.lineTo(s[0], s[1]); else g.moveTo(s[0], s[1]); }); g.stroke(); }
+  drawMoored(v, g, !opt && selObj && selObj.t === 'ship' ? selObj.o : null);
   const bt = !opt && tool === 'bollard';
-  if (v.mPerPx() < 3 || bt) { g.fillStyle = '#3A2A00'; g.strokeStyle = '#fff'; g.lineWidth = 1; g.font = 'bold 10px Segoe UI'; for (const b of W.bollards) { const s = v.m2s(b.x, b.y); g.fillStyle = '#3A2A00'; g.beginPath(); g.arc(s[0], s[1], bt ? 4.5 : 3, 0, 7); g.fill(); g.stroke(); if ((bt && v.mPerPx() < 1.6) || v.mPerPx() < 0.8) { g.fillStyle = '#3A2A00'; g.fillText('B' + b.n, s[0] + 6, s[1] - 5); } } }
+  if (v.mPerPx() < 3 || bt) { g.fillStyle = '#3A2A00'; g.strokeStyle = '#fff'; g.lineWidth = 1; g.font = 'bold 10px Segoe UI'; for (const b of W.bollards) { if (b.bi < 0) continue; const s = v.m2s(b.x, b.y); g.fillStyle = '#3A2A00'; g.beginPath(); g.arc(s[0], s[1], bt ? 4.5 : 3, 0, 7); g.fill(); g.stroke(); if ((bt && v.mPerPx() < 1.6) || v.mPerPx() < 0.8) { g.fillStyle = '#3A2A00'; g.fillText('B' + b.n, s[0] + 6, s[1] - 5); } } }
   if (!opt) for (const b of W.objs.berths) if (bt || (selObj && selObj.o === b)) { const s = v.m2s(b.pts[0][0], b.pts[0][1]); g.fillStyle = '#E65100'; g.font = 'bold 11px Segoe UI'; g.beginPath(); g.arc(s[0], s[1], 4, 0, 7); g.fill(); g.fillText('Đầu bến', s[0] + 6, s[1] + 14); }
   const LC = { W: '#ffffff', R: '#e53935', G: '#2e9e55', Y: '#ffd600' };
   for (const o of W.objs.lights) { const s = v.m2s(o.x, o.y); g.fillStyle = LC[o.color] || '#fff'; g.strokeStyle = '#111'; g.lineWidth = 2; g.beginPath(); if (o.kind === 'light') { g.arc(s[0], s[1], 6, 0, 7); } else if (/^beacon/.test(o.kind)) { g.moveTo(s[0], s[1] - 7); g.lineTo(s[0] + 6, s[1] + 5); g.lineTo(s[0] - 6, s[1] + 5); g.closePath(); } else { g.rect(s[0] - 5, s[1] - 5, 10, 10); } g.fill(); g.stroke(); if (!opt && selObj && selObj.o === o) { g.strokeStyle = '#00B8D4'; g.setLineDash([4, 3]); g.beginPath(); g.arc(s[0], s[1], 13, 0, 7); g.stroke(); g.setLineDash([]); } if (!opt || v.mPerPx() < 6) { g.font = '11px Segoe UI'; g.fillStyle = '#111'; g.fillText(o.name || '', s[0] + 9, s[1] - 7); } }
