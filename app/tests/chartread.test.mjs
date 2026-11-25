@@ -88,6 +88,21 @@ test('mặt đáy: tam giác qua điểm đo tái tạo đúng mặt phẳng; n�
   for (let i = 0; i < gw * gh; i++) { if (cl[i] === 1) assert.ok(zz[i] <= -1, 'nước ' + zz[i]); if (cl[i] === 2) assert.ok(zz[i] >= 0 && zz[i] <= 30); }
 });
 
+test('mặt nước giữa hai hòn gần nhau: theo số đo sâu + độ dốc bờ, không nông giả do tam giác nối hai mép bờ', () => {
+  // hai hòn (ô 5–20 và 30–45, hàng 10–30), luồng 9 ô ở giữa; số đo 4 m ở hai đầu luồng, 5 m ngoài khơi
+  const gw = 60, gh = 40, cell = 4, cl = new Uint8Array(gw * gh).fill(1);
+  for (let y = 10; y <= 30; y++) for (let x = 5; x <= 45; x++) if (x <= 20 || x >= 30) cl[y * gw + x] = 3;
+  const e = []; for (let y = 1; y < gh - 1; y++) for (let x = 1; x < gw - 1; x++) { const o = y * gw + x; if (cl[o] === 1 && [o - 1, o + 1, o - gw, o + gw].some((q) => cl[q] === 3)) e.push((x + 0.5) * cell, (y + 0.5) * cell, 0); }
+  const snd = [[25, 3, 4], [25, 37, 4], [2, 2, 5], [57, 2, 5], [2, 37, 5], [57, 37, 5], [52, 20, 5], [2, 20, 5]].map(([x, y, v]) => ({ x: (x + 0.5) * cell, y: (y + 0.5) * cell, v, dry: false }));
+  const z = composeGrid({ cl, gw, gh, cell, W2: 0, H2: 0, Eland: null, edges: Float32Array.from(e), snd }), d = (x, y) => -z[y * gw + x] / 10;
+  // số đo 4 m cách bờ ≈ 8 ô → độ dốc bờ ≈ 4/8; giữa luồng cách bờ 4,5 ô → ≈ 2,2 m (tam giác mép–mép cũ cho ≈ 0,1 m)
+  assert.ok(d(25, 20) > 2, 'giữa luồng ' + d(25, 20));
+  assert.ok(d(21, 20) < 1.5 && d(21, 20) > 0, 'sát bờ ' + d(21, 20));     // sát bờ về gần 0
+  for (const s of snd) assert.ok(Math.abs(d(Math.floor(s.x / cell), Math.floor(s.y / cell)) - s.v) < 0.15, 'đúng số đo ' + s.v);
+  for (let o = 0; o < gw * gh; o++) if (cl[o] === 1) assert.ok(z[o] <= -1, 'nước dưới 0');
+  assert.ok(d(25, 20) <= 4.05, 'không sâu quá số đo hai đầu ' + d(25, 20));
+});
+
 test('dựng cả tờ: số đo sâu + đảo → lưới z (nước âm theo số, đất cao, viền đúng)', async () => {
   const { W, H, img } = islandChart();
   for (const [x, y, t] of [[60, 60, '12'], [880, 80, '14'], [60, 880, '11'], [870, 900, '13'], [430, 900, '9,8'], [900, 480, '10,6'], [40, 470, '12,4'], [450, 30, '15']]) sounding(img, W, x, y, t, false);

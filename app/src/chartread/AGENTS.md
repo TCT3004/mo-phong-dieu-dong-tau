@@ -13,8 +13,9 @@
 | `digits.js` | `loadTemplates` (giải nén mẫu), `deshear` (nắn chữ nghiêng), `feature` (24×24 mờ chuẩn hóa + tỷ lệ), `classifyItalic` (kNN 5 tâm cụm), `classifyUpright` (số lỗ kín giới hạn lớp, số 1 là thanh hẹp), `templateImage` (cho kiểm thử) |
 | `read.js` | `readBlock`: gom nét → chữ số → cụm số, đọc số đo sâu (phần nguyên + chữ số lẻ thấp hơn, gạch chân / nằm trong vùng bãi = độ cao bãi cạn, bỏ nét gạch đường đứt, bỏ chữ địa danh) và độ cao (chấm bên trái / phải = vị trí đỉnh, số trong ngoặc = độ cao cả hòn); `postFilter` (bỏ số lẻ mồ côi, đánh dấu nghi khi lệch hẳn 8 số lân cận); `dedupeHeights` |
 | `terrain.js` | nửa độ phân giải: `halfMasks` (lớp đa số 2×2, nét cam, chữ gọn = vật chắn, nét dài / mảnh = cho đi qua), `landElevation` (suối / đường trong đảo tính là đất, đường bình độ nối qua nét mảnh + nối đầu mút, chia vùng giữa các đường, đếm bậc từ bờ lên, khoảng cao đều 5–100 m suy từ chấm độ cao, nội suy giữa hai đường, hiệu chỉnh tỷ lệ theo chấm độ cao, đảo không có đường bình độ dựng vòm theo hình đảo + số độ cao, làm mượt giữ mép bờ) |
-| `surface.js` | `edgeSamples` (mép nước / bãi = 0, mép bãi / đất = mép bờ), `rasterTin` (Delaunay `delaunator`, tô ô), `composeGrid` (ô đất lấy độ cao đất, ô nước / bãi theo tam giác; nước ≤ −0,1 m, bãi 0 … mép bờ, bãi xa đất không cao quá bãi cao nhất) |
-| `model.js` | `buildDepthModel` (cả quy trình, có tiến độ), `readAll` (khối 2048² chồng lề), `coastHeight`, `rebuildWater` (sau khi sửa số đo sâu, không cần ảnh), `ALG`, `CELL` |
+| `surface.js` | `edgeSamples` (mép nước / bãi = 0, mép bãi / đất = mép bờ), `rasterTin` (Delaunay `delaunator`, tô ô, Int16), `rasterTinF` (như trên ra số thực, ô ngoài lưới tam giác lấy theo ô gần nhất), `waterDepths` (ô nước = min(nội suy giữa các số đo sâu, độ dốc bờ nội suy × khoảng cách tới bờ); độ dốc bờ của mỗi số đo = độ sâu ÷ khoảng cách từ nó tới ô bãi / đất gần nhất, tối đa 1), `composeGrid` (ô đất lấy độ cao đất; ô bãi theo tam giác qua số đo + điểm mép, 0 … mép bờ, bãi xa đất không cao quá bãi cao nhất; ô nước theo `waterDepths`, ≥ 0,1 m; ô nước không nối tới số đo nào giữ cách tam giác) |
+| `model.js` | `buildDepthModel` (cả quy trình, có tiến độ), `readAll` (khối 2048² chồng lề), `coastHeight`, `rebuildWater` (sau khi sửa số đo sâu hoặc nâng thuật toán mặt nước, không cần ảnh; ghi `alg` mới), `CELL` |
+| `version.js` | `ALG` phiên bản thuật toán, `WATER_ONLY_FROM` (tờ dựng bằng `alg` từ số này tới `ALG − 1` chỉ cần dựng lại mặt nước); tách riêng để giao diện đọc mà không kéo bộ đọc chữ số vào bundle chính |
 
 ## Local Contracts
 
@@ -28,7 +29,8 @@
 
 ## Work Guidance
 
-- Đổi thuật toán làm thay kết quả thì tăng `ALG`
+- Đổi thuật toán làm thay kết quả thì tăng `ALG` (`version.js`); chỉ đổi mặt nước thì giữ `WATER_ONLY_FROM` để tờ cũ dựng lại mặt nước, đổi phần đọc số / đất thì nâng `WATER_ONLY_FROM` = `ALG` để tờ cũ đọc lại
+- Ô nước không nối tam giác qua điểm mép bờ: hai mép bờ gần nhau sẽ làm nông giả cả vùng nước ở giữa
 - Mẫu chữ số dựng ngoài repo từ hải đồ thử (không đưa hải đồ vào repo); chỉ thay `digit_tpl.js` khi có bộ mẫu kiểm chứng tốt hơn
 
 ## Verification

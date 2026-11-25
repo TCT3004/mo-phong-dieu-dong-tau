@@ -5,8 +5,9 @@ import { loadTemplates } from './digits.js';
 import { readBlock, postFilter, dedupeHeights } from './read.js';
 import { halfMasks, landElevation } from './terrain.js';
 import { edgeSamples, cellClasses, composeGrid } from './surface.js';
+import { ALG } from './version.js';
 
-export const ALG = 1;        // phiên bản thuật toán (đổi thì nên đọc lại)
+export { ALG };                // phiên bản thuật toán (xem version.js)
 export const CELL = 4;       // điểm ảnh tờ cho một ô lưới z
 
 // độ cao mép bờ (mép đất vàng) so với số 0 hải đồ: theo độ cao bãi cạn lớn nhất đọc được, mặc định 3 m
@@ -52,5 +53,5 @@ export async function buildDepthModel(idx, W, H, pal, opts = {}) {
 // dựng lại phần nước / bãi sau khi sửa số đo sâu (không cần ảnh hải đồ): giữ ô đất, tam giác lại
 export function rebuildWater(m) {
   const z = composeGrid({ cl: m.cl, gw: m.gw, gh: m.gh, cell: m.cell, W2: 0, H2: 0, Eland: null, edges: m.edges, snd: m.snd, zPrev: m.z });
-  return Object.assign({}, m, { z, made: Date.now() });
+  return Object.assign({}, m, { z, alg: ALG, made: Date.now() });
 }

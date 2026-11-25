@@ -1,6 +1,10 @@
-// Mặt đáy và lưới độ cao cuối: tam giác Delaunay qua số đo sâu + điểm mép (mép nước / bãi = 0, mép bãi / đất = hc),
-// tô vào lưới ô (mặc định 4 điểm ảnh tờ); ô đất lấy độ cao đất. Lưới z: Int16 đơn vị dm, dương = cao hơn số 0 hải đồ.
+// Mặt đáy và lưới độ cao cuối, tô vào lưới ô (mặc định 4 điểm ảnh tờ). Lưới z: Int16 đơn vị dm, dương = cao hơn số 0 hải đồ.
+// - ô đất: độ cao đất
+// - ô bãi: tam giác Delaunay qua số đo + điểm mép (mép nước / bãi = 0, mép bãi / đất = hc)
+// - ô nước: min(nội suy giữa các số đo sâu, độ dốc bờ nội suy × khoảng cách tới bờ) — không nối tam giác qua điểm mép bờ,
+//   vì giữa hai hòn gần nhau ít số đo, tam giác mép–mép làm cả vùng nước ở giữa nông giả 0–1 m
 import Delaunator from 'delaunator';
+import { edt } from './img.js';
 
 // điểm mép từ lớp nửa độ phân giải (1 nước, 2 bãi, 3 đất), mỗi ô 3×3 một điểm → Float32 [x, y, z] theo điểm ảnh tờ
 export function edgeSamples(cls2, W2, H2, hc, step = 3) {
@@ -43,6 +47,48 @@ export function rasterTin(pts, gw, gh, cell, wet, out) {
   return filled;
 }
 
+// xy: [x, y] theo điểm ảnh tờ, vals: giá trị tại điểm → Float32 cho các ô mask[ô] = 1 (nội suy tuyến tính trên tam giác,
+// ô ngoài lưới tam giác lấy theo ô gần nhất đã có, nối qua các ô mask); ô không tới được = NaN
+export function rasterTinF(xy, vals, gw, gh, cell, mask) {
+  const N = gw * gh, out = new Float32Array(N).fill(NaN), n = vals.length;
+  if (n >= 3) {
+    const T = new Delaunator(Float64Array.from(xy)).triangles;
+    for (let t = 0; t < T.length; t += 3) {
+      const a = T[t], b = T[t + 1], c = T[t + 2];
+      const ax = xy[a * 2] / cell - 0.5, ay = xy[a * 2 + 1] / cell - 0.5, bx = xy[b * 2] / cell - 0.5, by = xy[b * 2 + 1] / cell - 0.5, cx = xy[c * 2] / cell - 0.5, cy = xy[c * 2 + 1] / cell - 0.5;
+      const det = (by - cy) * (ax - cx) + (cx - bx) * (ay - cy); if (Math.abs(det) < 1e-9) continue;
+      const y0 = Math.max(0, Math.ceil(Math.min(ay, by, cy))), y1 = Math.min(gh - 1, Math.floor(Math.max(ay, by, cy)));
+      const x0 = Math.max(0, Math.ceil(Math.min(ax, bx, cx))), x1 = Math.min(gw - 1, Math.floor(Math.max(ax, bx, cx)));
+      for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
+        const o = y * gw + x; if (!mask[o]) continue;
+        const l1 = ((by - cy) * (x - cx) + (cx - bx) * (y - cy)) / det, l2 = ((cy - ay) * (x - cx) + (ax - cx) * (y - cy)) / det, l3 = 1 - l1 - l2;
+        if (l1 < -1e-6 || l2 < -1e-6 || l3 < -1e-6) continue;
+        out[o] = l1 * vals[a] + l2 * vals[b] + l3 * vals[c];
+      }
+    }
+  }
+  // điểm đo nằm ở ô mask chưa được tô (ít điểm, hoặc điểm sát mép tam giác) thì gieo đúng giá trị của nó
+  for (let i = 0; i < n; i++) { const x = Math.min(gw - 1, Math.max(0, Math.floor(xy[i * 2] / cell))), y = Math.min(gh - 1, Math.max(0, Math.floor(xy[i * 2 + 1] / cell))), o = y * gw + x; if (mask[o] && isNaN(out[o])) out[o] = vals[i]; }
+  let fr = []; for (let o = 0; o < N; o++) if (mask[o] && !isNaN(out[o])) fr.push(o);
+  while (fr.length) { const nx = []; for (const o of fr) { const x = o % gw; for (const q of [o - 1, o + 1, o - gw, o + gw]) { if (q < 0 || q >= N || Math.abs((q % gw) - x) > 1 || !mask[q] || !isNaN(out[q])) continue; out[q] = out[o]; nx.push(q); } } fr = nx; }
+  return out;
+}
+
+// độ sâu ô nước (m, dương; NaN = không có số đo nối tới): min(S, K × khoảng cách tới bờ)
+// S = nội suy giữa các số đo sâu; K = độ dốc bờ nội suy (mỗi số đo: độ sâu ÷ khoảng cách từ nó tới bờ gần nhất);
+// bờ = ô bãi hoặc ô đất. Đúng chỗ số đo: K × khoảng cách = đúng số đo; sát bờ về 0; bờ dốc thì sâu nhanh, bãi thoải thì sâu dần
+export function waterDepths({ cl, gw, gh, cell, snd }) {
+  const N = gw * gh, coast = new Uint8Array(N), wet = new Uint8Array(N);
+  for (let o = 0; o < N; o++) { const c = cl[o]; if (c === 2 || c === 3) coast[o] = 1; else wet[o] = 1; }
+  const S = snd.filter((s) => !s.del && !s.sus && !s.dry && s.v > 0); if (!S.length) return null;
+  const { D } = edt(coast, gw, gh), dc = (o) => Math.max(0.5, D[o] - 0.5) * cell; // điểm ảnh tờ; không có bờ: D rất lớn
+  const xy = [], V = [], K = [];
+  for (const s of S) { const o = Math.min(gh - 1, Math.max(0, Math.floor(s.y / cell))) * gw + Math.min(gw - 1, Math.max(0, Math.floor(s.x / cell))); xy.push(s.x, s.y); V.push(s.v); K.push(Math.min(1, s.v / dc(o))); }
+  const Sv = rasterTinF(xy, V, gw, gh, cell, wet), Kv = rasterTinF(xy, K, gw, gh, cell, wet), out = new Float32Array(N).fill(NaN);
+  for (let o = 0; o < N; o++) if (wet[o] && !isNaN(Sv[o])) out[o] = Math.max(0.1, Math.min(Sv[o], Kv[o] * dc(o)));
+  return out;
+}
+
 // lớp ô lưới (lấy điểm nửa độ phân giải ở tâm ô)
 export function cellClasses(cls2, W2, H2, gw, gh, cell) {
   const cl = new Uint8Array(gw * gh), f = cell / 2;
@@ -83,5 +129,8 @@ export function composeGrid({ cl, gw, gh, cell, W2, H2, Eland, edges, snd, zPrev
       for (const o of frontier) { const x = o % gw; for (const q of [o - 1, o + 1, o - gw, o + gw]) { if (q < 0 || q >= wet.length || (Math.abs((q % gw) - x) > 1)) continue; if (wet[q] === 1) { z[q] = z[o]; wet[q] = 2; nx.push(q); } } }
       frontier = nx; }
   }
+  // ô nước: theo số đo sâu + độ dốc bờ (ô nước không nối tới số đo nào, ví dụ ao trong đảo, giữ cách cũ)
+  const wd = waterDepths({ cl, gw, gh, cell, snd });
+  if (wd) for (let o = 0; o < wet.length; o++) if (cl[o] !== 2 && cl[o] !== 3 && !isNaN(wd[o])) z[o] = -Math.max(1, Math.round(wd[o] * 10));
   return z;
 }
