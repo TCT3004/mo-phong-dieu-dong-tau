@@ -17,7 +17,21 @@ export function paletteInfo(pal) {
     orange[i] = r > 230 && g < 246 && b < 160 && r - b > 80 ? 1 : 0;
     white[i] = r > 250 && g > 250 && b > 250 ? 1 : 0;
   }
-  return { lum, cls, core, soft, orange, white, dark, land };
+  return { lum, cls, core, soft, orange, white, dark, land, pal };
+}
+
+// màu nước (tô theo dải độ sâu: thường xanh đậm 0–2 m, xanh nhạt 2–5 m, trắng > 5 m) → số hiệu 1…n theo độ sáng tăng dần
+// (tối hơn = nông hơn); màu nước phụ (ít điểm ảnh) gộp vào màu chính gần nhất. Trả { TI: Uint8 (chỉ số màu → số hiệu, 0 = không phải nước), n }
+export function waterTintIds(idx, P) {
+  const cnt = new Float64Array(256); for (let i = 0; i < idx.length; i += 7) cnt[idx[i]]++;
+  const rgb = (k) => [P.pal[k * 3], P.pal[k * 3 + 1], P.pal[k * 3 + 2]], dist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+  let tot = 0; for (let k = 0; k < 256; k++) if (P.cls[k] === 1) tot += cnt[k];
+  const major = []; for (let k = 0; k < 256; k++) if (P.cls[k] === 1 && cnt[k] >= tot * 0.03) major.push(k);
+  major.sort((a, b) => P.lum[a] - P.lum[b]);
+  const groups = []; for (const k of major) { const g = groups.find((q) => dist(rgb(q[0]), rgb(k)) < 8); if (g) g.push(k); else if (groups.length < 7) groups.push([k]); }
+  const TI = new Uint8Array(256);
+  for (let k = 0; k < 256; k++) { if (P.cls[k] !== 1 || !groups.length) continue; let bi = 0, bd = Infinity; groups.forEach((g, i) => { const d = dist(rgb(g[0]), rgb(k)); if (d < bd) { bd = d; bi = i; } }); TI[k] = bi + 1; }
+  return { TI, n: groups.length };
 }
 
 // ---------- thành phần liên thông (hai lượt, gộp bằng cây) ----------
@@ -158,4 +172,12 @@ export function maskedBlur(v, mask, W, H, sigma) {
   const out = new Float32Array(W * H);
   for (let i = 0; i < out.length; i++) out[i] = mask[i] ? num[i] / Math.max(den[i], 1e-4) : v[i];
   return out;
+}
+
+// điểm ảnh màu nước «sạch» để lấy màu vùng: chính nó và các điểm cách 1–2 điểm ảnh theo 4 hướng đều là màu nước
+// (bỏ viền răng cưa quanh chữ số / nét vẽ — màu lượng tử của viền có thể trùng màu tô một dải độ sâu khác)
+export function pureWater(idx, W, H, i, cls) {
+  const x = i % W, y = (i - x) / W; if (x < 2 || y < 2 || x >= W - 2 || y >= H - 2) return false;
+  return cls[idx[i - 1]] === 1 && cls[idx[i + 1]] === 1 && cls[idx[i - W]] === 1 && cls[idx[i + W]] === 1 &&
+    cls[idx[i - 2]] === 1 && cls[idx[i + 2]] === 1 && cls[idx[i - 2 * W]] === 1 && cls[idx[i + 2 * W]] === 1;
 }

@@ -1,7 +1,7 @@
 # Mô phỏng điều động tàu 3D
 
 Phần mềm mô phỏng 3D dành cho **người điều động tàu** (không phải người lái), chạy offline trên Windows.
-Bản thử nghiệm v0.4.1 — giai đoạn 4: app tự đọc số độ sâu, độ cao núi và đường bình độ trên hải đồ KAP để dựng mặt đáy và núi đúng như hải đồ (viền đảo theo đúng nét bờ). 0.4.1 sửa cách nội suy độ sâu giữa các số đo: hết vùng nông giả giữa các hòn gần nhau. Giai đoạn 3 đã có: vẽ mô hình tàu từ sơ đồ, cờ trên tàu, dữ liệu cảng nạp từ file, vệt nước sau tàu, cây / nhà trên bờ, kho tàu 13 mẫu, tàu đậu ở cảng.
+Bản thử nghiệm v0.4.2 — giai đoạn 4: app tự đọc số độ sâu, độ cao núi và đường bình độ trên hải đồ KAP để dựng mặt đáy và núi đúng như hải đồ (viền đảo theo đúng nét bờ). 0.4.1–0.4.2 sửa cách nội suy độ sâu giữa các số đo: hết vùng nông giả giữa các hòn gần nhau; mỗi vùng màu nước (xanh đậm 0–2 m, xanh nhạt 2–5 m, trắng > 5 m) chỉ nội suy từ số đo cùng màu, nên luồng nạo vét tô màu sâu hơn hai bên theo đúng số đo trong luồng. Giai đoạn 3 đã có: vẽ mô hình tàu từ sơ đồ, cờ trên tàu, dữ liệu cảng nạp từ file, vệt nước sau tàu, cây / nhà trên bờ, kho tàu 13 mẫu, tàu đậu ở cảng.
 
 ## Các phần chính
 
@@ -15,7 +15,7 @@ Bản thử nghiệm v0.4.1 — giai đoạn 4: app tự đọc số độ sâu,
 
 Mô hình chuyển động: kiểu MMG 3 bậc tự do (thân tàu, chân vịt, bánh lái), có squat, hiệu ứng bờ, chân vịt kéo lái, gió, dòng chảy, sóng.
 
-Tọa độ: toàn app dùng WGS-84. Hải đồ VN-2000 (ghi trong file KAP, hoặc chọn khi nạp PDF) được chuyển sang WGS-84 theo tham số EPSG:6960. Độ sâu, radar, địa hình 3D ghép từ mọi tờ đã nạp; ngoài vùng hải đồ là biển trống sâu 30 m. Tờ KAP đã đọc số thì độ sâu theo số đo sâu trên hải đồ (nội suy giữa các số đo, sát bờ về 0 m theo độ dốc bờ suy từ các số đo gần đó), độ cao tính từ số 0 hải đồ; tờ chưa đọc / PDF thì độ sâu theo màu.
+Tọa độ: toàn app dùng WGS-84. Hải đồ VN-2000 (ghi trong file KAP, hoặc chọn khi nạp PDF) được chuyển sang WGS-84 theo tham số EPSG:6960. Độ sâu, radar, địa hình 3D ghép từ mọi tờ đã nạp; ngoài vùng hải đồ là biển trống sâu 30 m. Tờ KAP đã đọc số thì độ sâu theo số đo sâu trên hải đồ (nội suy giữa các số đo cùng vùng màu nước, giữ trong dải độ sâu của màu đó — dải app tự suy từ số đo của từng tờ —, sát bờ về 0 m và sát ranh màu về độ sâu ở ranh theo độ dốc suy từ các số đo gần đó), độ cao tính từ số 0 hải đồ; tờ chưa đọc / PDF thì độ sâu theo màu.
 
 Nạp hải đồ PDF: tab 2 → «Thêm hải đồ PDF…», nhập tỷ lệ, chọn datum, phóng sát và bấm vào 2–4 giao điểm lưới kinh vĩ rồi gõ tọa độ in ở mép, bấm các góc khung trong để cắt lề, xem sai số rồi nạp.
 
@@ -49,7 +49,7 @@ npm test               # chạy unit test
 cp dist/MoPhongDieuDongTau.html ../electron/index.html
 cd ../electron
 npm install
-npx electron-builder --win portable --x64   # tạo electron/dist/MoPhongDieuDongTau-0.4.1.exe
+npx electron-builder --win portable --x64   # tạo electron/dist/MoPhongDieuDongTau-0.4.2.exe
 ```
 
 File `.exe` chưa có chữ ký số: lần đầu mở, nếu Windows chặn thì bấm **More info → Run anyway**.

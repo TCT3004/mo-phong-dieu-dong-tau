@@ -20,7 +20,7 @@ import { openShipDraw } from './ui_shipdraw.js';
 import { fleetCard, initFleetCard } from './ui_fleet.js';
 import { initDepthUI, depthCard, initDepthCard, pointCard, initPointCard, drawDepthPts, depthClick, depthRightClick, dmState, clearSel } from './ui_depth.js';
 import { MOOR_HINT, shipAt, anchorAtPt, dragAnchor, deleteAnchor, placeNew, dragShip, dropShip, deleteShip, mooredCard, initMooredCard, mooredEdit, drawMoored, fleetForFile, fleetFromFile } from './ui_moored.js';
-import { ALG as DM_ALG, WATER_ONLY_FROM } from './chartread/version.js';
+import { ALG as DM_ALG, WATER_ONLY_FROM, TINT_FROM } from './chartread/version.js';
 
 const fld = (k, label, unit, val, attr) => `<div class="fld"><label for="f_${k}">${label}</label><div class="in"><input id="f_${k}" data-k="${k}" value="${esc(val)}" ${attr || ''}>${unit ? `<span class="u">${unit}</span>` : ''}</div></div>`;
 const sel = (k, label, opts, val) => `<div class="fld"><label for="f_${k}">${label}</label><div class="in"><select id="f_${k}" data-k="${k}">${opts.map((o) => `<option value="${o[0]}" ${String(o[0]) === String(val) ? 'selected' : ''}>${o[1]}</option>`).join('')}</select></div></div>`;
@@ -494,10 +494,12 @@ export function initSet() {
 export async function initCharts() {
   await CS.catalog.init(); drawLib(); drawStatus();
   // tờ KAP nạp từ bản trước chưa đọc độ sâu: đọc nền lần lượt (mỗi tờ một lần; tờ đang dở lúc tắt app thì đọc lại)
-  // tờ đã đọc bằng thuật toán cũ chỉ khác cách nội suy mặt nước: dựng lại mặt nước (vài giây, giữ chỗ người dùng sửa)
-  setTimeout(() => { for (const r of CS.catalog.records) { if (r.kind !== 'kap' || !r.ready) continue;
-    if (!r.dm || r.dm.st === 'run') CS.catalog.readDepth(r).catch(() => {});
-    else if (r.dm.st === 'ok' && (r.dm.alg || 1) >= WATER_ONLY_FROM && (r.dm.alg || 1) < DM_ALG) CS.catalog.readDepth(r, { water: true }).catch(() => {}); } }, 4000);
+  // tờ đã đọc bằng thuật toán cũ: dựng lại mặt nước (thiếu màu nước thì lấy từ ảnh trước), giữ số đo / độ cao đã đọc và chỗ
+  // người dùng sửa; tờ đang dựng dở lúc tắt app thì dựng lại từ ảnh, giữ số đo nếu đã có
+  setTimeout(async () => { for (const r of CS.catalog.records) { if (r.kind !== 'kap' || !r.ready) continue;
+    const alg = (r.dm && r.dm.alg) || 1, keep = async () => { const l = await CS.catalog.getDLite(r.id).catch(() => null); return l && l.snd ? { snd: l.snd, hts: l.hts || [] } : {}; };
+    if (!r.dm || r.dm.st === 'run') CS.catalog.readDepth(r, r.dm ? await keep() : {}).catch(() => {});
+    else if (r.dm.st === 'ok' && alg < DM_ALG) CS.catalog.readDepth(r, alg >= WATER_ONLY_FROM ? { water: true } : alg >= TINT_FROM ? { tint: true } : await keep()).catch(() => {}); } }, 4000);
   const keys = await DB.keys('charts');
   if (keys && keys.length) {
     const files = []; for (const k of keys) { const f = await DB.get('charts', k); if (f) files.push(f instanceof File ? f : new File([f], String(k))); }

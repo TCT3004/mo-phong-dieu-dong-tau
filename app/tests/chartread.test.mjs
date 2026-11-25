@@ -5,7 +5,7 @@ import { label, edt, thin, maskedBlur, paletteInfo } from '../src/chartread/img.
 import { loadTemplates, templateImage, SLANT } from '../src/chartread/digits.js';
 import { readBlock, postFilter } from '../src/chartread/read.js';
 import { halfMasks, landElevation } from '../src/chartread/terrain.js';
-import { rasterTin, composeGrid } from '../src/chartread/surface.js';
+import { rasterTin, composeGrid, tintBands, cellClasses, cellTints } from '../src/chartread/surface.js';
 import { buildDepthModel } from '../src/chartread/model.js';
 
 // bảng màu: 0 trắng (nước sâu), 1 đen (chữ), 2 vàng (đất), 3 cam (đường bình độ), 4 xanh lơ (nước nông), 5 xanh lá (bãi)
@@ -101,6 +101,44 @@ test('mặt nước giữa hai hòn gần nhau: theo số đo sâu + độ dốc
   for (const s of snd) assert.ok(Math.abs(d(Math.floor(s.x / cell), Math.floor(s.y / cell)) - s.v) < 0.15, 'đúng số đo ' + s.v);
   for (let o = 0; o < gw * gh; o++) if (cl[o] === 1) assert.ok(z[o] <= -1, 'nước dưới 0');
   assert.ok(d(25, 20) <= 4.05, 'không sâu quá số đo hai đầu ' + d(25, 20));
+});
+
+test('luồng nạo vét tô màu sâu hơn hai bên: giữa luồng theo số đo trong luồng, không kéo theo số đo sát mép ngoài luồng', () => {
+  // nước xanh đậm (màu 1, 0–2 m) có luồng xanh nhạt (màu 2) cột 26–33; đất từ cột 52; tàu ở giữa luồng hàng 30,
+  // hai bên sát mép luồng có số 1,9 và 1,3 (như hải đồ thật), trong luồng 4,1 ở hàng 24 và 4,5 ở hàng 36
+  const gw = 60, gh = 60, cell = 4, N = gw * gh, cl = new Uint8Array(N).fill(1), tn = new Uint8Array(N).fill(1);
+  for (let y = 0; y < gh; y++) for (let x = 0; x < gw; x++) { const o = y * gw + x; if (x >= 52) { cl[o] = 3; tn[o] = 0; } else if (x >= 26 && x <= 33) tn[o] = 2; }
+  const P = (x, y, v) => ({ x: (x + 0.5) * cell, y: (y + 0.5) * cell, v, dry: false });
+  const chan = [[30, 3, 4.6], [29, 9, 4.4], [30, 15, 4.8], [30, 24, 4.1], [30, 36, 4.5], [29, 42, 4.2], [30, 48, 4.7], [30, 54, 4.3], [31, 6, 4.5], [28, 50, 4.0]].map((q) => P(...q));
+  const bank = [[24, 30, 1.9], [35, 30, 1.3], [15, 5, 1.0], [8, 40, 0.8], [18, 50, 1.5], [40, 10, 1.1], [45, 25, 1.4], [42, 45, 1.6], [48, 55, 0.7], [5, 55, 1.2], [12, 30, 1.0], [38, 38, 1.7], [20, 10, 1.2], [10, 20, 0.9]].map((q) => P(...q));
+  const snd = [...chan, ...bank], edges = new Float32Array(0);
+  const z = composeGrid({ cl, tn, gw, gh, cell, W2: 0, H2: 0, Eland: null, edges, snd, mpp: 2 }), d = (x, y) => -z[y * gw + x] / 10;
+  assert.ok(d(30, 30) > 3.8, 'giữa luồng chỗ tàu ' + d(30, 30));            // cách cũ nội suy ngang qua 1,9 – 1,3 → ≈ 1,7 m
+  assert.ok(d(26, 30) >= 2 && d(26, 30) < 3, 'mép luồng ' + d(26, 30));     // sát mép luồng về khoảng 2 m (ranh màu)
+  for (let o = 0; o < N; o++) if (cl[o] === 1 && tn[o] === 1) assert.ok(-z[o] / 10 <= 2.01, 'ngoài luồng không sâu quá 2 m');
+  for (const s of snd) assert.ok(Math.abs(d(Math.floor(s.x / cell), Math.floor(s.y / cell)) - s.v) < 0.15, 'đúng số đo ' + s.v + ' → ' + d(Math.floor(s.x / cell), Math.floor(s.y / cell)));
+  // số đo nông hẳn hơn dải màu chỉ làm hố nông cục bộ
+  const z2 = composeGrid({ cl, tn, gw, gh, cell, W2: 0, H2: 0, Eland: null, edges, snd: [...snd, P(30, 18, 0.5)], mpp: 2 }), d2 = (x, y) => -z2[y * gw + x] / 10;
+  assert.ok(d2(30, 18) < 1, 'bãi ngầm lẻ ' + d2(30, 18)); assert.ok(Math.abs(d2(30, 30) - d(30, 30)) < 0.05, 'xa bãi ngầm không đổi');
+});
+
+test('màu nước từng ô: xếp nông → sâu theo độ sáng, viền răng cưa quanh chữ không tính là màu khác', () => {
+  // bảng màu: 1 đen, 2 trắng (> 5 m), 3 xanh nhạt (2–5 m), 4 xanh đậm (0–2 m); chữ đen giữa vùng trắng có viền 1 điểm ảnh màu xanh nhạt
+  const pal = new Uint8Array(768); [[1, 0, 0, 0], [2, 255, 255, 255], [3, 232, 255, 255], [4, 200, 255, 255]].forEach(([i, r, g, b]) => pal.set([r, g, b], i * 3));
+  const W = 80, H = 80, idx = new Uint8Array(W * H);
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) idx[y * W + x] = y >= 40 ? 3 : x < 40 ? 4 : 2;
+  for (let y = 9; y <= 21; y++) for (let x = 54; x <= 63; x++) idx[y * W + x] = (y === 9 || y === 21 || x === 54 || x === 63) ? 3 : 1;
+  const P = paletteInfo(pal), M = halfMasks(idx, W, H, P, 1), gw = 20, gh = 20, cl = cellClasses(M.cls2, M.W2, M.H2, gw, gh, 4), tn = cellTints(M.tint2, cl, M.W2, M.H2, gw, gh, 4);
+  const t = (x, y) => tn[Math.floor(y / 4) * gw + Math.floor(x / 4)];
+  assert.ok(t(10, 10) < t(10, 60) && t(10, 60) < t(70, 30), 'thứ tự màu ' + [t(10, 10), t(10, 60), t(70, 30)]);
+  for (const [x, y] of [[54, 9], [58, 15], [63, 21], [56, 20]]) assert.equal(t(x, y), t(70, 30), 'quanh chữ ' + x + ',' + y);
+});
+
+test('dải độ sâu của màu nước suy từ số đo: tách 0–2 / 2–5 / > 5, không tách được thì thôi', () => {
+  const vals = new Map([[1, [0.2, 0.5, 0.8, 1, 1.1, 1.3, 1.5, 1.7, 1.9, 1.8, 1.2]], [2, [2.1, 2.5, 3, 3.4, 3.8, 4, 4.4, 4.8, 4.9, 2.2, 3.1]], [3, [5.2, 6, 7.5, 8, 9, 12, 15, 18, 5.5, 6.6, 7, 1]]]);
+  const B = tintBands([1, 2, 3], vals);
+  assert.deepEqual([...B].map(([t, b]) => [t, b.L, b.U]), [[1, 0, 2], [2, 2, 5], [3, 5, Infinity]]);
+  assert.equal(tintBands([1, 2], new Map([[1, [1, 4, 8, 2, 6, 3, 9, 1, 5, 7]], [2, [2, 7, 1, 9, 3, 8, 4, 6, 5, 2]]])), null);
 });
 
 test('dựng cả tờ: số đo sâu + đảo → lưới z (nước âm theo số, đất cao, viền đúng)', async () => {

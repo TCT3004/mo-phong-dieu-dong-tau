@@ -1,7 +1,7 @@
 // Worker đọc độ sâu / độ cao / đường bình độ của một tờ KAP rồi dựng lưới z (xem chartread/).
 // Được bundle thành chuỗi IIFE (src/_readerworker.js), chạy bằng Worker classic từ Blob (chạy được dưới file://).
 import { inflateSync } from 'fflate';
-import { buildDepthModel, rebuildWater } from '../chartread/model.js';
+import { buildDepthModel, rebuildWater, addTints } from '../chartread/model.js';
 // ghép ảnh chỉ số màu gốc từ ô mức 0 (nén deflate-raw hoặc thô)
 function assemble(tiles, W, H, TS) {
   const idx = new Uint8Array(W * H);
@@ -14,9 +14,10 @@ self.onmessage = async (e) => {
   try {
     let out;
     if (m.mode === 'water') out = rebuildWater(m.model);
+    else if (m.mode === 'tint') out = addTints(assemble(m.tiles, m.W, m.H, m.TS), m.W, m.H, new Uint8Array(m.pal), m.model);
     else out = await buildDepthModel(m.tiles ? assemble(m.tiles, m.W, m.H, m.TS) : new Uint8Array(m.idx), m.W, m.H, new Uint8Array(m.pal), {
       du: m.du, mpp: m.mpp, snd: m.snd, hts: m.hts, hc: m.hc,
       onProgress: (f, s) => self.postMessage({ type: 'progress', f, s }), log: (s) => self.postMessage({ type: 'log', s }) });
-    self.postMessage({ type: 'done', model: out }, [out.z.buffer, out.cl.buffer, out.edges.buffer]);
+    self.postMessage({ type: 'done', model: out }, [out.z.buffer, out.cl.buffer, out.edges.buffer, ...(out.tn ? [out.tn.buffer] : [])]);
   } catch (err) { self.postMessage({ type: 'error', msg: String((err && err.message) || err) }); }
 };

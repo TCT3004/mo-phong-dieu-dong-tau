@@ -1,14 +1,15 @@
 // Dựng độ cao đất từ hải đồ raster (làm ở nửa độ phân giải): lớp đất / bãi / nước từng điểm ảnh, đường bình độ cam,
 // đếm số đường bình độ từ bờ lên (bậc), khoảng cao đều suy từ điểm độ cao, nội suy giữa hai đường, đỉnh theo số độ cao.
 // Đảo không có đường bình độ: dựng theo hình đảo (khoảng cách tới bờ) và số độ cao (chấm / ngoặc).
-import { label, dilate, open, close, edt, thin, maskedBlur } from './img.js';
+import { label, dilate, open, close, edt, thin, maskedBlur, waterTintIds, pureWater } from './img.js';
 
 const S = 2; // hệ số thu nhỏ
 // ---------- 1. mặt nạ nửa độ phân giải ----------
 // cls2: 0 chưa rõ, 1 nước, 2 bãi, 3 đất (đa số trong 2×2); or2: có nét cam; thick2: chữ / ký hiệu gọn (vật chắn); thin2: nét mảnh / đường dài (cho đi qua); white2
 export function halfMasks(idx, W, H, P, k) {
   const W2 = Math.ceil(W / S), H2 = Math.ceil(H / S), n2 = W2 * H2;
-  const cls2 = new Uint8Array(n2), or2 = new Uint8Array(n2), thick2 = new Uint8Array(n2), thin2 = new Uint8Array(n2), white2 = new Uint8Array(n2);
+  const cls2 = new Uint8Array(n2), or2 = new Uint8Array(n2), thick2 = new Uint8Array(n2), thin2 = new Uint8Array(n2), white2 = new Uint8Array(n2), tint2 = new Uint8Array(n2);
+  const { TI, n: nTint } = waterTintIds(idx, P);
   const BH = 1024, OV = 8, longPx = 60 * k;
   for (let by = 0; by < H; by += BH) {
     const y0 = Math.max(0, by - OV), y1 = Math.min(H, by + BH + OV), h = y1 - y0;
@@ -18,7 +19,7 @@ export function halfMasks(idx, W, H, P, k) {
     for (let i = 0; i < thick.length; i++) thick[i] = dth[i] & unk[i];
     const { lab, n, st } = label(thick, W, h, true), isLong = new Uint8Array(n);
     for (let c = 1; c < n; c++) if (Math.max(st[c * 5 + 2] - st[c * 5], st[c * 5 + 3] - st[c * 5 + 1]) > longPx) isLong[c] = 1;
-    const cnt = new Uint8Array(W2 * 4);
+    const cnt = new Uint8Array(W2 * 4), cntT = new Uint8Array(W2 * 8);
     for (let y = by; y < Math.min(H, by + BH); y++) {
       const yy = y - y0, s = y * W, o = yy * W, y2 = y >> 1;
       for (let x = 0; x < W; x++) {
@@ -27,11 +28,14 @@ export function halfMasks(idx, W, H, P, k) {
         if (P.white[c]) white2[i2] = 1;
         if (thick[o + x] && !isLong[lab[o + x]]) thick2[i2] = 1; else if (unk[o + x]) thin2[i2] = 1;
         if (cl) cnt[(x >> 1) * 4 + cl]++;
+        if (TI[c] && pureWater(idx, W, H, s + x, P.cls)) cntT[(x >> 1) * 8 + TI[c]]++;
       }
       if ((y & 1) || y === H - 1) for (let x2 = 0; x2 < W2; x2++) {
         const a = cnt[x2 * 4 + 1], b = cnt[x2 * 4 + 2], c3 = cnt[x2 * 4 + 3];
         cls2[y2 * W2 + x2] = c3 >= a && c3 >= b && c3 ? 3 : b > a ? 2 : a ? 1 : 0;
         cnt[x2 * 4 + 1] = cnt[x2 * 4 + 2] = cnt[x2 * 4 + 3] = 0;
+        let bt = 0, bn = 0; for (let t = 1; t <= nTint; t++) { const q = cntT[x2 * 8 + t]; if (q > bn) { bn = q; bt = t; } cntT[x2 * 8 + t] = 0; }
+        tint2[y2 * W2 + x2] = bt;
       }
     }
   }
@@ -39,7 +43,7 @@ export function halfMasks(idx, W, H, P, k) {
   // điểm chưa rõ lấy lớp của điểm đã rõ gần nhất (nét bờ đen chia đôi cho hai bên)
   const known = new Uint8Array(n2); for (let i = 0; i < n2; i++) known[i] = cls2[i] ? 1 : 0;
   const { I } = edt(known, W2, H2, true); for (let i = 0; i < n2; i++) if (!cls2[i] && I[i] >= 0) cls2[i] = cls2[I[i]];
-  return { W2, H2, cls2, or2, thick2, thin2, white2 };
+  return { W2, H2, cls2, or2, thick2, thin2, white2, tint2, nTint };
 }
 
 // ---------- 2. độ cao đất ----------
