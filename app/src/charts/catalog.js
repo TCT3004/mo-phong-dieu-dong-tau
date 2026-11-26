@@ -106,14 +106,44 @@ class Catalog {
   }
   // m thật / điểm ảnh tờ (ở tâm tờ)
   mppOf(r) { const ll = r.xf.pxToLL(r.W / 2, r.H / 2); return r.mppMerc / mercScale(ll[0]); }
-  // đọc độ sâu cả tờ (chạy nền, mỗi lúc một tờ). opt: { snd, hts } có sẵn thì chỉ dựng lại; { water: true } chỉ dựng lại mặt nước sau khi sửa số
-  readDepth(r, opt = {}) {
+  // đọc độ sâu cả tờ (worker, mỗi lúc một tờ). opt: { snd, hts } có sẵn thì chỉ dựng lại; { water: true } chỉ dựng lại mặt nước
+  // sau khi sửa số; { tint: true } lấy màu nước từ ảnh rồi dựng lại mặt nước.
+  // Hàng đợi: pri = người dùng bấm / sửa → chen lên đầu hàng (sau các việc người dùng khác) và dừng việc nền đang đọc cả tờ
+  // (việc đó quay lại hàng, lần sau đọc lại từ đầu); việc nền (mở app, nạp tờ) xếp cuối. Mỗi tờ chỉ một việc chờ:
+  // yêu cầu mới gộp vào việc cũ (đọc cả tờ > lấy màu nước > dựng lại mặt nước)
+  readDepth(r, opt = {}, pri = false) {
     if (!r || r.kind !== 'kap' || !r.ready) return Promise.resolve(null);
-    const job = (this.rq || Promise.resolve()).then(() => this._readDepth(r, opt));
-    this.rq = job.catch(() => null); return job;
+    const rank = (o) => (o.water ? 1 : o.tint ? 2 : 3), plain = (o) => !o.water && !o.tint && !o.snd, dq = this.dq || (this.dq = []);
+    return new Promise((res, rej) => {
+      const p = { res, rej }, cur = this.dcur;
+      // tờ này đang được đọc cả tờ từ đầu mà lại xin đọc từ đầu: chờ chung kết quả, không đọc hai lần
+      if (cur && cur.r.id === r.id && plain(opt) && plain(cur.opt)) { cur.ps.push(p); if (pri) cur.pri = true; return; }
+      let j = dq.find((q) => q.r.id === r.id);
+      if (j) { if (rank(opt) >= rank(j.opt)) j.opt = opt; j.ps.push(p); if (!pri || j.pri) { this.emit({ type: 'dmq' }); return; } dq.splice(dq.indexOf(j), 1); j.pri = true; }
+      else { j = { r, opt, pri, ps: [p] }; if (!pri) { dq.push(j); this.emit({ type: 'dmq' }); this._pumpDepth(); return; } }
+      const i = dq.findIndex((q) => !q.pri); if (i < 0) dq.push(j); else dq.splice(i, 0, j);
+      // việc nền đang đọc cả tờ khác: dừng lại (quay về hàng) để đọc ngay tờ người dùng chọn
+      if (cur && !cur.pri && cur.r.id !== r.id && rank(cur.opt) === 3 && cur.abort) cur.abort();
+      this.emit({ type: 'dmq' }); this._pumpDepth();
+    });
   }
-  async _readDepth(r, opt) {
+  _pumpDepth() {
+    if (this.dcur || !this.dq || !this.dq.length) return;
+    const j = this.dq.shift(); this.dcur = j; this.emit({ type: 'dmq' });
+    this._readDepth(j.r, j.opt, j).then((m) => j.ps.forEach((p) => p.res(m)), (e) => {
+      if (e && e.aborted) { delete j.abort; const ex = this.dq.find((q) => q.r.id === j.r.id); if (ex) { ex.ps.push(...j.ps); return; }
+        const i = this.dq.findIndex((q) => !q.pri); if (i < 0) this.dq.push(j); else this.dq.splice(i, 0, j); }
+      else j.ps.forEach((p) => p.rej(e)); })
+      .finally(() => { if (this.dcur === j) this.dcur = null; this.emit({ type: 'dmq' }); this._pumpDepth(); });
+  }
+  // trạng thái hàng đợi: −1 không chờ, 0 đang chạy, n ≥ 1 thứ tự chờ
+  depthQueuePos(id) { if (this.dcur && this.dcur.r.id === id) return 0; const i = (this.dq || []).findIndex((q) => q.r.id === id); return i < 0 ? -1 : i + 1; }
+  depthJob(id) { if (this.dcur && this.dcur.r.id === id) return this.dcur; return (this.dq || []).find((q) => q.r.id === id) || null; }
+  depthQueueInfo() { return { cur: this.dcur ? this.dcur.r : null, waiting: (this.dq || []).length }; }
+  async _readDepth(r, opt, job = {}) {
     if (!this.byId.has(r.id)) return null;
+    const aborted = () => Object.assign(new Error('dừng để đọc tờ khác trước'), { aborted: true }), prevDm = r.dm;
+    let stop = false; job.abort = () => { stop = true; };
     let msg;
     if (opt.water) { const g = await this.getDGrid(r.id), l = opt.model || await this.getDLite(r.id); if (!g || !l) return null; msg = { mode: 'water', model: Object.assign({}, l, g) }; }
     else if (opt.tint) { // tờ đọc bằng bản cũ: lấy màu nước từ ảnh rồi dựng lại mặt nước
@@ -123,26 +153,32 @@ class Catalog {
     else {
       r.dm = Object.assign({}, r.dm, { st: 'run', f: 0, s: 'Ghép ảnh hải đồ' }); this.emit({ type: 'dm', id: r.id });
       const tiles = await this.level0Tiles(r);
+      if (stop) { r.dm = prevDm; this.emit({ type: 'dm', id: r.id }); throw aborted(); }
       msg = { mode: 'full', tiles, TS, W: r.W, H: r.H, pal: Uint8Array.from(r.palettes.day).buffer, du: r.du || 250, mpp: this.mppOf(r), snd: opt.snd, hts: opt.hts };
     }
     const m = await new Promise((res, rej) => {
       const url = URL.createObjectURL(new Blob([READER_SRC], { type: 'text/javascript' })), w = new Worker(url);
-      const end = () => { w.terminate(); URL.revokeObjectURL(url); };
-      w.onmessage = (e) => { const q = e.data;
+      let idle = 0; const end = () => { clearTimeout(idle); w.terminate(); URL.revokeObjectURL(url); };
+      // không thấy tin gì từ worker quá 10 phút (máy hết bộ nhớ làm worker chết lặng) thì báo lỗi, không để kẹt cả hàng đợi
+      const kick = () => { clearTimeout(idle); idle = setTimeout(() => { end(); rej(new Error('quá 10 phút không thấy tiến triển (có thể máy thiếu bộ nhớ) — bấm «Đọc lại» để thử lại')); }, 600000); };
+      kick(); job.abort = () => { end(); rej(aborted()); };
+      w.onmessage = (e) => { const q = e.data; kick();
         if (q.type === 'progress') { r.dm = Object.assign({}, r.dm, { st: 'run', f: q.f, s: q.s }); this.emit({ type: 'dm', id: r.id }); }
         else if (q.type === 'log') console.log('[đọc độ sâu ' + r.name + ']', q.s);
         else if (q.type === 'done') { end(); res(q.model); }
         else if (q.type === 'error') { end(); rej(new Error(q.msg)); } };
       w.onerror = (e) => { end(); rej(new Error(e.message || 'Lỗi worker đọc độ sâu')); };
       w.postMessage(msg, msg.tiles ? [msg.pal, ...msg.tiles.map((q) => q.d.buffer)] : []);
-    }).catch(async (e) => { r.dm = Object.assign({}, r.dm, { st: 'err', err: e.message }); await this.save(r); this.emit({ type: 'dm', id: r.id }); throw e; });
+    }).catch(async (e) => { if (e.aborted) { r.dm = prevDm; this.emit({ type: 'dm', id: r.id }); throw e; }
+      r.dm = Object.assign({}, r.dm, { st: 'err', err: e.message }); await this.save(r); this.emit({ type: 'dm', id: r.id }); throw e; });
+    job.abort = null;
     if (!this.byId.has(r.id)) return null;
     // người dùng sửa thêm trong lúc đang dựng: giữ bản điểm mới nhất, dựng thêm một lượt mặt nước
     let again = false;
     if (msg.mode === 'water' || msg.mode === 'tint' || opt.snd) { const cur = await this.getDLite(r.id); if (cur && cur.snd) { const used = JSON.stringify(msg.model ? msg.model.snd : opt.snd);
       if (JSON.stringify(cur.snd) !== used) again = true; m.snd = cur.snd; if (msg.mode !== 'full' || JSON.stringify(cur.hts) === JSON.stringify(opt.hts)) m.hts = cur.hts; } }
     await this.putDModel(r.id, m);
-    if (again) setTimeout(() => this.readDepth(r, { water: true }).catch(() => {}), 0);
+    if (again) setTimeout(() => this.readDepth(r, { water: true }, true).catch(() => {}), 0);
     r.dm = { st: 'ok', alg: m.alg, made: m.made, n: m.snd.filter((s) => !s.del).length, sus: m.snd.filter((s) => s.sus && !s.del).length, nh: m.hts.length, interval: m.interval, hc: m.hc };
     await this.save(r); this.emit({ type: 'dm', id: r.id }); this.emit({ type: 'dmodel', id: r.id });
     return m;

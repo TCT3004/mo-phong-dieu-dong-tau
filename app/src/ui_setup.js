@@ -18,7 +18,7 @@ import { QUALITY } from './view3d.js';
 import { openWindage } from './windage.js';
 import { openShipDraw } from './ui_shipdraw.js';
 import { fleetCard, initFleetCard } from './ui_fleet.js';
-import { initDepthUI, depthCard, initDepthCard, pointCard, initPointCard, drawDepthPts, depthClick, depthRightClick, dmState, clearSel } from './ui_depth.js';
+import { initDepthUI, depthCard, initDepthCard, pointCard, initPointCard, susCard, initSusCard, susJump, drawDepthPts, depthClick, depthRightClick, dmState, clearSel } from './ui_depth.js';
 import { MOOR_HINT, shipAt, anchorAtPt, dragAnchor, deleteAnchor, placeNew, dragShip, dropShip, deleteShip, mooredCard, initMooredCard, mooredEdit, drawMoored, fleetForFile, fleetFromFile } from './ui_moored.js';
 import { ALG as DM_ALG, WATER_ONLY_FROM, TINT_FROM } from './chartread/version.js';
 
@@ -134,19 +134,21 @@ function initialView() {
 }
 const norm = (t) => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/gi, 'd').toLowerCase();
 const normA = (t) => norm(t).replace(/[^a-z0-9]/g, '');
-let libQ = '', libLL = null, libT = 0;
+let libQ = '', libLL = null, libT = 0, lastQ = -1;
 function recState(r) {
   if (r.ready) { const d = dmState(r); return (r.datumKnown ? r.datumName + (r.datum !== 'WGS84' ? ' → WGS-84' : '') : '⚠ datum ' + r.datumName) + ' · georef bậc ' + r.coef.order + ', sai số ' + fmtM(r.rmsM) + ' m' + (d ? ' · ' + d : ''); }
   if (r.error) return 'Lỗi: ' + r.error;
   if (r.progress !== undefined) return 'Đang chia ô ảnh… ' + Math.round(r.progress * 100) + '%';
   return CS.catalog.busy ? 'Đang chờ nạp…' : 'Nạp dở dang — thêm lại file này';
 }
+// hàng chờ đọc độ sâu (hiện ở dòng đầu kho)
+function dqText() { const q = CS.catalog.depthQueueInfo(); return q.cur ? ' · đang đọc độ sâu tờ ' + q.cur.name + (q.waiting ? ', còn ' + q.waiting + ' tờ chờ' : '') : ''; }
 function drawLib() {
   const el = $('#chartLib'); if (!el) return; const all = CS.catalog.records, cur = cv && cv.ref ? cv.ref.id : null;
   let list = all.slice().sort((a, b) => a.name.localeCompare(b.name, 'vi', { numeric: true }));
   if (libQ) { const q = norm(libQ).trim(), qa = normA(libQ); list = list.filter((c) => { const f = [c.name, c.nu, c.file]; return f.map(norm).join(' | ').includes(q) || (qa && f.map(normA).some((h) => h.includes(qa))); }); }
   if (libLL) { const m = llToMerc(libLL[0], libLL[1]); list = list.filter((c) => c.plyMerc && inside(m[0], m[1], c.plyMerc)).sort((a, b) => (a.scale || 1e9) - (b.scale || 1e9)); }
-  const info = $('#libInfo'); if (info) info.textContent = libQ || libLL ? 'Tìm thấy ' + list.length + ' / ' + all.length + ' tờ' + (libLL ? ' có chứa ' + fmtLL(libLL[0], libLL[1]) + ' (tỷ lệ lớn nhất trước)' : '') : all.length ? all.length + ' tờ trong kho' : '';
+  const info = $('#libInfo'); if (info) info.textContent = libQ || libLL ? 'Tìm thấy ' + list.length + ' / ' + all.length + ' tờ' + (libLL ? ' có chứa ' + fmtLL(libLL[0], libLL[1]) + ' (tỷ lệ lớn nhất trước)' : '') : all.length ? all.length + ' tờ trong kho' + dqText() : '';
   el.innerHTML = list.length ? list.map((c) => `<div style="display:flex;gap:4px;align-items:stretch"><button data-id="${esc(c.id)}" class="${c.id === cur ? 'on' : ''}" ${c.ready ? '' : 'disabled'} style="flex:1;min-width:0"><b>${esc(c.name)}</b>${c.scale ? ' · ' + fmtSc(c.scale) : ''}${c.nu && c.nu !== c.name ? ' · số ' + esc(c.nu) : ''}<br><span class="muted">${esc(recState(c))}</span></button><button data-del="${esc(c.id)}" aria-label="Xóa tờ ${esc(c.name)} khỏi kho" title="Xóa khỏi kho" style="width:30px;flex:0 0 30px;text-align:center;padding:0">✕</button></div>`).join('')
     : `<div class="muted">${all.length ? 'Không có tờ nào khớp.' : 'Kho trống. Thêm thư mục hoặc file .kap.'}</div>`;
 }
@@ -175,7 +177,7 @@ function drawSide() {
   } else if (selObj && selObj.t === 'sound') {
     h += `<section class="card"><h2>Đang chọn: điểm độ sâu</h2>${fld('o_d', 'Độ sâu', 'm', selObj.o.d)}<button class="btn warn sm" id="oDel" style="margin-top:8px">Xóa</button></section>`;
   }
-  if (tool === 'depth') h += pointCard();
+  if (tool === 'depth') h += susCard(cv) + pointCard();
   if (tool === 'ship' || (selObj && selObj.t === 'ship')) h += mooredCard(selObj && selObj.t === 'ship' ? selObj.o : null);
   if (A.sim && A.sim.t >= 2) { const S = A.sim.S, st0 = startPos(), dd = Math.hypot(S.x - st0.x, S.y - st0.y); if (dd > 20) h += `<section class="card"><h2>Vị trí tàu</h2><div class="muted">Bài tập đang dở: tàu đang cách vị trí xuất phát ${fmtDist(dd)} (hình tàu màu xanh lục trên hải đồ). Hải đồ tab 3 hiện vị trí tàu lúc này.</div><button class="btn sm" id="toStart" style="margin-top:8px;width:100%">Đưa tàu về vị trí xuất phát (bắt đầu lại)</button></section>`; }
   if (tool === 'route') h += routeCard();
@@ -194,10 +196,12 @@ function drawSide() {
   }
   h += `<section class="card"><h2>Đối tượng đã đặt</h2><div class="muted" style="margin-bottom:4px">Lưu theo tọa độ WGS-84, dùng chung cho mọi tờ hải đồ.</div><div class="kv"><span>Đèn / phao</span><b>${W.objs.lights.length}</b></div><div class="kv"><span>Cầu bến · bích</span><b>${W.objs.berths.length} · ${W.bollards.filter((b) => b.bi >= 0).length}</b></div><div class="kv"><span>Tuyến đi</span><b>${(W.objs.routes || []).length}</b></div><div class="kv"><span>Vị trí xuất phát</span><b>${W.start ? fmtLL(...toLL(sp.x, sp.y)) : 'chưa chọn'}</b></div><div class="kv"><span>Vị trí xuất phát có sẵn</span><b>${(W.objs.starts || []).length}</b></div><div class="kv"><span>Tàu đậu</span><b>${(W.objs.ships || []).length}</b></div>
   <div class="flex" style="gap:6px;margin-top:8px"><button class="btn sm" id="objExp">Lưu ra file…</button><label class="btn sm" style="display:inline-flex;align-items:center">Mở từ file…<input type="file" id="objImp" accept=".json" hidden></label></div><div class="muted" style="margin-top:4px">File gồm đèn, phao, tiêu, cầu bến, cọc bích, tuyến đi, vị trí xuất phát, tàu đậu (kèm mô hình tàu, không kèm ảnh sơ đồ) — chép sang máy khác rồi mở ở đây. Mở file sẽ gộp vào đối tượng đang có (trùng tên thì thay).</div></section>`;
-  el.innerHTML = h; initMooredCard(); if (r) initDepthCard(r); if (tool === 'depth') initPointCard();
+  el.innerHTML = h; initMooredCard(); if (r) initDepthCard(r); if (tool === 'depth') { initSusCard(cv, () => { drawChart(); drawSide(); }); initPointCard(); }
+  // «Sửa N điểm nghi sai» ở thẻ độ sâu: bật công cụ «Độ sâu đọc được» rồi tới điểm nghi sai gần nhất
+  const sg = $('#dmSusGo'); if (sg) sg.onclick = () => { const b = $('#toolBtns button[data-tool="depth"]'); if (b) b.click(); susJump(cv, 1); drawChart(); drawSide(); };
 }
 const TOOLS = [['pan', 'Chọn / kéo'], ['light', 'Đèn / phao'], ['berth', 'Cầu bến'], ['bollard', 'Cọc bích'], ['ship', 'Tàu đậu'], ['route', 'Tuyến đi'], ['start', 'Vị trí xuất phát'], ['depth', 'Độ sâu đọc được'], ['measure', 'Đo']];
-const HINT = { depth: 'Các số app đọc từ hải đồ: đỏ = số đo sâu, cam = nghi đọc sai (chưa dùng), xanh dương = số bạn sửa / thêm, xanh lá = độ cao. Bấm vào điểm để sửa, bấm chỗ trống để thêm số đo sâu, Shift + bấm để thêm độ cao, chuột phải vào điểm để xóa. Sửa xong app tự dựng lại mặt đáy.', ship: MOOR_HINT, pan: 'Kéo để di chuyển, lăn chuột để phóng to. Bấm vào đèn, cầu bến hoặc tàu đậu để sửa (kéo tàu đậu để dời). Bấm chuột phải vào đèn / cầu bến / tàu đậu để xóa.', light: 'Bấm lên vị trí đèn hoặc phao trên hải đồ, rồi sửa thông tin ở khung bên phải.', berth: 'Bấm lần lượt dọc mép cầu (phía nước). Bấm đúp để kết thúc. Bấm chuột phải để bỏ điểm vừa đặt. Bích buộc dây tự đặt đều theo khoảng cách bạn nhập.', sound: 'Bấm lên con số độ sâu trên hải đồ rồi gõ giá trị.', start: 'Bấm lên chỗ tàu xuất phát. Hướng ban đầu nhập ở tab 4.', bollard: 'Kéo cọc bích dọc mép cầu để dời. Bấm lên mép cầu để thêm cọc. Chuột phải vào cọc để xóa. Số khoảng cách từ đầu bến hiện ở khung bên phải (bấm vào cầu bến bằng «Chọn / kéo» để xem).', measure: 'Bấm hai điểm để đo khoảng cách (hải lý, gần thì mét) và phương vị. Chuột phải để bỏ.', route: 'Bấm lên hải đồ để thêm điểm vào cuối tuyến đang chọn. Kéo một điểm để dời. Chuột phải vào điểm để xóa. Nhập tọa độ ở khung bên phải cũng được. Tuyến đang chọn hiện ở tab 3.' };
+const HINT = { depth: 'Các số app đọc từ hải đồ: đỏ = số đo sâu, vòng vàng nhấp nháy = nghi đọc sai (chưa dùng — đi lần lượt bằng «Sau ›» ở khung bên phải), xanh dương = số bạn sửa / thêm, xanh lá = độ cao. Bấm vào điểm để sửa, bấm chỗ trống để thêm số đo sâu, Shift + bấm để thêm độ cao, chuột phải vào điểm để xóa. Sửa xong app tự dựng lại mặt đáy.', ship: MOOR_HINT, pan: 'Kéo để di chuyển, lăn chuột để phóng to. Bấm vào đèn, cầu bến hoặc tàu đậu để sửa (kéo tàu đậu để dời). Bấm chuột phải vào đèn / cầu bến / tàu đậu để xóa.', light: 'Bấm lên vị trí đèn hoặc phao trên hải đồ, rồi sửa thông tin ở khung bên phải.', berth: 'Bấm lần lượt dọc mép cầu (phía nước). Bấm đúp để kết thúc. Bấm chuột phải để bỏ điểm vừa đặt. Bích buộc dây tự đặt đều theo khoảng cách bạn nhập.', sound: 'Bấm lên con số độ sâu trên hải đồ rồi gõ giá trị.', start: 'Bấm lên chỗ tàu xuất phát. Hướng ban đầu nhập ở tab 4.', bollard: 'Kéo cọc bích dọc mép cầu để dời. Bấm lên mép cầu để thêm cọc. Chuột phải vào cọc để xóa. Số khoảng cách từ đầu bến hiện ở khung bên phải (bấm vào cầu bến bằng «Chọn / kéo» để xem).', measure: 'Bấm hai điểm để đo khoảng cách (hải lý, gần thì mét) và phương vị. Chuột phải để bỏ.', route: 'Bấm lên hải đồ để thêm điểm vào cuối tuyến đang chọn. Kéo một điểm để dời. Chuột phải vào điểm để xóa. Nhập tọa độ ở khung bên phải cũng được. Tuyến đang chọn hiện ở tab 3.' };
 export function initChart() {
   $('#p-chart').innerHTML = `<div class="flex" style="align-items:flex-start">
   <div class="col" style="flex:1 1 260px;max-width:320px"><section class="card"><h2>Kho hải đồ (.kap)</h2><div class="muted" style="margin-bottom:8px">Nạp một lần, app lưu trên máy. Các tờ tự ghép liền nhau theo tọa độ, tờ tỷ lệ lớn nằm trên — kéo, phóng to thu nhỏ thoải mái như OpenCPN. Thêm thư mục: app quét cả thư mục con, lấy file .kap. Hải đồ PDF cần bấm vài điểm tọa độ khi nạp. File .rar / .zip cần giải nén trước.</div>
@@ -235,6 +239,7 @@ export function initChart() {
   CS.catalog.on((ev) => {
     if (ev.type === 'progress') libSoon();
     else if (ev.type === 'dm') { libSoon(); if (cv && cv.ref && cv.ref.id === ev.id) sideSoon(); }
+    else if (ev.type === 'dmq') { libSoon(); const q = cv && cv.ref ? CS.catalog.depthQueuePos(cv.ref.id) : -1; if (q !== lastQ) { lastQ = q; sideSoon(); } } // hàng chờ đọc độ sâu đổi
     else { drawLib(); drawStatus(); }
     if (ev.type === 'dmodel' && A.hooks.chartsChanged) A.hooks.chartsChanged();
   });
