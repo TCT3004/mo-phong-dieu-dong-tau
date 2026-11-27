@@ -17,7 +17,7 @@ import { defaultEnv, tideAt, envWaveL } from './world.js';
 import { QUALITY } from './view3d.js';
 import { openWindage } from './windage.js';
 import { openShipDraw } from './ui_shipdraw.js';
-import { fleetCard, initFleetCard } from './ui_fleet.js';
+import { fleetCard, initFleetCard, refreshFleetCard } from './ui_fleet.js';
 import { initDepthUI, depthCard, initDepthCard, pointCard, initPointCard, susCard, initSusCard, susJump, drawDepthPts, depthClick, depthRightClick, dmState, clearSel } from './ui_depth.js';
 import { MOOR_HINT, shipAt, anchorAtPt, dragAnchor, deleteAnchor, placeNew, dragShip, dropShip, deleteShip, mooredCard, initMooredCard, mooredEdit, drawMoored, fleetForFile, fleetFromFile } from './ui_moored.js';
 import { ALG as DM_ALG, WATER_ONLY_FROM, TINT_FROM } from './chartread/version.js';
@@ -316,7 +316,11 @@ export function initChart() {
   });
   $('#chartSide').addEventListener('change', async (e) => {
     if (e.target.id !== 'objImp' || !e.target.files.length) return; const f = e.target.files[0]; e.target.value = '';
-    try { const F = JSON.parse(await f.text()); if (F && F.loai === 'doi-tuong-hai-do') await fleetFromFile(F); const n = mergePlacesFile(A.W, F); selObj = null; objsChanged(); uiAlert(`Đã mở ${f.name}: ${n.lights} đèn / phao / tiêu, ${n.berths} cầu bến, ${n.routes} tuyến đi, ${n.starts} vị trí xuất phát có sẵn, ${n.ships} tàu đậu.`); }
+    try { const F = JSON.parse(await f.text()), fl = F && F.loai === 'doi-tuong-hai-do' ? await fleetFromFile(F) : { added: 0, same: 0 }; const n = mergePlacesFile(A.W, F); selObj = null; objsChanged();
+      // kho tàu tab 1 điền lại ngay (tàu mới dùng được luôn, không phải mở lại app)
+      const ft = fl.added || fl.same ? ` Kho tàu: thêm ${fl.added} tàu mới${fl.same ? `, ${fl.same} tàu đã có sẵn (giữ tàu trong kho)` : ''}.` : '';
+      await refreshFleetCard(fl.added ? `Đã thêm ${fl.added} tàu từ file ${f.name} — chọn ở ô «Loại tàu» → «Tên tàu».` : '');
+      uiAlert(`Đã mở ${f.name}: ${n.lights} đèn / phao / tiêu, ${n.berths} cầu bến, ${n.routes} tuyến đi, ${n.starts} vị trí xuất phát có sẵn, ${n.ships} tàu đậu.${ft}`); }
     catch (err) { uiAlert('Không mở được file: ' + err.message); }
   });
   $('#chartSide').addEventListener('click', (e) => { if (e.target.id === 'oDel' && selObj) { const arr = selObj.t === 'light' ? A.W.objs.lights : selObj.t === 'berth' ? A.W.objs.berths : A.W.objs.sounds; arr.splice(arr.indexOf(selObj.o), 1); selObj = null; objsChanged(); } });

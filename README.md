@@ -1,7 +1,7 @@
 # Mô phỏng điều động tàu 3D
 
 Phần mềm mô phỏng 3D dành cho **người điều động tàu** (không phải người lái), chạy offline trên Windows.
-Bản thử nghiệm v0.4.3 — giai đoạn 4: app tự đọc số độ sâu, độ cao núi và đường bình độ trên hải đồ KAP để dựng mặt đáy và núi đúng như hải đồ (viền đảo theo đúng nét bờ). 0.4.1–0.4.2 sửa cách nội suy độ sâu giữa các số đo: hết vùng nông giả giữa các hòn gần nhau; mỗi vùng màu nước (xanh đậm 0–2 m, xanh nhạt 2–5 m, trắng > 5 m) chỉ nội suy từ số đo cùng màu, nên luồng nạo vét tô màu sâu hơn hai bên theo đúng số đo trong luồng. 0.4.3: điểm nghi đọc sai hiện bằng vòng vàng nhấp nháy (thấy cả khi thu nhỏ), nút «‹ Trước · Sau ›» đưa hải đồ tới từng điểm để sửa; tờ bạn bấm đọc độ sâu được làm ngay, các tờ đang chờ ghi rõ thứ tự. Giai đoạn 3 đã có: vẽ mô hình tàu từ sơ đồ, cờ trên tàu, dữ liệu cảng nạp từ file, vệt nước sau tàu, cây / nhà trên bờ, kho tàu 13 mẫu, tàu đậu ở cảng.
+Bản thử nghiệm v0.4.4 — giai đoạn 4: app tự đọc số độ sâu, độ cao núi và đường bình độ trên hải đồ KAP để dựng mặt đáy và núi đúng như hải đồ (viền đảo theo đúng nét bờ). 0.4.1–0.4.2 sửa cách nội suy độ sâu giữa các số đo: hết vùng nông giả giữa các hòn gần nhau; mỗi vùng màu nước (xanh đậm 0–2 m, xanh nhạt 2–5 m, trắng > 5 m) chỉ nội suy từ số đo cùng màu, nên luồng nạo vét tô màu sâu hơn hai bên theo đúng số đo trong luồng. 0.4.3: điểm nghi đọc sai hiện bằng vòng vàng nhấp nháy (thấy cả khi thu nhỏ), nút «‹ Trước · Sau ›» đưa hải đồ tới từng điểm để sửa; tờ bạn bấm đọc độ sâu được làm ngay, các tờ đang chờ ghi rõ thứ tự. 0.4.4: app đọc thêm đường đẳng sâu (5, 10, 20 m…) trên hải đồ, giá trị suy từ số đo hai bên, nên mặt đáy giữa các số đo bám đúng hình đường đẳng sâu; mở file đối tượng có tàu thì kho tàu cập nhật ngay. Giai đoạn 3 đã có: vẽ mô hình tàu từ sơ đồ, cờ trên tàu, dữ liệu cảng nạp từ file, vệt nước sau tàu, cây / nhà trên bờ, kho tàu 13 mẫu, tàu đậu ở cảng.
 
 ## Các phần chính
 
@@ -49,7 +49,7 @@ npm test               # chạy unit test
 cp dist/MoPhongDieuDongTau.html ../electron/index.html
 cd ../electron
 npm install
-npx electron-builder --win portable --x64   # tạo electron/dist/MoPhongDieuDongTau-0.4.3.exe
+npx electron-builder --win portable --x64   # tạo electron/dist/MoPhongDieuDongTau-0.4.4.exe
 ```
 
 File `.exe` chưa có chữ ký số: lần đầu mở, nếu Windows chặn thì bấm **More info → Run anyway**.

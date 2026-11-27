@@ -152,8 +152,11 @@ export async function fleetForFile() {
   for (const id of refs) { const p = await getFleetShip(id); if (p) out.push({ id, type: p.type || 'Khác', name: p.name || 'Tàu', p }); }
   return out;
 }
-// mở file: thêm tàu trong file vào kho máy này (trùng loại + tên thì dùng tàu đã có), đổi id tham chiếu của tàu đậu
+// mở file: thêm tàu trong file vào kho máy này (trùng loại + tên thì dùng tàu đã có), đổi id tham chiếu của tàu đậu.
+// Trả { added: số tàu mới vào kho, same: số tàu đã có sẵn }
 export async function fleetFromFile(F) {
-  const map = {}; for (const e of F.fleet || []) { const id = await ensureFleetShip(e); if (id) map[e.id] = id; }
+  const map = {}; let added = 0, same = 0;
+  for (const e of F.fleet || []) { const q = await ensureFleetShip(e); if (!q) continue; map[e.id] = q.id; if (q.added) added++; else if (!String(e.id).startsWith('tpl:')) same++; }
   for (const sh of F.ships || []) if (map[sh.ref]) sh.ref = map[sh.ref];
+  return { added, same };
 }

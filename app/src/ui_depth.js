@@ -55,6 +55,7 @@ export function depthCard(r, tool) {
   else if (d.st === 'err') h += `<div class="note bad">Lỗi: ${esc(d.err || '')}</div><button class="btn sm" id="dmRead" style="margin-top:8px;width:100%">Đọc lại</button>`;
   else {
     h += `<div class="kv"><span>Số đo sâu</span><b>${d.n.toLocaleString('vi-VN')}</b></div><div class="kv"><span>Nghi đọc sai (chưa dùng)</span><b${d.sus ? ' style="color:#FFD600"' : ''}>${d.sus || 0}</b></div><div class="kv"><span>Độ cao (đỉnh / hòn)</span><b>${d.nh}</b></div>`;
+    if (d.alg >= 4) h += `<div class="kv"><span>Đường đẳng sâu dùng được</span><b>${d.iso || 0}</b></div>`;
     h += `<div class="kv"><span>Khoảng cao đường bình độ</span><b>${d.interval ? d.interval + ' m' : '—'}</b></div><div class="kv"><span>Mép bờ cao hơn số 0 hải đồ</span><b>${fnum(d.hc)} m</b></div>${d.interval ? '' : '<div class="muted">Không đọc được đường bình độ: núi dựng theo hình đảo và số độ cao.</div>'}`;
     h += `<div class="muted" style="margin-top:6px">${tool === 'depth' ? 'Điểm đỏ: số app đọc · vòng vàng nhấp nháy: nghi sai (chưa dùng, đi lần lượt bằng «Sau ›» ở thẻ trên) · xanh dương: số bạn sửa / thêm · xanh lá: độ cao. Bấm chỗ trống để thêm số đo sâu, Shift + bấm để thêm độ cao, chuột phải vào điểm để xóa.' : 'Chọn công cụ «Độ sâu đọc được» để xem và sửa từng điểm.'}</div>`;
     if (tool !== 'depth' && d.sus) h += `<button class="btn pri sm" id="dmSusGo" style="margin-top:8px;width:100%">Sửa ${d.sus} điểm nghi sai</button>`;

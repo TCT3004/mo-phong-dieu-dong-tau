@@ -62,10 +62,10 @@ export async function saveFleetShip(type, name, p) {
   return id;
 }
 export async function deleteFleetShip(id) { if (String(id).startsWith('tpl:')) return; cache.delete(id); await tx('readwrite', (o) => o.delete(id)); }
-// tàu nạp từ file đối tượng (tàu đậu ở cảng kèm mô hình): thêm vào kho nếu chưa có (theo loại + tên)
+// tàu nạp từ file đối tượng (tàu đậu ở cảng kèm mô hình): thêm vào kho nếu chưa có (theo loại + tên). Trả { id, added }
 export async function ensureFleetShip(e) {
-  if (!e || !e.p) return null; if (String(e.id).startsWith('tpl:')) return e.id;
+  if (!e || !e.p) return null; if (String(e.id).startsWith('tpl:')) return { id: e.id, added: false };
   const list = await listFleet(), same = list.find((q) => !q.builtin && q.type === e.type && q.name === e.name);
-  if (same) return same.id;
-  await tx('readwrite', (o) => o.put({ id: e.id, type: e.type, name: e.name, p: e.p, t: Date.now() })); return e.id;
+  if (same) return { id: same.id, added: false };
+  await tx('readwrite', (o) => o.put({ id: e.id, type: e.type, name: e.name, p: e.p, t: Date.now() })); return { id: e.id, added: true };
 }

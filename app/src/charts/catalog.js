@@ -94,8 +94,9 @@ class Catalog {
   async getDLite(id) { return tx('dmodel', 'readonly', (s) => s.get(id)); }
   async getDGrid(id) { return tx('dmodel', 'readonly', (s) => s.get(id + '|g')); }
   async getDModel(id) { const [a, b] = await Promise.all([this.getDLite(id), this.getDGrid(id)]); return a && b ? Object.assign({}, a, b) : null; }
-  async putDLite(id, m) { const { z, cl, tn, edges, ...lite } = m; await tx('dmodel', 'readwrite', (s) => s.put(lite, id)); }
-  async putDModel(id, m) { const { z, cl, tn, edges, ...lite } = m; await tx('dmodel', 'readwrite', (s) => { s.put(lite, id); s.put({ z, cl, tn, edges, gw: m.gw, gh: m.gh, cell: m.cell, hc: m.hc }, id + '|g'); }); }
+  // phần nhẹ (số đo, độ cao, thông số) và phần lưới (z, lớp ô, màu nước, điểm mép, đường đẳng sâu dò từ ảnh) lưu riêng
+  async putDLite(id, m) { const { z, cl, tn, edges, iso, ...lite } = m; await tx('dmodel', 'readwrite', (s) => s.put(lite, id)); }
+  async putDModel(id, m) { const { z, cl, tn, edges, iso, ...lite } = m; await tx('dmodel', 'readwrite', (s) => { s.put(lite, id); s.put({ z, cl, tn, edges, iso, gw: m.gw, gh: m.gh, cell: m.cell, hc: m.hc }, id + '|g'); }); }
   // ô mức 0 của tờ (còn nén) để worker ghép lại ảnh chỉ số màu gốc: [{ x, y, z, d }]
   async level0Tiles(r) {
     const d0 = await db(), rg = IDBKeyRange.bound(r.id + '/0/', r.id + '/0/\uffff');
@@ -146,10 +147,10 @@ class Catalog {
     let stop = false; job.abort = () => { stop = true; };
     let msg;
     if (opt.water) { const g = await this.getDGrid(r.id), l = opt.model || await this.getDLite(r.id); if (!g || !l) return null; msg = { mode: 'water', model: Object.assign({}, l, g) }; }
-    else if (opt.tint) { // tờ đọc bằng bản cũ: lấy màu nước từ ảnh rồi dựng lại mặt nước
+    else if (opt.tint) { // tờ đọc bằng bản cũ: lấy thêm từ ảnh (màu nước, đường đẳng sâu) rồi dựng lại mặt nước
       const g = await this.getDGrid(r.id), l = await this.getDLite(r.id); if (!g || !l) return null;
       const tiles = await this.level0Tiles(r);
-      msg = { mode: 'tint', tiles, TS, W: r.W, H: r.H, pal: Uint8Array.from(r.palettes.day).buffer, model: Object.assign({}, l, g, { mpp: l.mpp || this.mppOf(r) }) }; }
+      msg = { mode: 'tint', tiles, TS, W: r.W, H: r.H, du: r.du || 250, pal: Uint8Array.from(r.palettes.day).buffer, model: Object.assign({}, l, g, { mpp: l.mpp || this.mppOf(r) }) }; }
     else {
       r.dm = Object.assign({}, r.dm, { st: 'run', f: 0, s: 'Ghép ảnh hải đồ' }); this.emit({ type: 'dm', id: r.id });
       const tiles = await this.level0Tiles(r);
@@ -179,7 +180,7 @@ class Catalog {
       if (JSON.stringify(cur.snd) !== used) again = true; m.snd = cur.snd; if (msg.mode !== 'full' || JSON.stringify(cur.hts) === JSON.stringify(opt.hts)) m.hts = cur.hts; } }
     await this.putDModel(r.id, m);
     if (again) setTimeout(() => this.readDepth(r, { water: true }, true).catch(() => {}), 0);
-    r.dm = { st: 'ok', alg: m.alg, made: m.made, n: m.snd.filter((s) => !s.del).length, sus: m.snd.filter((s) => s.sus && !s.del).length, nh: m.hts.length, interval: m.interval, hc: m.hc };
+    r.dm = { st: 'ok', alg: m.alg, made: m.made, n: m.snd.filter((s) => !s.del).length, sus: m.snd.filter((s) => s.sus && !s.del).length, nh: m.hts.length, interval: m.interval, hc: m.hc, iso: m.isoOk || 0 };
     await this.save(r); this.emit({ type: 'dm', id: r.id }); this.emit({ type: 'dmodel', id: r.id });
     return m;
   }

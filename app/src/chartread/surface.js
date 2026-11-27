@@ -2,8 +2,10 @@
 // - ô đất: độ cao đất
 // - ô bãi: tam giác Delaunay qua số đo + điểm mép (mép nước / bãi = 0, mép bãi / đất = hc)
 // - ô nước: theo từng vùng màu nước (dải độ sâu), nội suy giữa các số đo cùng màu, sát ranh về độ sâu ở ranh theo độ dốc suy từ số đo
-//   (xem waterDepths) — không nối tam giác qua điểm mép bờ: giữa hai hòn gần nhau ít số đo, tam giác mép–mép làm nông giả cả vùng
+//   (xem waterDepths) — không nối tam giác qua điểm mép bờ: giữa hai hòn gần nhau ít số đo, tam giác mép–mép làm nông giả cả vùng;
+//   đường đẳng sâu đã có giá trị (isobath.js) góp thêm điểm dọc đường vào nội suy cùng số đo
 import Delaunator from 'delaunator';
+import { isoValues } from './isobath.js';
 import { edt } from './img.js';
 
 // điểm mép từ lớp nửa độ phân giải (1 nước, 2 bãi, 3 đất), mỗi ô 3×3 một điểm → Float32 [x, y, z] theo điểm ảnh tờ
@@ -124,10 +126,14 @@ export function tintBands(ids, vals) {
 // giữ trong dải màu (luồng nạo vét tô màu sâu hơn hai bên thì giữa luồng theo số đo trong luồng, không kéo theo số đo ngoài mép);
 // số đo nông hẳn hơn dải màu (bãi ngầm lẻ, hoặc đọc nhầm) chỉ tạo hố nông cục bộ dốc 1:10 quanh nó; số đo sâu hẳn hơn dải bị bỏ.
 // Không có màu / màu không khớp: một vùng, L = 0 ở bờ (độ dốc bờ suy từ số đo), không có U
-export function waterDepths({ cl, tn, gw, gh, cell, snd, mpp }) {
+// iso (đường đẳng sâu dò từ ảnh, isobath.js): đường nào suy được giá trị từ số đo hai bên thì các ô dọc đường thành điểm nội suy thêm
+// (vùng màu: chỉ khi giá trị nằm trong dải của vùng đó). info (nếu có) nhận { isoAll, isoOk } — số đường dò được / có giá trị
+export function waterDepths({ cl, tn, gw, gh, cell, snd, mpp, iso, k, info }) {
   const N = gw * gh, coast = new Uint8Array(N), wet = new Uint8Array(N);
   for (let o = 0; o < N; o++) { const c = cl[o]; if (c === 2 || c === 3) coast[o] = 1; else wet[o] = 1; }
   const S = snd.filter((s) => !s.del && !s.sus && !s.dry && s.v > 0); if (!S.length) return null;
+  const isoPts = (B) => { if (!iso) return []; const r = isoValues(iso, S, gw, gh, cell, B ? (o) => (tn[o] && B.get(tn[o])) || null : null, k || 1);
+    if (info) { info.isoAll = r.lines.length; info.isoOk = r.lines.filter((l) => l.ok).length; } return r.pts; };
   const out = new Float32Array(N).fill(NaN);
   const ids = []; if (tn) { const seen = new Uint8Array(256); for (let o = 0; o < N; o++) if (wet[o] && tn[o]) seen[tn[o]] = 1; for (let t = 1; t < 256; t++) if (seen[t]) ids.push(t); }
   // màu của từng số đo: ô của nó (chữ số đã lấp màu quanh), không có thì màu ô nước gần nhất trong 4 ô
@@ -135,8 +141,9 @@ export function waterDepths({ cl, tn, gw, gh, cell, snd, mpp }) {
     for (let r = 1; r <= 4; r++) for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) { const x = x0 + dx, y = y0 + dy; if (x < 0 || y < 0 || x >= gw || y >= gh) continue; const t = tn[y * gw + x]; if (t) return t; } return 0; };
   let B = null; const vals = new Map(), tS = new Map();
   if (ids.length >= 2) { for (const s of S) { const t = tOf(s); tS.set(s, t); if (t) { if (!vals.has(t)) vals.set(t, []); vals.get(t).push(s.v); } } B = tintBands(ids, vals); }
-  const DC = edt(coast, gw, gh).D;
-  if (!B) { zoneDepths(out, wet, S, 0, Infinity, null, DC, null, gw, gh, cell); return out; }
+  const DC = edt(coast, gw, gh).D, IP = isoPts(B);
+  if (!B) { zoneDepths(out, wet, IP.length ? S.concat(IP) : S, 0, Infinity, null, DC, null, gw, gh, cell); return out; }
+  const tI = new Map(); for (const p of IP) tI.set(p, tn[cellOf(p, gw, gh, cell)]);
   const cones = [];
   ids.forEach((t, i) => {
     const { L, U } = B.get(t), mask = new Uint8Array(N), srcL = new Uint8Array(N), srcU = new Uint8Array(N); let anyL = false, anyU = false;
@@ -144,18 +151,19 @@ export function waterDepths({ cl, tn, gw, gh, cell, snd, mpp }) {
       else if (c < t) { srcL[o] = 1; anyL = true; } else { srcU[o] = 1; anyU = true; } }
     const inb = [], all = S.filter((s) => tS.get(s) === t);
     for (const s of all) { if (s.v < L - 0.5) cones.push([s, L]); else if (s.v <= U + 0.5) inb.push(s); }
+    for (const p of IP) if (tI.get(p) === t && p.v >= L - 0.5 && p.v <= U + 0.5) inb.push(p);
     const pts = inb.length ? inb : [{ x: 0, y: 0, v: isFinite(U) ? (L + U) / 2 : L + 2 }];  // vùng không có số đo: giữa dải
     if (!inb.length) { for (let o = 0; o < N; o++) if (mask[o]) { out[o] = pts[0].v; } return; }
     zoneDepths(out, mask, pts, L, U, anyL ? edt(srcL, gw, gh).D : null, DC, isFinite(U) && anyU ? edt(srcU, gw, gh).D : null, gw, gh, cell);
   });
   // ô nước không rõ màu (tn = 0): một vùng như khi không có màu
   let unk = 0; const mk = new Uint8Array(N); for (let o = 0; o < N; o++) if (wet[o] && !tn[o]) { mk[o] = 1; unk++; }
-  if (unk) zoneDepths(out, mk, S, 0, Infinity, null, DC, null, gw, gh, cell);
+  if (unk) zoneDepths(out, mk, IP.length ? S.concat(IP) : S, 0, Infinity, null, DC, null, gw, gh, cell);
   // số đo nông hơn hẳn dải màu: hố nông cục bộ, sâu thêm 1 m mỗi 10 m ra xa
-  const k = 0.1 * (mpp || 2);
-  for (const [s, L] of cones) { const R = (L - s.v) / k / cell + 1, cx = s.x / cell - 0.5, cy = s.y / cell - 0.5;
+  const kc = 0.1 * (mpp || 2);
+  for (const [s, L] of cones) { const R = (L - s.v) / kc / cell + 1, cx = s.x / cell - 0.5, cy = s.y / cell - 0.5;
     for (let y = Math.max(0, Math.floor(cy - R)); y <= Math.min(gh - 1, Math.ceil(cy + R)); y++) for (let x = Math.max(0, Math.floor(cx - R)); x <= Math.min(gw - 1, Math.ceil(cx + R)); x++) {
-      const o = y * gw + x; if (!wet[o] || isNaN(out[o])) continue; const d = s.v + Math.hypot(x - cx, y - cy) * cell * k; if (d < out[o]) out[o] = Math.max(0.1, d); } }
+      const o = y * gw + x; if (!wet[o] || isNaN(out[o])) continue; const d = s.v + Math.hypot(x - cx, y - cy) * cell * kc; if (d < out[o]) out[o] = Math.max(0.1, d); } }
   return out;
 }
 
@@ -183,8 +191,8 @@ export function soundingPts(snd) {
   const o = []; for (const s of snd) { if (s.del || s.sus) continue; o.push(s.x, s.y, s.dry ? s.v : -s.v); } return o;
 }
 
-// dựng lưới z: cl (lớp ô), Eland (Float32 nửa độ phân giải hoặc null), edges (Float32 điểm mép), snd
-export function composeGrid({ cl, tn, gw, gh, cell, W2, H2, Eland, edges, snd, zPrev, mpp }) {
+// dựng lưới z: cl (lớp ô), Eland (Float32 nửa độ phân giải hoặc null), edges (Float32 điểm mép), snd; iso, k, info: xem waterDepths
+export function composeGrid({ cl, tn, gw, gh, cell, W2, H2, Eland, edges, snd, zPrev, mpp, iso, k, info }) {
   const z = zPrev ? Int16Array.from(zPrev) : new Int16Array(gw * gh), wet = new Uint8Array(gw * gh), f = cell / 2;
   for (let o = 0; o < gw * gh; o++) {
     if (cl[o] === 3) { if (Eland) { const x = Math.min(W2 - 1, Math.floor(((o % gw) + 0.5) * f)), y = Math.min(H2 - 1, Math.floor((((o / gw) | 0) + 0.5) * f)), e = Eland[y * W2 + x]; z[o] = Math.round((isNaN(e) ? 3 : e) * 10); } }
@@ -212,7 +220,7 @@ export function composeGrid({ cl, tn, gw, gh, cell, W2, H2, Eland, edges, snd, z
       frontier = nx; }
   }
   // ô nước: theo số đo sâu + độ dốc bờ (ô nước không nối tới số đo nào, ví dụ ao trong đảo, giữ cách cũ)
-  const wd = waterDepths({ cl, tn, gw, gh, cell, snd, mpp });
+  const wd = waterDepths({ cl, tn, gw, gh, cell, snd, mpp, iso, k, info });
   if (wd) for (let o = 0; o < wet.length; o++) if (cl[o] !== 2 && cl[o] !== 3 && !isNaN(wd[o])) z[o] = -Math.max(1, Math.round(wd[o] * 10));
   return z;
 }

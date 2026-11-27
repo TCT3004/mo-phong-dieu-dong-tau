@@ -6,6 +6,7 @@ import { halfMasks, landElevation } from './terrain.js';
 import { paletteInfo, waterTintIds, pureWater } from './img.js';
 import { edgeSamples, cellClasses, cellTints, composeGrid } from './surface.js';
 import { ALG } from './version.js';
+import { isoLines } from './isobath.js';
 
 export { ALG };                // phiên bản thuật toán (xem version.js)
 export const CELL = 4;       // điểm ảnh tờ cho một ô lưới z
@@ -43,28 +44,33 @@ export async function buildDepthModel(idx, W, H, pal, opts = {}) {
   prog(0.7, 'Đọc đường bình độ, dựng núi');
   const T = landElevation(M, hts, opts.mpp || 2, hc, k, log);
   const { W2, H2 } = M, clsT = M.cls2.slice(); for (let i = 0; i < clsT.length; i++) if (T.land[i]) clsT[i] = 3;
-  prog(0.9, 'Dựng mặt đáy');
   const edges = edgeSamples(clsT, W2, H2, hc), gw = Math.ceil(W / CELL), gh = Math.ceil(H / CELL), cl = cellClasses(clsT, W2, H2, gw, gh, CELL);
   const tn = cellTints(M.tint2, cl, W2, H2, gw, gh, CELL), mpp = opts.mpp || 2;
-  const z = composeGrid({ cl, tn, gw, gh, cell: CELL, W2, H2, Eland: T.E, edges, snd, mpp });
+  prog(0.85, 'Đọc đường đẳng sâu');
+  const iso = isoLines(idx, W, H, P, k, cl, gw, gh, CELL, log), info = {};
+  prog(0.93, 'Dựng mặt đáy');
+  const z = composeGrid({ cl, tn, gw, gh, cell: CELL, W2, H2, Eland: T.E, edges, snd, mpp, iso, k, info });
   prog(1, 'Xong');
-  return { alg: ALG, made: Date.now(), W, H, cell: CELL, gw, gh, hc, mpp, nTint: M.nTint, interval: T.interval, levels: T.levels, fit: T.fit, nSpots: T.nSpots, snd, hts, z, cl, tn, edges };
+  return { alg: ALG, made: Date.now(), W, H, cell: CELL, gw, gh, hc, mpp, k, nTint: M.nTint, interval: T.interval, levels: T.levels, fit: T.fit, nSpots: T.nSpots, isoAll: info.isoAll || 0, isoOk: info.isoOk || 0, snd, hts, z, cl, tn, edges, iso };
 }
 
 // dựng lại phần nước / bãi sau khi sửa số đo sâu (không cần ảnh hải đồ): giữ ô đất, tam giác lại
 export function rebuildWater(m) {
-  const z = composeGrid({ cl: m.cl, tn: m.tn || null, gw: m.gw, gh: m.gh, cell: m.cell, W2: 0, H2: 0, Eland: null, edges: m.edges, snd: m.snd, zPrev: m.z, mpp: m.mpp });
-  return Object.assign({}, m, { z, alg: ALG, made: Date.now() });
+  const info = {}, z = composeGrid({ cl: m.cl, tn: m.tn || null, gw: m.gw, gh: m.gh, cell: m.cell, W2: 0, H2: 0, Eland: null, edges: m.edges, snd: m.snd, zPrev: m.z, mpp: m.mpp, iso: m.iso, k: m.k || 1, info });
+  return Object.assign({}, m, { z, alg: ALG, made: Date.now(), isoAll: info.isoAll || 0, isoOk: info.isoOk || 0 });
 }
 
-// tờ dựng bằng thuật toán cũ (chưa có màu nước): lấy màu nước từng ô từ ảnh (đa số trong ô, ô bãi / đất bỏ qua)
-// rồi dựng lại mặt nước — không dựng lại núi, giữ số đo / độ cao và chỗ người dùng sửa
-export function addTints(idx, W, H, pal, m) {
-  const P = paletteInfo(pal), { TI, n } = waterTintIds(idx, P), { gw, gh, cell, cl } = m, tint2 = new Uint8Array(gw * gh);
+// tờ dựng bằng thuật toán cũ: lấy thêm từ ảnh màu nước từng ô (đa số trong ô, ô bãi / đất bỏ qua) và đường đẳng sâu,
+// rồi dựng lại mặt nước — không đọc lại số, không dựng lại núi, giữ số đo / độ cao và chỗ người dùng sửa. du: dpi của tờ
+export function addImageLayers(idx, W, H, pal, m, du = 250) {
+  const P = paletteInfo(pal), k = du / 250, { gw, gh, cell, cl } = m;
+  if (m.tn && (m.alg || 1) >= 3) return rebuildWater(Object.assign({}, m, { iso: isoLines(idx, W, H, P, k, cl, gw, gh, cell), k })); // đã có màu nước
+  const { TI, n } = waterTintIds(idx, P), tint2 = new Uint8Array(gw * gh);
   const c = new Uint8Array(8);
   for (let y = 0; y < gh; y++) for (let x = 0; x < gw; x++) { const o = y * gw + x; if (cl[o] === 2 || cl[o] === 3) continue; c.fill(0); let bt = 0, bn = 0;
     for (let yy = y * cell; yy < Math.min(H, (y + 1) * cell); yy++) for (let xx = x * cell; xx < Math.min(W, (x + 1) * cell); xx++) { const i = yy * W + xx, t = TI[idx[i]]; if (t && pureWater(idx, W, H, i, P.cls) && ++c[t] > bn) { bn = c[t]; bt = t; } }
     tint2[o] = bt; }
   const tn = cellTints(tint2, cl, gw, gh, gw, gh, 2); // tint2 đã ở độ phân giải ô: lấy thẳng + lấp ô nước thiếu
-  return rebuildWater(Object.assign({}, m, { tn, nTint: n }));
+  const iso = isoLines(idx, W, H, P, k, cl, gw, gh, cell);
+  return rebuildWater(Object.assign({}, m, { tn, nTint: n, iso, k }));
 }

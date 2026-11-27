@@ -52,9 +52,16 @@ export function fleetCard() {
     <button class="btn sm" id="flSave">Lưu tàu đang dùng vào kho…</button><button class="btn sm" id="flDel">Xóa khỏi kho</button></div>
     <div id="flSaveBox" hidden></div><div class="muted" id="flInfo" style="margin-top:6px">Kho có sẵn 13 tàu mẫu chung chung (đã có mô hình 3D và thông số chạy được); tàu bạn lưu có dấu ★.</div></section>`;
 }
+let refill = null; // điền lại 2 ô chọn của thẻ «Kho tàu» tab 1
+// kho tàu đổi từ chỗ khác (mở file đối tượng ở tab 2): điền lại thẻ tab 1 ngay, không phải mở lại app
+export async function refreshFleetCard(msg) {
+  if (refill && document.getElementById('flType')) await refill();
+  const i = document.getElementById('flInfo'); if (i && msg) i.textContent = msg;
+}
 export async function initFleetCard(reload) {
   const ts = document.getElementById('flType'), ns = document.getElementById('flName'); if (!ts) return;
   let list = await fillFleet(ts, ns, A.p.fleetId);
+  refill = async () => { list = await fillFleet(ts, ns, A.p.fleetId); };
   ns.onchange = async () => {
     const id = ns.value; if (!id) return; const e = list.find((q) => q.id === id);
     if (!(await uiConfirm('Nạp «' + e.name + '» làm tàu điều động?\nThông số tab 1 và mô hình 3D sẽ thay bằng của tàu này (tàu đang dùng chưa lưu thì bấm «Lưu tàu đang dùng vào kho…» trước).', { ok: 'Nạp tàu' }))) { ns.value = A.p.fleetId || ''; return; }

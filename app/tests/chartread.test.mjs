@@ -7,6 +7,7 @@ import { readBlock, postFilter } from '../src/chartread/read.js';
 import { halfMasks, landElevation } from '../src/chartread/terrain.js';
 import { rasterTin, composeGrid, tintBands, cellClasses, cellTints } from '../src/chartread/surface.js';
 import { buildDepthModel } from '../src/chartread/model.js';
+import { isoLines, isoValues } from '../src/chartread/isobath.js';
 
 // bảng màu: 0 trắng (nước sâu), 1 đen (chữ), 2 vàng (đất), 3 cam (đường bình độ), 4 xanh lơ (nước nông), 5 xanh lá (bãi)
 const PAL = new Uint8Array(768); [[255, 255, 255], [0, 0, 0], [255, 255, 168], [250, 176, 46], [200, 255, 255], [200, 255, 184]].forEach((c, i) => PAL.set(c, i * 3));
@@ -150,4 +151,25 @@ test('dựng cả tờ: số đo sâu + đảo → lưới z (nước âm theo s
   assert.ok(zAt(500, 500) > 150, 'đỉnh ' + zAt(500, 500));
   assert.ok(zAt(70, 70) < -10 && zAt(70, 70) > -14, 'nước gần số 12: ' + zAt(70, 70));
   assert.ok(zAt(500, 830) < 0 && zAt(500, 812) >= 0 && zAt(500, 812) <= m.hc && zAt(500, 790) > m.hc - 0.2, 'viền: ' + zAt(500, 830) + ' / ' + zAt(500, 812) + ' / ' + zAt(500, 790));
+});
+
+test('đường đẳng sâu: dò nét xám cong trong nước, bỏ đường thẳng dài (lưới kinh vĩ), giá trị theo số đo hai bên, mặt nước đi qua đúng mức', () => {
+  const W = 800, H = 800, cell = 4, gw = W / cell, gh = H / cell, pal = PAL.slice(); pal.set([110, 110, 110], 6 * 3);
+  const P = paletteInfo(pal), idx = new Uint8Array(W * H), curve = (x) => 400 + 80 * Math.sin(2 * Math.PI * x / 800);
+  for (let x = 0; x < W; x++) { const y = Math.round(curve(x)); for (let t = 0; t < 2; t++) idx[(y + t) * W + x] = 6; idx[150 * W + x] = 6; idx[151 * W + x] = 6; }
+  const cl = new Uint8Array(gw * gh).fill(1), iso = isoLines(idx, W, H, P, 1, cl, gw, gh, cell);
+  assert.ok(iso.off.length >= 2, 'có đường');
+  for (const o of iso.c) assert.ok(Math.abs(Math.floor(o / gw) * cell - 150) > 12, 'đường thẳng (lưới kinh vĩ) đã bỏ');
+  // số đo: trên đường cong 6–9 m, dưới 12–16 m; quanh đường thẳng cũng 6–9 (đường thẳng không có giá trị)
+  const snd = []; for (let y = 30; y < H; y += 72) for (let x = 30; x < W; x += 72) { const dc = y - curve(x); if (Math.abs(dc) < 15) continue; snd.push({ x, y, v: dc < 0 ? 6 + ((x + y) % 4) : 12 + ((x * 3 + y) % 5), dry: false }); }
+  const r = isoValues(iso, snd, gw, gh, cell, null, 1), ok = r.lines.filter((l) => l.ok);
+  assert.ok(ok.length >= 1 && ok.every((l) => l.v === 10), 'giá trị 10 m: ' + JSON.stringify(r.lines));
+  const info = {}, z = composeGrid({ cl, tn: null, gw, gh, cell, W2: 0, H2: 0, Eland: null, edges: new Float32Array(0), snd, mpp: 2, iso, k: 1, info });
+  assert.ok(info.isoOk >= 1, 'đếm đường có giá trị');
+  let n = 0, bad = 0; for (let x = 20; x < W - 20; x += 8) { const o = Math.floor(curve(x) / cell) * gw + Math.floor(x / cell); n++; if (Math.abs(-z[o] / 10 - 10) > 0.6) bad++; }
+  assert.ok(bad <= n * 0.1, 'dọc đường ≈ 10 m (' + bad + '/' + n + ' lệch)');
+  for (const s of snd) { const d = -z[Math.floor(s.y / cell) * gw + Math.floor(s.x / cell)] / 10; assert.ok(Math.abs(d - s.v) < 0.15, 'đúng số đo ' + s.v + ' → ' + d); }
+  // số đo hai bên không tách được (mọi số 6–9) → đường không có giá trị, không góp điểm
+  const r2 = isoValues(iso, snd.map((s) => ({ ...s, v: 6 + (s.x % 3) })), gw, gh, cell, null, 1);
+  assert.equal(r2.pts.length, 0, 'không tách được thì bỏ');
 });
