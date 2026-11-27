@@ -21,6 +21,7 @@ import { fleetCard, initFleetCard, refreshFleetCard } from './ui_fleet.js';
 import { initDepthUI, depthCard, initDepthCard, pointCard, initPointCard, susCard, initSusCard, susJump, drawDepthPts, depthClick, depthRightClick, dmState, clearSel } from './ui_depth.js';
 import { MOOR_HINT, shipAt, anchorAtPt, dragAnchor, deleteAnchor, placeNew, dragShip, dropShip, deleteShip, mooredCard, initMooredCard, mooredEdit, drawMoored, fleetForFile, fleetFromFile } from './ui_moored.js';
 import { ALG as DM_ALG, WATER_ONLY_FROM, TINT_FROM } from './chartread/version.js';
+import { TR_KINDS, DENSITY, DENSITY_NAMES } from './traffic.js';
 
 const fld = (k, label, unit, val, attr) => `<div class="fld"><label for="f_${k}">${label}</label><div class="in"><input id="f_${k}" data-k="${k}" value="${esc(val)}" ${attr || ''}>${unit ? `<span class="u">${unit}</span>` : ''}</div></div>`;
 const sel = (k, label, opts, val) => `<div class="fld"><label for="f_${k}">${label}</label><div class="in"><select id="f_${k}" data-k="${k}">${opts.map((o) => `<option value="${o[0]}" ${String(o[0]) === String(val) ? 'selected' : ''}>${o[1]}</option>`).join('')}</select></div></div>`;
@@ -433,6 +434,9 @@ export function initEnv() {
   <div class="lbl" style="margin-top:10px">Ánh sáng</div><div class="seg" id="lightSeg" style="display:flex;margin-top:4px">${[['auto', 'Theo giờ'], ['day', 'Ngày'], ['dusk', 'Hoàng hôn'], ['night', 'Đêm']].map((o) => `<button data-light="${o[0]}" class="${(e.light || 'auto') === o[0] ? 'on' : ''}" style="flex:1">${o[1]}</button>`).join('')}</div>
   <button class="btn sm ${e.fogOn ? 'on' : ''}" id="fogBtn" style="width:100%;margin-top:8px">Sương mù dày (tầm nhìn 0,3 Hl): ${e.fogOn ? 'ĐANG BẬT' : 'tắt'}</button>
   <div class="muted" style="margin-top:6px">«Theo giờ»: sáng tối theo đồng hồ bài tập. Chọn Ngày / Hoàng hôn / Đêm để xem thử nhanh, không đổi giờ. Hai nút này áp dụng ngay cả khi đang chạy bài.</div></section>
+  <section class="card"><h2>Tàu khác trên luồng</h2><div class="lbl">Số tàu quanh tàu mình</div><div class="seg" id="trSeg" style="display:flex;margin-top:4px">${DENSITY_NAMES.map((n, i) => `<button data-tr="${i}" class="${(e.trDensity === undefined ? 2 : +e.trDensity) === i ? 'on' : ''}" style="flex:1">${n}${DENSITY[i] ? ' (' + DENSITY[i] + ')' : ''}</button>`).join('')}</div>
+  <div class="flex" style="gap:12px;margin-top:8px;flex-wrap:wrap">${Object.entries(TR_KINDS).map(([k, K]) => `<label style="display:flex;gap:6px;align-items:center"><input type="checkbox" data-trk="${k}" ${(e.trKinds || {})[k] === false ? '' : 'checked'} style="width:16px;height:16px"> ${K.name}${k === 'hang' ? ' nhỏ' : ''}</label>`).join('')}</div>
+  <div class="muted" style="margin-top:6px">Xà lan, tàu cá, tàu hàng nhỏ chạy theo luồng (chỗ đủ sâu cho mớn của từng tàu), đi bên phải luồng, tự tránh va theo quy tắc: đối hướng cùng sang phải, cắt hướng thì tàu thấy tàu kia bên phải nhường, tàu vượt nhường, tàu đang đánh cá được nhường; đổi hướng có kéo còi, sương mù có còi sương mù. Đổi ở đây áp dụng ngay khi đang chạy bài.</div></section>
   <fieldset ${rnd ? 'disabled' : ''} style="${FS}${rnd ? 'opacity:.45' : ''}"><section class="card"><h2>Gió</h2><div class="grid g3">${fld('windDir', 'Hướng (từ)', '°', e.windDir)}${fld('windKn', 'Tốc độ', 'hl/h', e.windKn)}${fld('gustKn', 'Giật', 'hl/h', e.gustKn)}</div><label style="display:flex;gap:8px;align-items:center;margin-top:8px"><input type="checkbox" id="windVary" ${e.windVary ? 'checked' : ''} style="width:17px;height:17px"> Gió giật và đổi hướng nhẹ theo thời gian</label></section>
   </fieldset>
   <section class="card"><h2>Dòng chảy (theo con nước)</h2><div class="grid g2">${fld('floodDir', 'Triều lên: chảy về', '°', e.floodDir)}${fld('floodKn', 'Mạnh nhất', 'hl/h', e.floodKn)}${fld('ebbDir', 'Triều rút: chảy về', '°', e.ebbDir)}${fld('ebbKn', 'Mạnh nhất', 'hl/h', e.ebbKn)}</div><div class="muted" style="margin-top:6px">Tốc độ dòng tự đổi theo bảng triều: mạnh nhất giữa con nước, bằng 0 lúc nước đứng. Bản đầu dùng chung một dòng chảy cho cả vùng.</div></section>
@@ -455,6 +459,11 @@ export function initEnv() {
   $('#wxSeg').onclick = (ev) => { const m = ev.target.dataset.wx; if (!m || m === e.wxMode) return; e.wxMode = m; saveEnv(); initEnv(); wxApply(); };
   $('#lightSeg').onclick = (ev) => { const m = ev.target.dataset.light; if (!m) return; e.light = m; saveEnv(); initEnv(); };
   $('#fogBtn').onclick = () => { e.fogOn = !e.fogOn; saveEnv(); initEnv(); };
+  // tàu khác trên luồng: đổi số tàu / loại tàu áp dụng ngay cho bài đang chạy
+  const trApply = () => { const T = A.sim && A.sim.traffic; if (!T) return; const k = e.trKinds || {}; T.n = DENSITY[e.trDensity === undefined ? 2 : +e.trDensity] || 0;
+    T.kinds = Object.keys(TR_KINDS).filter((q) => k[q] !== false && T.specs[TR_KINDS[q].tpl[0]]); T.list = T.list.filter((v) => T.n && T.kinds.includes(v.kind)); };
+  $('#trSeg').onclick = (ev) => { const v = ev.target.dataset.tr; if (v === undefined) return; e.trDensity = +v; saveEnv(); trApply(); initEnv(); };
+  $$('#p-env [data-trk]').forEach((cb) => { cb.onchange = () => { e.trKinds = Object.assign({}, e.trKinds, { [cb.dataset.trk]: cb.checked }); saveEnv(); trApply(); }; });
   $('#tideGen').onclick = () => {
     const g = (k) => num($('#f_' + k).value, 0), hwT = g('hwT'), hwH = g('hwH'), lwT = g('lwT'), lwH = g('lwH');
     for (let h = 0; h < 24; h++) {

@@ -1,7 +1,9 @@
 // Trạng thái chung + vòng mô phỏng.
 import { defaultShip, buildModel, newState, stepShip, squat, displayRpm, stepLabel, KN, D2R } from './physics.js';
 import { World, defaultEnv, envAt, makeAnchors, makeLines, externalForces, wrap180, body2w, FREE_SPD } from './world.js';
-import { CS, setOrigin, toLL } from './chartsys.js';
+import { CS, setOrigin, toLL, sampleWorld } from './chartsys.js';
+import { Traffic } from './traffic.js';
+import { TPL } from './fleet_tpl.js';
 import { Weather } from './weather.js';
 import { loadPlaces, placesToWorld, savePlaces } from './places.js';
 
@@ -70,17 +72,37 @@ export function newSim() {
     log: [], rec: [], info: {}, wx, wxSeed, e: envAt(A.env, daySec0(), 0, wx), aground: false, bank: [1e4, 1e4], ukc: 99, h: 99, sq: 0, hC: 0,
     started: new Date().toISOString(), track: [], frame: { lat0: CS.frame.lat0, lon0: CS.frame.lon0 }
   };
+  // tàu khác chạy trên luồng (tab 4: mật độ, loại tàu); mỗi bài một hạt giống mới
+  A.sim.traffic = new Traffic(trafficNav(), trafficSpecs(), { seed: (Math.random() * 2 ** 31) | 0, density: A.env.trDensity === undefined ? 2 : +A.env.trDensity, kinds: A.env.trKinds });
+  A.sim.trInfo = A.sim.traffic.info;
   refreshDepth();
   logOrder('Bắt đầu bài tập', 'note');
   if (A.hooks.simReset) A.hooks.simReset();
   return A.sim;
+}
+// thông số mẫu tàu cho tàu khác chạy trên luồng (chỉ kích thước, mô hình 3D dựng riêng ở traffic3d.js)
+function trafficSpecs() { const o = {}; for (const t of TPL) o[t.id] = { name: t.name.replace(/ \(mẫu\)$/, ''), L: +t.ship.loa, B: +t.ship.B, T: +t.ship.T }; return o; }
+// độ sâu / chỗ cấm cho tàu khác: chỉ đi trong vùng hải đồ đã nạp (có hải đồ mà chỗ đó chưa có lưới thì coi như chưa biết),
+// tránh tàu đậu (cách 25 m) và vùng trước mép cầu bến (30 m)
+function trafficNav() {
+  const W = A.W;
+  return {
+    depth(x, y) { const has = W.hasCharts(); if (has && !sampleWorld(x, y).rec) return NaN; return W.depthAt(x, y) + (A.sim && A.sim.e ? A.sim.e.tide : 0); },
+    blocked(x, y) {
+      for (const sh of W.objs.ships || []) { const p = (sh.hdg || 0) * D2R, dx = x - sh.x, dy = y - sh.y, a = dx * Math.sin(p) + dy * Math.cos(p), b = dx * Math.cos(p) - dy * Math.sin(p); if (Math.abs(a) < sh.L / 2 + 25 && Math.abs(b) < sh.B / 2 + 25) return true; }
+      for (const s of W.segs) { if (s.ship) continue; const t = (x - s.ax) * s.tx + (y - s.ay) * s.ty, sd = (x - s.ax) * s.nx + (y - s.ay) * s.ny; if (t > -10 && t < s.len + 10 && sd > -40 && sd < 30) return true; }
+      return false;
+    },
+    ready() { const s = A.sim; return !!s && (!W.hasCharts() || !!sampleWorld(s.S.x, s.S.y).rec); }
+  };
 }
 // gốc trôi: đổi tọa độ trạng thái mô phỏng (tàu, vết, neo, dây, điểm đo, bản ghi) sang gốc mới
 CS.originSubs.add((map) => {
   A.W.mapCoords(map);
   const s = A.sim; if (!s) return; const S = s.S;
   [S.x, S.y] = map(S.x, S.y); s.track = s.track.map((p) => map(p[0], p[1]));
-  for (const r of s.rec) [r.x, r.y] = map(r.x, r.y);
+  for (const r of s.rec) { [r.x, r.y] = map(r.x, r.y); if (r.tr) for (const q of r.tr) [q[1], q[2]] = map(q[1], q[2]); }
+  if (s.traffic) s.traffic.mapCoords(map);
   for (const a of s.anchors) if (a.ax !== null) [a.ax, a.ay] = map(a.ax, a.ay);
   for (const l of s.lines) if (l.st !== 'chua') [l.bx, l.by] = map(l.bx, l.by);
   if (s.mark) [s.mark.x, s.mark.y] = map(s.mark.x, s.mark.y);
@@ -138,7 +160,15 @@ export function substep() {
   if (Math.round(s.t * 10) % 10 === 0) s.bank = [W.bankDist(S, 1, M.d, e.tide), W.bankDist(S, -1, M.d, e.tide)];
   const env = { h: Math.max(h, M.d * 1.02), wS: e.wS, wD: e.wD, cE: e.cE, cN: e.cN, waveH: e.waveH, waveD: e.waveD, bankS: s.bank[0], bankP: s.bank[1] };
   const ctrl = { nT: s.steps.map((id) => (M.steps[id] || M.steps.st).n), dT: helmCmd() };
+  // tàu khác: chạy + tránh va; tàu trong 400 m có khối va chạm với tàu mình
+  if (s.traffic) {
+    const gE = S.u * Math.sin(S.psi) + S.v * Math.cos(S.psi) + S.cE, gN = S.u * Math.cos(S.psi) - S.v * Math.sin(S.psi) + S.cN;
+    const still = s.anchors.some((a) => a.ax !== null && a.st !== 'drop') || s.lines.some((l) => l.st !== 'chua');
+    s.traffic.step(DT, { x: S.x, y: S.y, psi: S.psi, gE, gN, L: M.loa, B: M.B, still }, { cE: e.cE, cN: e.cN, vis: e.vis });
+    W.dyn = []; for (const v of s.traffic.list) if (Math.hypot(v.x - S.x, v.y - S.y) < 400) W.dyn.push(...hullSegs(s.traffic.outline(v), v.x, v.y, 'tr:' + v.id, v.B));
+  } else W.dyn = [];
   const ext = externalForces(W, S, M, s.anchors, s.lines, Math.max(h, 1), DT, s.info);
+  if (s.info.hitShip && String(s.info.hitShip).startsWith('tr:') && s.info.hit > 0.08) { const id = +String(s.info.hitShip).slice(3); s.traffic.bump(id); if (!s.hitTr || s.t - s.hitTr > 20) { s.hitTr = s.t; const v = s.traffic.list.find((q) => q.id === id); logOrder('VA CHẠM ' + (v ? v.name : 'TÀU KHÁC').toUpperCase(), 'alarm'); } }
   stepShip(S, M, ctrl, env, ext, DT);
   s.sq = squat(M, Math.abs(S.u) / KN, Math.max(h, M.d)); s.ukc = h - M.d - s.sq;
   if (s.ukc < 0) { S.u *= 0.6; S.v *= 0.6; S.r *= 0.6; if (!s.aground) { s.aground = true; logOrder('TÀU MẮC CẠN', 'alarm'); } } else if (s.ukc > 0.3) s.aground = false;
@@ -146,9 +176,17 @@ export function substep() {
   const k = Math.round(s.t * 10);
   if (k % 10 === 0) {
     const gE = S.u * Math.sin(S.psi) + S.v * Math.cos(S.psi) + S.cE, gN = S.u * Math.cos(S.psi) - S.v * Math.sin(S.psi) + S.cN;
-    s.rec.push({ t: s.t, x: S.x, y: S.y, psi: S.psi, sog: Math.hypot(gE, gN) / KN, rot: S.r / D2R * 60, d: S.delta, rpm: displayRpm(M, S.n.reduce((a, b) => a + b, 0) / M.nE), ukc: s.ukc, tide: e.tide, st: s.steps.join(','), vis: e.vis, wH: e.waveH, wD: Math.round(e.waveD / D2R), wL: Math.round(e.waveL), wKn: +e.wKn.toFixed(1), wDir: Math.round(e.wDir), rn: +e.rain.toFixed(2), cl: +e.cloud.toFixed(2), wx: e.wx ? e.wx.type : undefined });
+    s.rec.push({ t: s.t, x: S.x, y: S.y, psi: S.psi, sog: Math.hypot(gE, gN) / KN, rot: S.r / D2R * 60, d: S.delta, rpm: displayRpm(M, S.n.reduce((a, b) => a + b, 0) / M.nE), ukc: s.ukc, tide: e.tide, st: s.steps.join(','), vis: e.vis, wH: e.waveH, wD: Math.round(e.waveD / D2R), wL: Math.round(e.waveL), wKn: +e.wKn.toFixed(1), wDir: Math.round(e.wDir), rn: +e.rain.toFixed(2), cl: +e.cloud.toFixed(2), wx: e.wx ? e.wx.type : undefined, tr: s.traffic && s.traffic.list.length ? s.traffic.snapshot() : undefined });
     if (k % 100 === 0) { s.track.push([S.x, S.y]); if (s.track.length > 2000) s.track.shift(); }
   }
+}
+// cạnh đường bao (tọa độ thế giới) → khối va chạm như tàu đậu (moored.shipSegs)
+function hullSegs(P, cx, cy, id, B) {
+  const out = [];
+  for (let i = 0; i < P.length; i++) { const [ax, ay] = P[i], [bx, by] = P[(i + 1) % P.length], len = Math.hypot(bx - ax, by - ay); if (len < 0.2) continue;
+    const tx = (bx - ax) / len, ty = (by - ay) / len; let nx = -ty, ny = tx; if (((ax + bx) / 2 - cx) * nx + ((ay + by) / 2 - cy) * ny < 0) { nx = -nx; ny = -ny; }
+    out.push({ ax, ay, bx, by, tx, ty, nx, ny, len, depth: 0, top: 2, ship: id, pen: B * 0.45, bi: -1, s0: 0 }); }
+  return out;
 }
 export function derived() {
   const s = A.sim, S = s.S, M = A.M;

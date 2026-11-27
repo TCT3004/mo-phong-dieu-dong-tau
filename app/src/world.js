@@ -202,11 +202,12 @@ export function externalForces(W, S, M, anchors, lines, h, dt, info) {
     l.pct = l.ten / mbl * 100;
   }
   // đệm va / cầu bến
-  if (W.segs.length) {
+  const SEGS = W.dyn && W.dyn.length ? W.segs.concat(W.dyn) : W.segs; // cầu bến, tàu đậu + tàu khác đang ở gần
+  if (SEGS.length) {
     const L = M.loa, B = M.B;
     const pts = [[L / 2, 0], [L * 0.36, B / 2], [L * 0.36, -B / 2], [0, B / 2], [0, -B / 2], [-L * 0.4, B / 2], [-L * 0.4, -B / 2], [-L / 2, B * 0.3], [-L / 2, -B * 0.3]];
     let dBow = 1e9, dStern = 1e9, vBow = 0, vStern = 0, hit = 0, hitShip = false;
-    for (const s of W.segs) {
+    for (const s of SEGS) {
       for (let i = 0; i < pts.length; i++) {
         const [bx, by] = pts[i], [wx, wy] = body2w(S, bx, by);
         const t = (wx - s.ax) * s.tx + (wy - s.ay) * s.ty; if (t < -3 || t > s.len + 3) continue;
@@ -219,7 +220,7 @@ export function externalForces(W, S, M, anchors, lines, h, dt, info) {
           let F = 3e6 * -sd + (vn < 0 ? 4e6 * -vn : 0); if (F > 6e7) F = 6e7;
           const fr = -Math.sign(vt) * Math.min(0.25 * F, 5e5 * Math.abs(vt));
           add(bx, by, F * s.nx + fr * s.tx, F * s.ny + fr * s.ty);
-          if (-vn > hit) { hit = -vn; hitShip = !!s.ship; }
+          if (-vn > hit) { hit = -vn; hitShip = s.ship || false; }
         }
       }
     }

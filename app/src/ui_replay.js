@@ -8,7 +8,7 @@ import { CS, toWorld } from './chartsys.js';
 import { makeGeo, mToPx } from './kap.js';
 import { WorldFrame } from './geo/frame.js';
 import { drawOverlay } from './ui_setup.js';
-import { shipPoly } from './ui_run.js';
+import { shipPoly, drawTraffic } from './ui_run.js';
 
 export const R = { ses: null, t: 0, playing: false, speed: 30, mode: 'chart', view: 'follow', ex: { view: 'follow', layout: 'pip', res: 720, speed: 10, range: 'all', overlay: true, audio: true }, rec: null };
 let cv = null, pip = null, comp = null;
@@ -16,7 +16,7 @@ const seg = (id, opts, cur, cb) => { const el = $(id); el.innerHTML = opts.map((
 
 export function saveSession() {
   const s = A.sim; if (!s || s.rec.length < 20) return null;
-  const ses = { id: 'S' + Date.now(), name: A.env.name || 'Bài tập', date: new Date().toLocaleString('vi-VN'), chart: A.W.chartName(s.S.x, s.S.y), frame: s.frame || { lat0: CS.frame.lat0, lon0: CS.frame.lon0 }, rec: s.rec.slice(), log: s.log.slice().reverse(), day0: s.day0, ship: A.p.name, lights: Object.assign({}, s.lights), env: { waveDir: A.env.waveDir, waveT: A.env.waveT } };
+  const ses = { id: 'S' + Date.now(), name: A.env.name || 'Bài tập', date: new Date().toLocaleString('vi-VN'), chart: A.W.chartName(s.S.x, s.S.y), frame: s.frame || { lat0: CS.frame.lat0, lon0: CS.frame.lon0 }, rec: s.rec.slice(), trInfo: s.trInfo || null, log: s.log.slice().reverse(), day0: s.day0, ship: A.p.name, lights: Object.assign({}, s.lights), env: { waveDir: A.env.waveDir, waveT: A.env.waveT } };
   A.sessions.unshift(ses); DB.put('sessions', ses.id, ses); return ses;
 }
 export async function restoreSessions() { const keys = await DB.keys('sessions'); if (!keys) return; for (const k of keys.sort().reverse().slice(0, 30)) { const s = await DB.get('sessions', k); if (s && !A.sessions.find((q) => q.id === s.id)) A.sessions.push(s); } }
@@ -33,8 +33,14 @@ export function rowsOf(s) {
   let map = null;
   if (s.frame) { if (s.frame.lat0 !== CS.frame.lat0 || s.frame.lon0 !== CS.frame.lon0) { const f0 = new WorldFrame(s.frame.lat0, s.frame.lon0); map = (x, y) => toWorld(...f0.toLL(x, y)); } }
   else map = legacyConv(s);
-  const rows = map ? s.rec.map((q) => { const [x, y] = map(q.x, q.y); return Object.assign({}, q, { x, y }); }) : s.rec;
+  const rows = map ? s.rec.map((q) => { const [x, y] = map(q.x, q.y); return Object.assign({}, q, { x, y, tr: q.tr ? q.tr.map((a) => { const [tx, ty] = map(a[1], a[2]); return [a[0], tx, ty, a[3], a[4]]; }) : q.tr }); }) : s.rec;
   conv.set(s, { key, rows }); return rows;
+}
+// tàu khác tại dòng i của bản ghi (đã đổi gốc): tốc độ suy từ dòng kế tiếp
+function trAt(s, i) {
+  const r = rowsOf(s), row = r[i], nx = r[i + 1], info = s.trInfo || {}; if (!row || !row.tr) return [];
+  return row.tr.map((a) => { const f = info[a[0]] || {}, b = nx && nx.tr ? nx.tr.find((q) => q[0] === a[0]) : null;
+    return { id: a[0], tpl: f.tpl, kind: f.kind, name: f.name || 'Tàu khác', L: f.L || 30, B: f.B || 7, x: a[1], y: a[2], psi: a[3] * D2R, fishing: !!a[4], u: b ? Math.hypot(b[1] - a[1], b[2] - a[2]) / Math.max(0.5, nx.t - row.t) : 0 }; }).filter((q) => q.tpl);
 }
 export function rowAt(t) { const r = R.ses.rec; return r[Math.max(0, Math.min(r.length - 1, Math.round(t) - 1))]; }
 
@@ -91,6 +97,7 @@ function draw2D(v, row, s, wide) {
   g.strokeStyle = '#607D8B'; g.lineWidth = 1.5; g.setLineDash([5, 4]); g.beginPath(); for (let i = i0; i < r.length; i += 3) { const p = v.m2s(r[i].x, r[i].y); if (i === i0) g.moveTo(p[0], p[1]); else g.lineTo(p[0], p[1]); } g.stroke(); g.setLineDash([]);
   g.strokeStyle = '#0D47A1'; g.lineWidth = 3; g.beginPath(); for (let i = 0; i <= i0; i += 2) { const p = v.m2s(r[i].x, r[i].y); if (i) g.lineTo(p[0], p[1]); else g.moveTo(p[0], p[1]); } g.stroke();
   g.strokeStyle = '#455A64'; g.lineWidth = 1; for (let i = 300; i < r.length; i += 300) { const pl = shipPoly(v, r[i].x, r[i].y, r[i].psi, M, 0); g.beginPath(); pl.forEach((p, k) => (k ? g.lineTo(p[0], p[1]) : g.moveTo(p[0], p[1]))); g.closePath(); g.stroke(); }
+  drawTraffic(v, g, trAt(s, i0), null, null);
   const pl = shipPoly(v, row.x, row.y, row.psi, M, 14); g.fillStyle = 'rgba(13,71,161,.4)'; g.strokeStyle = '#0D47A1'; g.lineWidth = 2; g.beginPath(); pl.forEach((p, k) => (k ? g.lineTo(p[0], p[1]) : g.moveTo(p[0], p[1]))); g.closePath(); g.fill(); g.stroke();
   g.restore();
 }
@@ -99,7 +106,7 @@ export function replayFrame(dt) {
   const s = R.ses; if (!s || !$('#repCv')) return;
   if (R.playing) { R.t += dt * (R.rec ? R.ex.speed : R.speed); if (R.t >= dur()) { R.t = dur(); R.playing = false; if (R.rec) stopExport(); } }
   const row = rowAt(R.t), use3 = R.rec ? R.ex.view !== 'chart' : R.mode === '3d';
-  if (use3 && A.view) { A.view.setSegs([]); { const q = rowsOf(s)[s.rec.indexOf(row)] || row; A.view.update({ x: q.x, y: q.y, psi: row.psi }, R.rec ? R.ex.view : R.view, env3(row, s)); } A.view.render(); }
+  if (use3 && A.view) { A.view.setSegs([]); A.view.setTraffic(trAt(s, s.rec.indexOf(row))); { const q = rowsOf(s)[s.rec.indexOf(row)] || row; A.view.update({ x: q.x, y: q.y, psi: row.psi }, R.rec ? R.ex.view : R.view, env3(row, s)); } A.view.render(); }
   if (!use3 || !R.rec) { if (R.mode === 'chart' || (R.rec && !use3)) draw2D(cv, row, s, true); }
   $('#repSl').value = Math.round(R.t); $('#repT').textContent = clock(R.t); $('#repPlay').textContent = R.playing ? '⏸' : '▶';
   $('#repAt').textContent = 'Tại ' + clock(s.day0 + row.t);

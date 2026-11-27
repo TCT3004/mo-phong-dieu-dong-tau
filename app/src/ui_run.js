@@ -7,6 +7,7 @@ import { ChartCanvas } from './render/chartcanvas.js';
 import { drawOverlay } from './ui_setup.js';
 import { Radar, RANGES } from './radar.js';
 import { NM, fmtDist, brgDeg, trackRoute } from './nav.js';
+import { TR_KINDS } from './traffic.js';
 
 let mini = null, radar = null, mapScale = 4, panel = 'day', lastLog = -1, built = '', telLink = true;
 const mapOff = { x: 0, y: 0 }, routeSt = {}, telDrag = {};
@@ -92,14 +93,14 @@ export function initRun() {
   const mc = $('#mini'); let md = null, mv = false;
   mc.onpointerdown = (e) => { if (e.button !== 0) return; md = [e.clientX, e.clientY]; mv = false; mc.setPointerCapture(e.pointerId); };
   mc.onpointermove = (e) => { if (!md) return; if (!mv && Math.hypot(e.clientX - md[0], e.clientY - md[1]) < 5) return; if (!mv) { mv = true; mc.style.cursor = 'grabbing'; } const r = mc.getBoundingClientRect(), k = mc.width / r.width * mapScale, dx = (e.clientX - md[0]) * k, dy = (e.clientY - md[1]) * k, c = Math.cos(mini.rot), sn = Math.sin(mini.rot); mapOff.x -= dx * c + dy * sn; mapOff.y += -dx * sn + dy * c; md = [e.clientX, e.clientY]; };
-  mc.onpointerup = (e) => { if (md && !mv) { const p = cpos(mc, e), [x, y] = mini.s2m(p[0], p[1]); A.sim.mark = { x, y }; } md = null; mc.style.cursor = 'crosshair'; };
-  mc.oncontextmenu = (e) => { e.preventDefault(); A.sim.mark = null; };
+  mc.onpointerup = (e) => { if (md && !mv) { const p = cpos(mc, e), [x, y] = mini.s2m(p[0], p[1]); A.sim.mark = { x, y }; pickTarget(A.sim.mark, 14 * mini.mPerPx()); } md = null; mc.style.cursor = 'crosshair'; };
+  mc.oncontextmenu = (e) => { e.preventDefault(); A.sim.mark = null; A.sim.tgt = null; };
   mc.onwheel = (e) => { e.preventDefault(); mapScale = Math.max(0.5, Math.min(60, mapScale * (e.deltaY > 0 ? 1.25 : 0.8))); };
   $('#mapHome').onclick = () => { mapOff.x = 0; mapOff.y = 0; };
   // radar: bấm đặt EBL/VRM, chuột phải bỏ, lăn chuột đổi cự ly
   const rc = $('#radar');
-  rc.onpointerdown = (e) => { if (e.button !== 0) return; const p = cpos(rc, e); A.sim.mark = radar.pick(p[0], p[1], A.sim.S); };
-  rc.oncontextmenu = (e) => { e.preventDefault(); A.sim.mark = null; };
+  rc.onpointerdown = (e) => { if (e.button !== 0) return; const p = cpos(rc, e), q = radar.pick(p[0], p[1], A.sim.S); A.sim.mark = q; pickTarget(q, radar.range * NM / 18); };
+  rc.oncontextmenu = (e) => { e.preventDefault(); A.sim.mark = null; A.sim.tgt = null; };
   rc.onwheel = (e) => { e.preventDefault(); radar.setRange(radar.ri + (e.deltaY > 0 ? 1 : -1)); };
   $('#routeSel').onchange = (e) => { A.W.objs.routeSel = +e.target.value; saveObjs(); for (const k in routeSt) delete routeSt[k]; };
   $('#alarmBtn').onclick = () => { const s = A.sim; s.alarm = !s.alarm; A.snd.alarm(s.alarm); logOrder(s.alarm ? 'Phát báo động chung' : 'Tắt báo động chung', 'signal'); };
@@ -297,7 +298,7 @@ export function uiTick() {
   // banner
   const bn = $('#banner'); let bt = '', cls = 'bad';
   if (s.aground) bt = 'TÀU MẮC CẠN — độ sâu không đủ. Lùi máy ra hoặc bắt đầu lại bài tập ở tab 4.';
-  else if (s.info.hitShip && s.info.hit > 0.08) bt = 'VA CHẠM TÀU ĐẬU';
+  else if (s.info.hitShip && s.info.hit > 0.08) bt = String(s.info.hitShip).startsWith('tr:') ? 'VA CHẠM ' + trName(s.info.hitShip).toUpperCase() : 'VA CHẠM TÀU ĐẬU';
   else if (s.info.hit > 0.25) bt = 'VA CẦU MẠNH — tốc độ áp cầu ' + (s.info.hit * 100).toFixed(0) + ' cm/s';
   else if (performance.now() < flashT) { bt = flashMsg; cls = ''; }
   else if (!s.running) { bt = 'ĐANG TẠM DỪNG — bấm ▶ ở góc trên để chạy'; cls = ''; }
@@ -312,9 +313,18 @@ export function uiTick() {
   const rie = $('#routeInfo'), riH = ri || '<span class="muted">' + (A.W.objs.routes && A.W.objs.routes.length ? 'Chọn tuyến ở ô dưới hải đồ' : 'Chưa có tuyến — lập tuyến ở tab 2 (công cụ «Tuyến đi»)') + '</span>'; if (rie._h !== riH) { rie._h = riH; rie.innerHTML = riH; }
   set('routeName', r ? '· ' + r.name : '');
   // điểm đo
+  const tv = s.tgt && s.traffic ? s.traffic.list.find((q) => q.id === s.tgt) : null; if (s.tgt && !tv) s.tgt = null;
+  if (tv) s.mark = { x: tv.x, y: tv.y }; // điểm đo bám theo mục tiêu
   const mk = s.mark; let mt = '', rf = '';
   if (mk) { const dd = Math.hypot(mk.x - S.x, mk.y - S.y), bb = brgDeg(mk.x - S.x, mk.y - S.y), tt = d.sog > 0.3 ? dd / (d.sog * KN) : 0; mt = 'Điểm chọn: ' + fmtDist(dd) + ' · ' + pad3(bb) + '°' + (tt ? ' · ' + Math.floor(tt / 60) + "' " + String(Math.round(tt % 60)).padStart(2, '0') + '"' : ''); rf = 'EBL ' + bb.toFixed(1).padStart(5, '0') + '° · VRM ' + fmtDist(dd); }
-  set('markInfo', mt); set('rFoot', rf || 'Bấm lên radar để đo phương vị / khoảng cách · chuột phải để bỏ');
+  if (tv) { // mục tiêu: tàu khác — phương vị, khoảng cách, hướng / tốc độ, CPA / TCPA so với tàu mình
+    const vx = tv.u * Math.sin(tv.psi) + S.cE, vy = tv.u * Math.cos(tv.psi) + S.cN, sog = Math.hypot(vx, vy) / KN, cog = brgDeg(vx, vy), rx = tv.x - S.x, ry = tv.y - S.y, wx = vx - d.gE, wy = vy - d.gN, w2 = wx * wx + wy * wy;
+    const tc = w2 > 1e-6 ? -(rx * wx + ry * wy) / w2 : 0, cpa = tc > 0 ? Math.hypot(rx + wx * tc, ry + wy * tc) : Math.hypot(rx, ry);
+    const tcs = tc > 0 ? Math.floor(tc / 60) + "'" + String(Math.round(tc % 60)).padStart(2, '0') + '"' : 'đã qua';
+    rf = 'MT ' + pad3(brgDeg(rx, ry)) + '° ' + fmtDist(Math.hypot(rx, ry)) + ' · CPA ' + fmtDist(cpa) + ' · ' + tcs; // chân radar hẹp: gọn
+    mt = 'Mục tiêu: ' + tv.name + (tv.fishing ? ' (đang đánh cá)' : '') + ' · ' + pad3(brgDeg(rx, ry)) + '° ' + fmtDist(Math.hypot(rx, ry)) + ' · đi ' + pad3(cog) + '° ' + sog.toFixed(1).replace('.', ',') + ' hl/h · CPA ' + fmtDist(cpa) + (tc > 0 ? ' sau ' + tcs : ' (đã qua)');
+  }
+  set('markInfo', mt); set('rFoot', rf || 'Bấm lên radar để đo phương vị / khoảng cách, bấm vào tàu khác để xem CPA / TCPA · chuột phải để bỏ');
   set('rRange', String(radar.range).replace('.', ',') + ' Hl');
   const night = sunEl(s.day0 + s.t, A.env.light) < 4; $('#band').classList.toggle('night', night);
   drawTape(hd, s.helm.mode !== 'rudder' ? s.helm.target : null, night); drawMini(d, night); drawPanel();
@@ -322,7 +332,9 @@ export function uiTick() {
 // vẽ radar mỗi khung hình
 export function consoleFrame(dtReal) {
   if (!radar || !A.sim) return; const s = A.sim;
-  radar.step(dtReal, A.W, s.S, s.e ? s.e.waveH : 0, s.e ? s.e.rain : 0);
+  radar.step(dtReal, A.W, s.S, s.e ? s.e.waveH : 0, s.e ? s.e.rain : 0, s.traffic ? s.traffic.list : null);
+  const tv = s.tgt && s.traffic ? s.traffic.list.find((q) => q.id === s.tgt) : null;
+  radar.tgt = tv ? { x: tv.x, y: tv.y, vx: tv.u * Math.sin(tv.psi) + s.S.cE, vy: tv.u * Math.cos(tv.psi) + s.S.cN } : null;
   radar.mark = s.mark ? Object.assign(radar.mark || {}, s.mark) : null;
   radar.draw(s.S);
 }
@@ -356,9 +368,29 @@ function drawTape(hd, tgt, night) {
   if (tgt !== null && tgt !== undefined) { const x = w / 2 + Math.max(-29, Math.min(29, wrap180(tgt - hd))) * ppd; g.fillStyle = '#E08A00'; g.beginPath(); g.moveTo(x - 13, 0); g.lineTo(x + 13, 0); g.lineTo(x, 18); g.fill(); }
   g.fillStyle = night ? '#5CD6FF' : '#0D47A1'; g.fillRect(w / 2 - 2, 0, 4, h);
 }
+// bấm gần một tàu khác (≤ r m) thì chọn làm mục tiêu: điểm đo bám theo tàu đó, chân radar hiện CPA / TCPA
+function pickTarget(q, r) {
+  const s = A.sim; s.tgt = null; if (!s.traffic || !q) return; let best = null, bd = Math.max(60, r);
+  for (const v of s.traffic.list) { const d = Math.hypot(v.x - q.x, v.y - q.y); if (d < bd) { bd = d; best = v; } }
+  if (best) { s.tgt = best.id; s.mark = { x: best.x, y: best.y }; }
+}
+// tên loại tàu khác (in hoa cho báo va chạm)
+const trName = (id) => { const v = A.sim.traffic && A.sim.traffic.list.find((q) => 'tr:' + q.id === String(id)); return v ? TR_KINDS[v.kind].name : 'tàu khác'; };
 export function shipPoly(v, x, y, psi, M, minPx) {
   const k = Math.max(1, (minPx || 0) / (M.loa / v.mPerPx())), L = M.loa * k, B = M.B * k, pts = [[L / 2, 0], [L * 0.3, B / 2], [-L / 2, B / 2], [-L / 2, -B / 2], [L * 0.3, -B / 2]];
   return pts.map((p) => v.m2s(x + p[0] * Math.sin(psi) + p[1] * Math.cos(psi), y + p[0] * Math.cos(psi) - p[1] * Math.sin(psi)));
+}
+// tàu khác trên hải đồ: hình tàu theo kích thước (tối thiểu 10 điểm ảnh), véc-tơ 6 phút, mục tiêu đang chọn có vòng + tên
+const TR_COL = { xalan: '#6D4C41', ca: '#00838F', hang: '#5E35B1' };
+export function drawTraffic(v, g, list, sel, S) {
+  for (const t of list) {
+    const k = Math.max(1, 12 / (t.L / v.mPerPx())), L = t.L * k, B = t.B * k, sn = Math.sin(t.psi), cs = Math.cos(t.psi), c = TR_COL[t.kind] || '#455A64';
+    const P = [[L / 2, 0], [L * 0.3, B / 2], [-L / 2, B / 2], [-L / 2, -B / 2], [L * 0.3, -B / 2]].map(([bx, by]) => v.m2s(t.x + bx * sn + by * cs, t.y + bx * cs - by * sn));
+    g.fillStyle = c + 'AA'; g.strokeStyle = c; g.lineWidth = 1.3; g.beginPath(); P.forEach((p, i) => (i ? g.lineTo(p[0], p[1]) : g.moveTo(p[0], p[1]))); g.closePath(); g.fill(); g.stroke();
+    const a = v.m2s(t.x, t.y), vx = (t.u || 0) * sn + (S ? S.cE : 0), vy = (t.u || 0) * cs + (S ? S.cN : 0), b = v.m2s(t.x + vx * 360, t.y + vy * 360);
+    g.setLineDash([3, 3]); g.beginPath(); g.moveTo(a[0], a[1]); g.lineTo(b[0], b[1]); g.stroke(); g.setLineDash([]);
+    if (t.id === sel) { g.strokeStyle = '#1B5E20'; g.lineWidth = 1.8; g.beginPath(); g.arc(a[0], a[1], 13, 0, 7); g.stroke(); g.fillStyle = '#1B5E20'; g.font = 'bold 11px Segoe UI'; g.fillText(t.name, a[0] + 15, a[1] - 8); }
+  }
 }
 function drawMini(d, night) {
   const s = A.sim, S = s.S, M = A.M, g = mini.ctx; mini.size(); mini.opt.palette = night ? 'night' : 'day';
@@ -382,6 +414,7 @@ function drawMini(d, night) {
   // dây & neo
   for (const l of s.lines) if (l.st !== 'chua') { const [fx, fy] = body2w(S, l.fx, l.side * M.B / 2 * l.fyk), a = mini.m2s(fx, fy), b = mini.m2s(l.bx, l.by); g.strokeStyle = (l.pct || 0) > 80 ? '#D50000' : '#37474F'; g.lineWidth = 1.5; g.beginPath(); g.moveTo(a[0], a[1]); g.lineTo(b[0], b[1]); g.stroke(); }
   for (const a of s.anchors) if (a.ax !== null) { const [hx, hy] = body2w(S, a.bx, a.by), p = mini.m2s(hx, hy), b = mini.m2s(a.ax, a.ay); g.strokeStyle = a.drag ? '#D50000' : '#4E342E'; g.lineWidth = 1.5; g.setLineDash([3, 2]); g.beginPath(); g.moveTo(p[0], p[1]); g.lineTo(b[0], b[1]); g.stroke(); g.setLineDash([]); g.fillStyle = '#4E342E'; g.beginPath(); g.arc(b[0], b[1], 4, 0, 7); g.fill(); }
+  drawTraffic(mini, g, s.traffic ? s.traffic.list : [], s.tgt, S);
   const sp = shipPoly(mini, S.x, S.y, S.psi, M, 14); g.fillStyle = 'rgba(13,71,161,.35)'; g.strokeStyle = '#0D47A1'; g.lineWidth = 1.6; g.beginPath(); sp.forEach((p, i) => (i ? g.lineTo(p[0], p[1]) : g.moveTo(p[0], p[1]))); g.closePath(); g.fill(); g.stroke();
   const h2 = mini.m2s(S.x + Math.sin(S.psi) * 400, S.y + Math.cos(S.psi) * 400); g.setLineDash([3, 3]); g.lineWidth = 1; g.beginPath(); g.moveTo(sp[0][0], sp[0][1]); g.lineTo(h2[0], h2[1]); g.stroke(); g.setLineDash([]);
   // điểm đo: đường từ tàu tới điểm chọn

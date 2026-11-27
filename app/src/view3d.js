@@ -10,6 +10,7 @@ import { makeFlags } from './flags.js';
 import { Wake } from './wake.js';
 import { buildScenery } from './scenery.js';
 import { MooredView } from './moored3d.js';
+import { TrafficView } from './traffic3d.js';
 
 export const QUALITY = {
   // ter: [nửa vùng mịn (m), bước lưới vùng mịn (m), bước lưới xa nhất (m), bước lưới vùng rất mịn quanh tàu (m), nửa vùng rất mịn (m)]
@@ -46,6 +47,7 @@ export class View3D {
     this.terrain = null; this.objG = new THREE.Group(); this.scene.add(this.objG);
     this.lineG = new THREE.Group(); this.scene.add(this.lineG); this.linePool = [];
     this.moored = new MooredView(THREE, this.scene, this.glow);
+    this.traffic = new TrafficView(THREE, this.scene, this.glow); this.trList = [];
     this.marks = []; this.navL = {};
     let drag = null;
     canvas.addEventListener('pointerdown', (e) => { drag = [e.clientX, e.clientY]; canvas.setPointerCapture(e.pointerId); });
@@ -237,6 +239,8 @@ export class View3D {
   }
   // tàu đậu ở cảng: pmap = ref → thông số tàu trong kho
   setMoored(list, pmap) { this.moored.set(list || [], pmap || {}); }
+  // tàu khác chạy trên luồng: [{ id, tpl, x, y, psi, u, fishing }] (đang chạy bài hoặc dựng lại từ bản ghi khi xem lại)
+  setTraffic(list) { this.trList = list || []; }
   buildObjects(W) {
     this.W = W; const g = this.objG; g.clear(); this.marks = [];
     const quayM = new THREE.MeshLambertMaterial({ color: 0x8d9499 }), bolM = new THREE.MeshLambertMaterial({ color: 0x20262b }), fenM = new THREE.MeshLambertMaterial({ color: 0x15191c });
@@ -358,6 +362,7 @@ export class View3D {
     const dark = day0 < 0.55; // đèn theo độ cao mặt trời, không theo mây
     if (this.scen && this.scen.userData.night) this.scen.userData.night.visible = dark;
     if (this.W) this.moored.update(this.W, e, dark, (x, z, t) => this.waveH(x, z, t));
+    this.traffic.update(this.trList, e, dark, (x, z, t) => this.waveH(x, z, t), this.cam.position, e.vis, day);
     for (const k in this.navL) for (const sp of this.navL[k]) sp.visible = !!(e.lights && e.lights[k]) && dark;
     const haloK = 1 + 2.2 * (1 - Math.min(1, e.vis / 3000)) + 0.8 * (e.rain || 0);
     for (const m of this.marks) {

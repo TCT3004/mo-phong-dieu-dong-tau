@@ -104,13 +104,14 @@ function frame(ts) {
     if (s.running) { acc += dtR * s.speed; let n = 0; while (acc >= DT && n < 90) { substep(); acc -= DT; n++; } if (n >= 90) acc = 0; if (checkOrigin()) hdr(); }
     if (A.view) {
       const ds = s.day0 + s.t, e = s.e;
-      A.view.setSegs(lineSegs3D());
+      A.view.setSegs(lineSegs3D()); A.view.setTraffic(s.traffic ? s.traffic.list : []);
       const aw = appWind(e, s.S);
       A.view.update({ x: s.S.x, y: s.S.y, psi: s.S.psi }, runState.view, { awTo: aw.to, awKn: aw.kn, sunEl: sunEl(ds, A.env.light), sunAz: 2 * Math.PI * (ds / 86400), vis: e.vis, tide: e.tide, waveH: e.waveH, waveD: e.waveD, waveT: e.waveT, rain: e.rain, cloud: e.cloud, flash: e.flash, bolt: e.wx ? e.wx.bolt : null, wDir: e.wDir, wKn: e.wKn, rollK: A.set.rollSpeed, t: s.t, lights: s.lights, daySec: ds, spd: s.S.u, prop: s.S.n.reduce((a, b) => a + b, 0) / s.S.n.length / (A.M.nMax || 1) });
       A.view.anchors3D(s.anchors, s.h);
       A.view.render(runState.view === 'bridge' ? paneCvs() : null);
     }
     if (s.wx) for (const ev of s.wx.takeEvents()) A.snd.thunder(ev.dist, s.speed);
+    if (s.traffic) for (const ev of s.traffic.takeEvents()) A.snd.hornFar(ev.pat, Math.hypot(ev.x - s.S.x, ev.y - s.S.y)); // còi tàu khác (đổi hướng, sương mù)
     consoleFrame(dtR);
     if (ts - lastUi > 150) { lastUi = ts; uiTick(); $('#hdrClock').textContent = clock(s.day0 + s.t); $('#runBtn').textContent = s.running ? '⏸' : '▶'; $('#alarmBar').style.display = s.alarm ? 'block' : 'none'; const M = A.M; A.snd.engine(s.S.n.reduce((a, b) => a + Math.abs(b), 0) / M.nE / M.nMax); A.snd.weather(s.e.rain || 0, s.e.wKn || 0); }
   } else if (A.tab === 'rep') replayFrame(dtR);

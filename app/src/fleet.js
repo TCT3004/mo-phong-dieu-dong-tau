@@ -5,7 +5,7 @@ import { defaultShip } from './physics.js';
 import { genModel } from './shipdraw/shipgen.js';
 import { TPL } from './fleet_tpl.js';
 
-export const SHIP_TYPES = ['Tàu hàng', 'Tàu dầu', 'Tàu khách', 'Tàu pháo', 'Tàu tên lửa', 'Tàu phóng lôi', 'Tàu tuần tra', 'Tàu hộ vệ', 'Tàu đổ bộ', 'Tàu hậu cần', 'Tàu lai', 'Khác'];
+export const SHIP_TYPES = ['Tàu hàng', 'Tàu dầu', 'Tàu khách', 'Tàu pháo', 'Tàu tên lửa', 'Tàu phóng lôi', 'Tàu tuần tra', 'Tàu hộ vệ', 'Tàu đổ bộ', 'Tàu hậu cần', 'Tàu lai', 'Xà lan', 'Tàu cá', 'Khác'];
 
 // thông số tab 1 từ vài số chính: tốc độ max (hl/h), vòng quay máy max, hộp số…; còn lại lấy theo tàu mẫu mặc định
 function params(o) {

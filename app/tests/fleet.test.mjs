@@ -6,8 +6,8 @@ import { TEMPLATES, templateShip, fleetTypes, SHIP_TYPES } from '../src/fleet.js
 import { buildModel as buildShipGeom } from '../src/shipdraw/model.js';
 import { buildModel, turningDiameter, sanity, newState, stepShip } from '../src/physics.js';
 
-test('13 tàu mẫu, đủ loại', () => {
-  assert.equal(TEMPLATES.length, 13);
+test('17 tàu mẫu, đủ loại', () => {
+  assert.equal(TEMPLATES.length, 17);
   for (const t of TEMPLATES) assert.ok(SHIP_TYPES.includes(t.type), t.name);
   assert.deepEqual(fleetTypes([{ type: 'Tàu cứu hộ' }]).slice(-2), ['Tàu cứu hộ', 'Khác']);
 });

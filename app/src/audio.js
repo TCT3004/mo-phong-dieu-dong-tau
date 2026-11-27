@@ -76,6 +76,15 @@ export class Sound {
     this.init(); if (!this.ctx) return; this.mkHorn(); const g = this.hG.gain; let t = this.ctx.currentTime + 0.05; g.cancelScheduledValues(t);
     for (const ch of pat) { const d = ch === 'L' ? 5 : 1; g.setTargetAtTime(0.5 * this.vol.bell, t, 0.06); g.setTargetAtTime(0, t + d, 0.1); t += d + 1; }
   }
+  // còi tàu khác ở xa: chuỗi 'S' ngắn 1 s / 'L' dài 5 s, nhỏ dần và đục dần theo khoảng cách (m); mỗi lần một bộ phát riêng
+  hornFar(pat, dist) {
+    this.init(); if (!this.ctx || !pat) return; const c = this.ctx, vol = 0.45 * this.vol.bell * Math.max(0.04, Math.min(1, 1 - dist / 3800)) ** 1.6; if (vol < 0.01) return;
+    const g = c.createGain(), lp = c.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = Math.max(260, 900 - dist * 0.18); g.gain.value = 0; lp.connect(g); g.connect(this.out);
+    const f0 = 98 + Math.random() * 40, os = [f0, f0 * 1.008, f0 * 1.5].map((f, i) => { const o = c.createOscillator(), og = c.createGain(); o.type = 'sawtooth'; o.frequency.value = f; og.gain.value = i === 2 ? 0.25 : 0.5; o.connect(og); og.connect(lp); return o; });
+    let t = c.currentTime + 0.05 + dist / 340; const t0 = t; // tiếng tới chậm theo khoảng cách
+    for (const ch of pat) { const d = ch === 'L' ? 5 : 1; g.gain.setTargetAtTime(vol, t, 0.06); g.gain.setTargetAtTime(0, t + d, 0.1); t += d + 1; }
+    for (const o of os) { o.start(t0 - 0.05); o.stop(t + 0.5); }
+  }
   alarm(on) {
     this.init(); if (!this.ctx) return; this.alarmOn = on;
     if (on && !this.al) { const c = this.ctx; this.al = c.createOscillator(); this.al.type = 'square'; this.alG = c.createGain(); this.alG.gain.value = 0.12 * this.vol.bell; const l = c.createOscillator(), lg = c.createGain(); l.frequency.value = 1.2; l.type = 'square'; lg.gain.value = 180; l.connect(lg); lg.connect(this.al.frequency); this.al.frequency.value = 760; this.al.connect(this.alG); this.alG.connect(this.out); this.al.start(); l.start(); this.alL = l; }

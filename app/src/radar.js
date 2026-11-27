@@ -19,7 +19,7 @@ export class Radar {
   setRange(i) { this.ri = Math.max(0, Math.min(RANGES.length - 1, i)); this.buf.fill(0); }
   // quét thêm các tia trong khoảng dt (giây thực); anten 24 v/ph
   // rain 0..1: nhiễu mưa (hạt lấm tấm, dày ở gần) và tín hiệu bờ yếu đi ở xa
-  step(dt, W, S, waveH, rain) {
+  step(dt, W, S, waveH, rain, ships) {
     this.acc += dt * 0.4 * NB; let n = Math.floor(this.acc); this.acc -= n; if (n > NB / 4) n = NB / 4;
     const rM = this.range * NM, dr = rM / NR, segs = W.segs || [], pts = (W.objs && W.objs.lights) || [];
     const clutter = Math.min(0.5, (waveH || 0) * 0.18), rc = Math.min(1, rain || 0);
@@ -42,6 +42,12 @@ export class Radar {
         const ex = s.bx - s.ax, ey = s.by - s.ay, den = sx * ey - sy * ex; if (Math.abs(den) < 1e-9) continue;
         const qx = s.ax - S.x, qy = s.ay - S.y, t = (qx * ey - qy * ex) / den, u = (qx * sy - qy * sx) / den;
         if (t > 0 && t < rM && u >= 0 && u <= 1) { const j = Math.floor(t / dr); for (let q = j; q < Math.min(NR, j + 2); q++) this.buf[row + q] = 255; }
+      }
+      // tàu khác: tiếng dội rộng theo búp sóng + kích thước tàu, dài theo chiều tàu nhìn từ radar
+      if (ships) for (const o of ships) {
+        const dx = o.x - S.x, dy = o.y - S.y, d = Math.hypot(dx, dy); if (d > rM || d < 10) continue;
+        let da = Math.abs(Math.atan2(dx, dy) - a); if (da > Math.PI) da = 2 * Math.PI - da;
+        if (da < (0.6 * Math.PI / 180) + Math.atan(o.L * 0.5 / d)) { const j = Math.floor(d / dr), n = Math.max(1, Math.ceil(Math.min(o.L, 40) * 0.5 / dr)); for (let q = j; q < Math.min(NR, j + n); q++) this.buf[row + q] = 250; }
       }
       // đèn, phao: mục tiêu điểm (búp sóng ~1,2°)
       for (const o of pts) {
@@ -95,6 +101,8 @@ export class Radar {
     const sa = this.sweep / NB * 2 * Math.PI + rot; g.strokeStyle = 'rgba(255,220,120,.35)'; g.beginPath(); g.moveTo(cx, cy); g.lineTo(cx + Math.sin(sa) * R, cy - Math.cos(sa) * R); g.stroke();
     // tàu mình
     g.strokeStyle = '#E8F0F6'; g.lineWidth = 1; const shp = Math.max(4, 60 * k); g.translate(cx, cy); g.rotate(ha); g.beginPath(); g.moveTo(0, -shp); g.lineTo(shp * 0.25, -shp * 0.5); g.lineTo(shp * 0.25, shp * 0.5); g.lineTo(-shp * 0.25, shp * 0.5); g.lineTo(-shp * 0.25, -shp * 0.5); g.closePath(); g.stroke(); g.setTransform(1, 0, 0, 1, 0, 0);
+    // mục tiêu đang chọn (tàu khác): vòng vuông kiểu ARPA + véc-tơ thật 6 phút
+    if (this.tgt) { const t = this.tgt, [px, py] = toS(t.x, t.y), [qx, qy] = toS(t.x + t.vx * 360, t.y + t.vy * 360); g.strokeStyle = '#7CF29A'; g.lineWidth = 1.4; g.strokeRect(px - 7, py - 7, 14, 14); g.beginPath(); g.moveTo(px, py); g.lineTo(qx, qy); g.stroke(); }
     // EBL / VRM
     if (this.mark) {
       const m = this.mark, d = Math.hypot(m.x - S.x, m.y - S.y), b = brgDeg(m.x - S.x, m.y - S.y), a = b * Math.PI / 180 + rot;

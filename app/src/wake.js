@@ -52,6 +52,9 @@ export class Wake {
     this.washA = fan(xa + Math.max(B * 0.6, L * 0.1), Math.max(B * 1.1, L * 0.18), B * 1.35);
     for (const m of [...this.bow, this.washF, this.washA]) m.material.uniforms.uI.value = 0;
   }
+  // ẩn (tàu ở xa) / bỏ hẳn (tàu khác ra khỏi vùng)
+  hide() { this.trail.geometry.setDrawRange(0, 0); this.pts = []; for (const m of this.local) m.material.uniforms.uI.value = 0; }
+  dispose() { if (this.trail.parent) this.trail.parent.remove(this.trail); this.trail.geometry.dispose(); this.mat.dispose(); for (const m of this.local) { if (m.parent) m.parent.remove(m); m.geometry.dispose(); m.material.dispose(); } this.local = []; }
   // mỗi khung hình. st {x,y,psi}; e: spd (m/s theo nước, tiến +), prop (vòng quay chân vịt / tối đa, lùi −), t, daylight; waveH(x, z, t)
   update(shipG, st, e, light, waveH, hs = 0.5) {
     if (!this.dims) return; const { L, B, xa } = this.dims, t = e.t || 0, spd = e.spd || 0, prop = e.prop || 0;

@@ -1,4 +1,4 @@
-// Bảng 12 tàu mẫu CHUNG CHUNG tự dựng (không theo tàu thật nào) cho kho tàu (fleet.js).
+// Bảng 17 tàu mẫu CHUNG CHUNG tự dựng (không theo tàu thật nào) cho kho tàu (fleet.js).
 // Mỗi mẫu: spec (mét; x về mũi từ giữa chiều dài, z từ đáy ky) → shipdraw/shipgen.js dựng mô hình bàn vẽ; ship → thông số tab 1.
 // build({ deck, hb }) trả khối thượng tầng, cánh gà, đèn, mắt, chi tiết thư viện (cột, radar, xuồng + cần, tời, cọc bích, thông gió…).
 import { makeTemplate } from './shipdraw/template.js';
@@ -226,5 +226,55 @@ export const TPL = [
         ...both('windlass', 45.4, 1.8, d(45.4), { l: 1.6, w: 1.8, h: 1 }), F('windlass', -48, 0, d(-48), { l: 1.8, w: 2.2, h: 1.2, rot: 90 }), F('breakwater', 31.4, 0, d(31.4), { l: 1.4, w: 2 * hb(31.4) * 0.7, h: 1.1 }),
         ...both('vent', 20, 6.2, d(20), { n: 2, rot: 90 }), ...both('vent', -16, 6.4, d(-16), { n: 2, rot: 90 }),
         ...common(100, d, hb, [38, 20, -20, -47]), ...navyKit({ L: 100, d, hb, x0: -46, x1: -22, t1, w: 14 * 0.95 })] }; } },
-    ship: { loa: 100, B: 15.4, D: 7.4, T: 3.1, cb: 0.72, engines: 2, ptype: 'fpp', vmax: 16, rpm: 900, gear: 4, accTime: 60, propD: 2.6, PD: 0.95, AR: 6, hR: 2.6, rudders: 2, rudMax: 35, rudTime: 15, respTime: 6, turnDia: 380, bowAnchors: 1, sternAnchors: 1, chainLen: 275, anchorW: 2.5, chainW: 30, lineR: 20, lineLen: 180, windAL: 1150, windAF: 270, windXc: -8, flags: 'hq' } }
+    ship: { loa: 100, B: 15.4, D: 7.4, T: 3.1, cb: 0.72, engines: 2, ptype: 'fpp', vmax: 16, rpm: 900, gear: 4, accTime: 60, propD: 2.6, PD: 0.95, AR: 6, hR: 2.6, rudders: 2, rudMax: 35, rudTime: 15, respTime: 6, turnDia: 380, bowAnchors: 1, sternAnchors: 1, chainLen: 275, anchorW: 2.5, chainW: 30, lineR: 20, lineLen: 180, windAL: 1150, windAF: 270, windXc: -8, flags: 'hq' } },
+
+  // ---- tàu khác chạy trên luồng (giai đoạn 5): xà lan tự hành, tàu cá — cũng dùng được làm tàu đậu / tàu mình ----
+  { id: 'xalan45', type: 'Xà lan', name: 'Xà lan tự hành 45 m (mẫu)', spec: {
+    L: 45, B: 9, D: 3.0, T: 2.3, H: 11, bow: 'raked', rake: 5, stern: 'transom', tb: 0.5, shA: 0.1, shF: 0.5, par: [-14, 12], ts: 0.92, bp: 1.1, sec: 'box', br: 0.35,
+    bulwarks: [[17, 22.4, 0.8]], opts: { colors: C('#3a3f44', '#eef0ee', '#6a4b3a', '#8b2a22') },
+    build: ({ deck: d, hb }) => { const z1 = d(-19), t1 = z1 + 2.4, br = t1 + 2.3; return {
+      blocks: [{ k: 't1', z0: z1, x0: -22, x1: -15.5, h: 2.4, w: 7.4, win: true }, { k: 'bridge', x0: -21, x1: -16.5, h: 2.3, w: 7.8, sl: -0.3, win: true, visor: 0.4 }],
+      anchors: [20.5, d(20.5) - 1.0],
+      lights: { mast1: [-18.5, br + 3.6], side: [-16.8, t1 + 0.9], stern: [-22.3, d(-22.3) + 1.2], anchF: [21.5, d(21.5) + 2.6], anchA: [-21.5, t1 + 1.2], nuc: [-18.5, br + 2.2] }, eye: [-17.2, t1 + 1.6],
+      fits: [F('hatch', -1.5, 0, d(-1.5), { l: 26, w: 7.2, h: 1.1 }), F('mast', -18.5, 0, br, { h: 4, w: 0.2, l: 1.8 }), F('funnel', -20.8, 2.6, t1, { l: 1, w: 0.8, h: 2.2 }),
+        ...common(45, d, hb, [19, 14.5, -14, -21]), F('windlass', 19.6, 0, d(19.6), { l: 1.2, w: 2.2, h: 0.8 }), ...both('fender', -2, 4.55, d(-2) - 0.8, { l: 30, w: 0.4, h: 0.4 }),
+        F('horn', -19.6, 0.6, br, {}), F('searchlight', -16.8, 2.2, br, {})] }; } },
+    ship: { loa: 45, B: 9, D: 3.0, T: 2.3, cb: 0.82, engines: 2, ptype: 'fpp', vmax: 8, rpm: 1200, gear: 4, accTime: 45, propD: 1.3, PD: 0.7, AR: 1.2, hR: 1.2, rudders: 2, rudMax: 35, rudTime: 20, respTime: 6, turnDia: 160, bowAnchors: 1, sternAnchors: 1, chainLen: 110, anchorW: 0.5, chainW: 9, lineR: 12, lineLen: 120, windAL: 160, windAF: 60, windXc: -8, flags: 'vn' } },
+
+  { id: 'xalan60', type: 'Xà lan', name: 'Xà lan tự hành 60 m (mẫu)', spec: {
+    L: 60, B: 11.5, D: 3.6, T: 2.9, H: 13, bow: 'raked', rake: 6.5, stern: 'transom', tb: 0.5, shA: 0.1, shF: 0.6, par: [-19, 16], ts: 0.92, bp: 1.1, sec: 'box', br: 0.4,
+    bulwarks: [[23, 29.8, 0.9]], opts: { colors: C('#5a2e26', '#f0f0ec', '#5d4a3a', '#2a2d30') },
+    build: ({ deck: d, hb }) => { const z1 = d(-25), t1 = z1 + 2.5, t2 = t1 + 2.4, br = t2 + 2.3; return {
+      blocks: [{ k: 't1', z0: z1, x0: -29.3, x1: -20.5, h: 2.5, w: 9.6, win: true }, { k: 't2', x0: -28.3, x1: -21.5, h: 2.4, w: 8.4, win: true },
+        { k: 'bridge', x0: -27.5, x1: -22.2, h: 2.3, w: 9.4, sl: -0.3, win: true, visor: 0.5 }],
+      anchors: [27.4, d(27.4) - 1.1],
+      lights: { mast1: [-24.8, br + 4.2], side: [-22.4, t2 + 0.9], stern: [-29.7, d(-29.7) + 1.2], anchF: [28.6, d(28.6) + 3], anchA: [-28.8, t1 + 1.2], nuc: [-24.8, br + 2.4] }, eye: [-23, t2 + 1.6],
+      fits: [F('hatch', -2, 0, d(-2), { l: 36, w: 9.4, h: 1.3 }), F('mast', -24.8, 0, br, { h: 4.6, w: 0.22, l: 2.2 }), ...both('funnel', -28, 3.4, t1, { l: 1.1, w: 0.9, h: 2.6 }),
+        ...common(60, d, hb, [25.5, 19.5, -18.5, -28.5]), F('windlass', 26.4, 0, d(26.4), { l: 1.4, w: 2.8, h: 0.9 }), ...both('fender', -2, 5.8, d(-2) - 0.9, { l: 40, w: 0.45, h: 0.45 }),
+        F('horn', -25.8, 0.7, br, {}), ...both('searchlight', -22.5, 2.6, br, {}), F('radar', -23.4, 0, br, { l: 1.4, w: 0.35, h: 0.6 })] }; } },
+    ship: { loa: 60, B: 11.5, D: 3.6, T: 2.9, cb: 0.84, engines: 2, ptype: 'fpp', vmax: 8.5, rpm: 1200, gear: 4, accTime: 55, propD: 1.5, PD: 0.7, AR: 1.6, hR: 1.4, rudders: 2, rudMax: 35, rudTime: 20, respTime: 7, turnDia: 220, bowAnchors: 1, sternAnchors: 1, chainLen: 137, anchorW: 0.8, chainW: 12, lineR: 14, lineLen: 120, windAL: 240, windAF: 85, windXc: -11, flags: 'vn' } },
+
+  { id: 'ca18', type: 'Tàu cá', name: 'Tàu cá vỏ gỗ 18 m (mẫu)', spec: {
+    L: 18, B: 5.4, D: 2.4, T: 1.7, H: 10, bow: 'raked', rake: 2.2, stern: 'transom', tb: 0.6, shA: 0.25, shF: 1.0, par: [-3, 2], ts: 0.72, bp: 1.6, sec: 'v', br: 0.5,
+    bulwarks: [[-8.9, 8.9, 0.6]], opts: { colors: C('#1f5f9e', '#f1efe6', '#8a6a48', '#b33a2a') },
+    build: ({ deck: d, hb }) => { const z1 = d(-4), t1 = z1 + 2.1; return {
+      blocks: [{ k: 'bridge', z0: z1, x0: -6.4, x1: -2.2, h: 2.1, w: 3.9, sl: -0.2, win: true, visor: 0.3 }],
+      masts: [{ id: 'truoc', x: 3.6, z0: d(3.6), h: 6.5, yard: 4.6 }],
+      lights: { mast1: [3.6, d(3.6) + 6.0], side: [-2.6, t1 - 0.4], stern: [-8.9, d(-8.9) + 1.0], anchF: [3.6, d(3.6) + 4.2], nuc: [3.6, d(3.6) + 5.0] }, eye: [-3, t1 - 0.4],
+      fits: [F('mast', -4.3, 0, t1, { h: 2.4, w: 0.12, l: 1.2 }), F('crane', 1.5, 0, d(1.5), { l: 5.5, w: 0.4, h: 1.2, el: 25, rot: 0 }), F('windlass', 0, 0, d(0), { l: 1, w: 1.6, h: 0.8 }),
+        ...both('bollard', 7, 1.7, d(7), { l: 0.5, w: 0.25, h: 0.4 }), ...both('bollard', -8, 2, d(-8), { l: 0.5, w: 0.25, h: 0.4 }), F('staff', -8.7, 0, d(-8.7), { h: 2.2 }),
+        F('raft', -4.3, 0, t1, { rot: 90 }), F('whip', -5.6, 1.2, t1, { h: 2.5 }), F('searchlight', -2.6, 1.3, t1, {})] }; } },
+    ship: { loa: 18, B: 5.4, D: 2.4, T: 1.7, cb: 0.5, engines: 1, ptype: 'fpp', vmax: 9, rpm: 1800, gear: 4, accTime: 12, propD: 1.0, PD: 0.75, AR: 0.8, hR: 1.0, rudders: 1, rudMax: 35, rudTime: 10, respTime: 3, turnDia: 45, bowAnchors: 1, sternAnchors: 0, chainLen: 60, anchorW: 0.12, chainW: 3, lineR: 8, lineLen: 60, windAL: 45, windAF: 18, windXc: -1, flags: 'vn' } },
+
+  { id: 'ca26', type: 'Tàu cá', name: 'Tàu cá vỏ thép 26 m, lưới kéo (mẫu)', spec: {
+    L: 26, B: 7, D: 3.2, T: 2.4, H: 13, bow: 'raked', rake: 2.6, stern: 'transom', tb: 0.7, shA: 0.2, shF: 1.2, fc: { x0: 7, h: 0.9 }, par: [-5, 3], ts: 0.78, bp: 1.5, sec: 'round', br: 0.8,
+    bulwarks: [[-12.9, 12.6, 0.8]], opts: { colors: C('#9e2b25', '#f2f1ea', '#5d6b5a', '#2a2d30') },
+    build: ({ deck: d, hb }) => { const z1 = d(4), t1 = z1 + 2.3, br = t1 + 2.2; return {
+      blocks: [{ k: 't1', z0: z1, x0: 1.2, x1: 7.6, h: 2.3, w: 5.4, win: true }, { k: 'bridge', x0: 2.2, x1: 6.8, h: 2.2, w: 5.8, sl: -0.3, win: true, visor: 0.35 }],
+      masts: [{ id: 'chinh', x: 4.6, z0: br, h: 4.2, yard: 2.6 }],
+      lights: { mast1: [4.6, br + 4.0], side: [6.4, t1 + 0.8], stern: [-12.9, d(-12.9) + 1.1], anchF: [10.8, d(10.8) + 2.8], nuc: [4.6, br + 3.0] }, eye: [6, t1 + 1.5],
+      fits: [F('crane', -11.6, 0, d(-11.6), { l: 4.5, w: 2.4, h: 4.8, el: 70, rot: 180 }), F('windlass', -4.5, 0, d(-4.5), { l: 2.2, w: 3.4, h: 1.4 }), F('funnel', 1.8, 0, t1, { l: 1.1, w: 0.9, h: 2.4 }),
+        ...both('bollard', 10.5, 2.4, d(10.5), { l: 0.6, w: 0.3, h: 0.5 }), ...both('bollard', -10, 3, d(-10), { l: 0.6, w: 0.3, h: 0.5 }), F('staff', 12.2, 0, d(12.2), { h: 2.2 }),
+        F('raft', 2.6, 0, br, { rot: 90 }), ...both('whip', 3, 1.8, br, { h: 3 }), F('searchlight', 6.4, 1.6, br, {}), F('radar', 5.6, 0, br + 2.4, { l: 1.2, w: 0.3, h: 0.5 })] }; } },
+    ship: { loa: 26, B: 7, D: 3.2, T: 2.4, cb: 0.55, engines: 1, ptype: 'fpp', vmax: 10, rpm: 1500, gear: 4, accTime: 18, propD: 1.4, PD: 0.75, AR: 1.2, hR: 1.2, rudders: 1, rudMax: 35, rudTime: 12, respTime: 3.5, turnDia: 70, bowAnchors: 1, sternAnchors: 0, chainLen: 82, anchorW: 0.25, chainW: 5, lineR: 10, lineLen: 80, windAL: 80, windAF: 32, windXc: 2, flags: 'vn' } },
 ];
